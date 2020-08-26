@@ -25,17 +25,20 @@ num_vertices = vertices.id.nunique()
 num_edges = len(edges)
 
 # Compute the strength sequence
-out_strength = np.array([[2], [5], [6], [1]])
+out_strength = np.array([2, 5, 6, 1])
 in_strength = np.array([[0, 5, 4], 
                          [0, 0, 3], 
                          [0, 0, 0], 
                          [2, 0, 0]])
+group_dict = {}
+for index, row in vertices.iterrows():
+    group_dict[row.id - 1] = row.group - 1
 
 # Compute the probability matrix given a z
 z = 1.0
 
 t0 = time.process_time()
-p = fitness_link_prob(out_strength, in_strength[:,0], z, num_vertices)
+p = fitness_link_prob(out_strength, in_strength, z, num_vertices, group_dict)
 print(time.process_time() - t0)
 
 print(p.toarray())

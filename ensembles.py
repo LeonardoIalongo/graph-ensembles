@@ -88,13 +88,42 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
     # Initialize empty result 
     p = sp.lil_matrix((N, N), dtype=np.float64)
 
-    # Simple iteration over all possibilities
-    for i in np.arange(N):
-        for j in np.arange(N):
-            if i != j:
-                p[i,j] = (z*out_strength[i]*in_strength[j] /
-                    (1 + z*out_strength[i]*in_strength[j]))
-
+    if group_dict is None:
+        if (out_strength.ndim > 1) or (in_strength.ndim > 1):
+            raise ValueError('A group dict was not provided but the strength '
+                + 'sequence is a vector.')   
+        else:
+            for i in np.arange(N):
+                for j in np.arange(N):
+                    if i != j:
+                        s_i = out_strength[i]
+                        s_j = in_strength[j]
+                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+    else:
+        if (out_strength.ndim > 1) and (in_strength.ndim > 1):
+            for i in np.arange(N):
+                for j in np.arange(N):
+                    if i != j:
+                        s_i = out_strength[i, group_dict[j]]
+                        s_j = in_strength[j, group_dict[i]]
+                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+        elif (out_strength.ndim > 1) and (in_strength.ndim == 1):
+            for i in np.arange(N):
+                for j in np.arange(N):
+                    if i != j:
+                        s_i = out_strength[i, group_dict[j]]
+                        s_j = in_strength[j]
+                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+        elif (out_strength.ndim == 1) and (in_strength.ndim > 1):
+            for i in np.arange(N):
+                for j in np.arange(N):
+                    if i != j:
+                        s_i = out_strength[i]
+                        s_j = in_strength[j, group_dict[i]]
+                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+        else:
+            raise ValueError('A group dict was provided but no vector' + 
+                ' strength sequence is available.')        
 
     return p
 
