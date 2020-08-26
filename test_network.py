@@ -17,22 +17,12 @@ vertices = pd.DataFrame({
     'id': [1, 2, 3, 4], 
     'group': [1, 2, 3, 3]}, dtype=np.int8)
 
-# Check no duplicate edges
-if any(edges.loc[:, ['src', 'dst']].duplicated()):
-    raise ValueError('Duplicated edges')
 
 num_vertices = vertices.id.nunique()
 num_edges = len(edges)
 
 # Compute the strength sequence
-out_strength = np.array([2, 5, 6, 1])
-in_strength = np.array([[0, 5, 4], 
-                         [0, 0, 3], 
-                         [0, 0, 0], 
-                         [2, 0, 0]])
-group_dict = {}
-for index, row in vertices.iterrows():
-    group_dict[row.id - 1] = row.group - 1
+out_strength, in_strength, index_dict, group_dict = get_strenghts(edges, vertices, group_col='group')
 
 # Compute the probability matrix given a z
 z = 1.0
