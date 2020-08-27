@@ -24,11 +24,18 @@ num_edges = len(edges)
 # Compute the strength sequence
 out_strength, in_strength, index_dict, group_dict = get_strenghts(edges, vertices, group_col='group')
 
-# Compute the probability matrix given a z
-z = 1.0
+# Find correct z to replicate graph density
+z0 = 1.0
 
 t0 = time.process_time()
-p = fitness_link_prob(out_strength, in_strength, z, num_vertices, group_dict)
-print(time.process_time() - t0)
+z = density_solver(lambda x: fitness_link_prob(out_strength, in_strength, 
+    x, num_vertices, group_dict), 
+    num_edges, 
+    z0)
+print('Compute time:', time.process_time() - t0, 's')
 
-print(p.toarray())
+P = fitness_link_prob(out_strength, in_strength, z, num_vertices, 
+    group_dict)
+
+print(P.sum())
+print(P.toarray())

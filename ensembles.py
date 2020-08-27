@@ -5,6 +5,7 @@ reconstruction, filtering or pattern detection among others. """
 import warnings
 import numpy as np 
 import pandas as pd 
+from scipy.optimize import fsolve
 import scipy.sparse as sp
 
 def get_strenghts(edges, vertices, group_col=None, group_dir='in'):
@@ -163,13 +164,26 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
     return p
 
 
-def expected_number_edges(strength, z, num_vertices):
-    result = 0
-    for i in np.arange(num_vertices):
-        for j in np.arange(num_vertices):
-            if i != j:
-                result += fitness_link_prob(strength(i), strength(j), z)
+def density_solver(p_fun, L, z0):
+    """ Return the optimal z to match a given number of links L.
 
-    return result
+    Parameters
+    ----------
+    p_fun: function
+        the function returning the probability matrix implied by a z value
+    L : int
+        number of links to be matched by expectation
+    z0: np.float64
+        initial conditions for z
+
+    Returns
+    -------
+    np.float64
+        the optimal z value solving L = <L>
+
+    TODO: Currently implemented with general solver, consider iterative approach.
+    """
+
+    return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
 
 
