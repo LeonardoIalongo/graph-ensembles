@@ -1,21 +1,21 @@
-""" This module defines the functions that allow for the construction of 
-network ensembles from partial information. They can be used for 
+""" This module defines the functions that allow for the construction of
+network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
-import warnings
-import numpy as np 
-import pandas as pd 
+import numpy as np
 from scipy.optimize import fsolve
 import scipy.sparse as sp
 
+
 def get_strenghts(edges, vertices, group_col=None, group_dir='in'):
-    """Return the in and out strength sequences for the given network 
-    specified by an edge and vertex list as pandas dataframes. 
+    """Return the in and out strength sequences for the given network
+    specified by an edge and vertex list as pandas dataframes.
 
     If a group_col is given then it returns a vector for each strength where
-    each element is the strength related to each group. You can specify 
-    whether the grouping applies only to the 'in', 'out', or 'all' edges through group_dir. It also returns a dictionary that returns the group 
-    index give the node index and a another that given the identifier of the 
+    each element is the strength related to each group. You can specify
+    whether the grouping applies only to the 'in', 'out', or 'all' edges
+    through group_dir. It also returns a dictionary that returns the group
+    index give the node index and a another that given the identifier of the
     node, returns the index of it.
     """
 
@@ -35,16 +35,16 @@ def get_strenghts(edges, vertices, group_col=None, group_dir='in'):
             index_dict[row.id] = i
             i += 1
         N = len(vertices)
-    
+
         out_temp = edges.groupby(['src']).agg({'weight': sum})
         out_strength = np.zeros(N)
         for index, row in out_temp.iterrows():
-            out_strength[index_dict[index]] = row.weight 
+            out_strength[index_dict[index]] = row.weight
 
         in_temp = edges.groupby(['dst']).agg({'weight': sum})
         in_strength = np.zeros(N)
         for index, row in in_temp.iterrows():
-            in_strength[index_dict[index]] = row.weight 
+            in_strength[index_dict[index]] = row.weight
 
         return out_strength, in_strength, index_dict
 
@@ -52,7 +52,7 @@ def get_strenghts(edges, vertices, group_col=None, group_dir='in'):
         i = 0
         j = 0
         index_dict = {}
-        group_dict = {} 
+        group_dict = {}
         group_list = vertices.loc[:, group_col].unique().tolist()
         for index, row in vertices.iterrows():
             index_dict[row.id] = i
@@ -72,33 +72,33 @@ def get_strenghts(edges, vertices, group_col=None, group_dir='in'):
             out_temp = edges.groupby(['src']).agg({'weight': sum})
             out_strength = np.zeros(N)
             for index, row in out_temp.iterrows():
-                out_strength[index_dict[index]] = row.weight 
+                out_strength[index_dict[index]] = row.weight
 
         if group_dir in ['in', 'all']:
             in_strength = np.zeros((N, G))
             for index, row in edges.iterrows():
                 i = index_dict[row.dst]
                 j = group_dict[index_dict[row.src]]
-                in_strength[i,j] += row.weight
+                in_strength[i, j] += row.weight
         else:
             in_temp = edges.groupby(['dst']).agg({'weight': sum})
             in_strength = np.zeros(N)
             for index, row in in_temp.iterrows():
-                in_strength[index_dict[index]] = row.weight 
+                in_strength[index_dict[index]] = row.weight
 
         return out_strength, in_strength, index_dict, group_dict
 
 
 def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
-    """Compute the link probability matrix given the in and out strength 
-    sequence, the density parameter z, and the number of vertices N. 
+    """Compute the link probability matrix given the in and out strength
+    sequence, the density parameter z, and the number of vertices N.
 
-    The out and in strength sequences should be numpy arrays of 1 dimension. 
-    If a group dictionary is specified then it will be assumed that the 
+    The out and in strength sequences should be numpy arrays of 1 dimension.
+    If a group dictionary is specified then it will be assumed that the
     array will now be 2-dimensional and that the row relates to the node index
     while the column refers to the group. If there is only one dimension it is
     assumed that it is the total strength.
-    
+
     Parameters
     ----------
     out_strength : np.ndarray
@@ -117,24 +117,25 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
     scipy.sparse.lil_matrix
         the link probability matrix
 
-    TODO: Currently implemented with numpy arrays and standard iteration over 
-    all indices. Consider allowing for sparse matrices in case of groups and to avoid iteration over all indices.
+    TODO: Currently implemented with numpy arrays and standard iteration over
+    all indices. Consider allowing for sparse matrices in case of groups and
+    to avoid iteration over all indices.
     """
 
-    # Initialize empty result 
+    # Initialize empty result
     p = sp.lil_matrix((N, N), dtype=np.float64)
 
     if group_dict is None:
         if (out_strength.ndim > 1) or (in_strength.ndim > 1):
             raise ValueError('A group dict was not provided but the strength '
-                + 'sequence is a vector.')   
+                             + 'sequence is a vector.')
         else:
             for i in np.arange(N):
                 for j in np.arange(N):
                     if i != j:
                         s_i = out_strength[i]
                         s_j = in_strength[j]
-                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
     else:
         if (out_strength.ndim > 1) and (in_strength.ndim > 1):
             for i in np.arange(N):
@@ -142,24 +143,24 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
                     if i != j:
                         s_i = out_strength[i, group_dict[j]]
                         s_j = in_strength[j, group_dict[i]]
-                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
         elif (out_strength.ndim > 1) and (in_strength.ndim == 1):
             for i in np.arange(N):
                 for j in np.arange(N):
                     if i != j:
                         s_i = out_strength[i, group_dict[j]]
                         s_j = in_strength[j]
-                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
         elif (out_strength.ndim == 1) and (in_strength.ndim > 1):
             for i in np.arange(N):
                 for j in np.arange(N):
                     if i != j:
                         s_i = out_strength[i]
                         s_j = in_strength[j, group_dict[i]]
-                        p[i,j] = z*s_i*s_j / (1 + z*s_i*s_j)
+                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
         else:
-            raise ValueError('A group dict was provided but no vector' + 
-                ' strength sequence is available.')        
+            raise ValueError('A group dict was provided but no vector' +
+                             ' strength sequence is available.')
 
     return p
 
@@ -181,9 +182,8 @@ def density_solver(p_fun, L, z0):
     np.float64
         the optimal z value solving L = <L>
 
-    TODO: Currently implemented with general solver, consider iterative approach.
+    TODO: Currently implemented with general solver, consider iterative
+    approach.
     """
 
     return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
-
-
