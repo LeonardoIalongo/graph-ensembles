@@ -4,3 +4,4 @@ __pycache__/
 dist/
 build/
 temp.py
+graph_ensembles.egg-info/

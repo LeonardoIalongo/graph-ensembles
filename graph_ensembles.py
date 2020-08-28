@@ -7,86 +7,32 @@ from scipy.optimize import fsolve
 import scipy.sparse as sp
 
 
-def get_strenghts(edges, vertices, group_col=None, group_dir='in'):
-    """Return the in and out strength sequences for the given network
-    specified by an edge and vertex list as pandas dataframes.
+class GraphModel():
+    """ General class for graph models. """
+    margins_fun = None
+    prob_matrix_fun = None
+    solver_fun = None
 
-    If a group_col is given then it returns a vector for each strength where
-    each element is the strength related to each group. You can specify
-    whether the grouping applies only to the 'in', 'out', or 'all' edges
-    through group_dir. It also returns a dictionary that returns the group
-    index give the node index and a another that given the identifier of the
-    node, returns the index of it.
-    """
-
-    # Check that there are no duplicates in vertex definitions
-    if any(vertices.loc[:, 'id'].duplicated()):
-        raise ValueError('Duplicated node definitions.')
-
-    # Check no duplicate edges
-    if any(edges.loc[:, ['src', 'dst']].duplicated()):
-        raise ValueError('There are duplicated edges.')
-
-    # Construct dictionaries
-    if group_col is None:
-        i = 0
-        index_dict = {}
-        for index, row in vertices.iterrows():
-            index_dict[row.id] = i
-            i += 1
-        N = len(vertices)
-
-        out_temp = edges.groupby(['src']).agg({'weight': sum})
-        out_strength = np.zeros(N)
-        for index, row in out_temp.iterrows():
-            out_strength[index_dict[index]] = row.weight
-
-        in_temp = edges.groupby(['dst']).agg({'weight': sum})
-        in_strength = np.zeros(N)
-        for index, row in in_temp.iterrows():
-            in_strength[index_dict[index]] = row.weight
-
-        return out_strength, in_strength, index_dict
-
-    else:
-        i = 0
-        j = 0
-        index_dict = {}
-        group_dict = {}
-        group_list = vertices.loc[:, group_col].unique().tolist()
-        for index, row in vertices.iterrows():
-            index_dict[row.id] = i
-            group_dict[i] = group_list.index(row[group_col])
-            i += 1
-            j += 1
-        N = len(vertices)
-        G = len(group_list)
-
-        if group_dir in ['out', 'all']:
-            out_strength = np.zeros((N, G))
-            for index, row in edges.iterrows():
-                i = index_dict[row.src]
-                j = group_dict[index_dict[row.src]]
-                out_strength[i, j] += row.weight
+    def __init__(self, data=None, param=None):
+        if data is None:
+            pass
         else:
-            out_temp = edges.groupby(['src']).agg({'weight': sum})
-            out_strength = np.zeros(N)
-            for index, row in out_temp.iterrows():
-                out_strength[index_dict[index]] = row.weight
+            # TODO: check type of data and extract necessary info
+            self.data = data
 
-        if group_dir in ['in', 'all']:
-            in_strength = np.zeros((N, G))
-            for index, row in edges.iterrows():
-                i = index_dict[row.dst]
-                j = group_dict[index_dict[row.src]]
-                in_strength[i, j] += row.weight
+        if param is None:
+            pass
         else:
-            in_temp = edges.groupby(['dst']).agg({'weight': sum})
-            in_strength = np.zeros(N)
-            for index, row in in_temp.iterrows():
-                in_strength[index_dict[index]] = row.weight
+            # TODO: check type of data and extract necessary info
+            self.param = param
 
-        return out_strength, in_strength, index_dict, group_dict
+    def solve(self):
+        """ Fit parameters to match the ensemble to the provided data."""
+        self.param = self.solver_fun(self)
+
+
+class VectorFitnessModel(GraphModel):
+    pass
 
 
 def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
@@ -101,9 +47,9 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
 
     Parameters
     ----------
-    out_strength : np.ndarray
+    out_strength: np.ndarray
         the out strength sequence of graph
-    in_strength : np.ndarray
+    in_strength: np.ndarray
         the in strength sequence of graph
     z: np.float64
         the density parameter of the fitness model
