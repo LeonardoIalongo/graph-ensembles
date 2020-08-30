@@ -7,32 +7,68 @@ from scipy.optimize import fsolve
 import scipy.sparse as sp
 
 
+class Graph():
+    """ Simple graph class """
+    def __init__(self, *args):
+        pass
+
+
 class GraphModel():
     """ General class for graph models. """
-    margins_fun = None
-    prob_matrix_fun = None
-    solver_fun = None
 
-    def __init__(self, data=None, param=None):
-        if data is None:
-            pass
-        else:
-            # TODO: check type of data and extract necessary info
-            self.data = data
-
-        if param is None:
-            pass
-        else:
-            # TODO: check type of data and extract necessary info
-            self.param = param
-
-    def solve(self):
-        """ Fit parameters to match the ensemble to the provided data."""
-        self.param = self.solver_fun(self)
+    def __init__(self, *args):
+        pass
 
 
 class VectorFitnessModel(GraphModel):
-    pass
+    """ A generalized fitness model that allows vector strength sequences."""
+
+    def __init__(self, *args):
+        """ Return a VectorFitnessModel for the given marginal graph data.
+
+        Accepts either a graph class object or three arguments (out_strength,
+        in_strength, group_dict) as input.
+        """
+        num_args = len(args)
+        if num_args < 1:
+            self.out_strength = None
+            self.in_strength = None
+            self.group_dict = None
+
+        elif num_args == 1:
+            if not isinstance(args[0], Graph):
+                raise ValueError('Only one argument was given but it is not a'
+                                 ' graph.')
+            # TODO: extract relevant data from graph
+            pass
+
+        elif num_args == 2:
+            if any([isinstance(x, dict) for x in args]):
+                raise ValueError('Missing one argument, probably either the'
+                                 ' in or out strength sequence.')
+            else:
+                raise ValueError('Missing group dictionary.')
+
+        elif num_args == 3:
+            if isinstance(args[0], np.ndarray):
+                self.out_strength = args[0]
+            else:
+                raise ValueError('Out degree provided is not a numpy array.')
+            if isinstance(args[1], np.ndarray):
+                self.in_strength = args[1]
+            else:
+                raise ValueError('In degree provided is not a numpy array.')
+            if isinstance(args[2], dict):
+                self.group_dict = args[2]
+            else:
+                raise ValueError('Group dict provided is not a dict.')
+
+        else:
+            raise ValueError('Too many arguments.')
+
+    def solve(self):
+        """ Fit parameters to match the ensemble to the provided data."""
+        pass
 
 
 def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
