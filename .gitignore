@@ -5,3 +5,4 @@ dist/
 build/
 temp.py
 graph_ensembles.egg-info/
+.coverage*
