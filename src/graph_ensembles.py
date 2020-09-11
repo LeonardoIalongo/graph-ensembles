@@ -7,6 +7,90 @@ from scipy.optimize import fsolve
 import scipy.sparse as sp
 
 
+def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
+    """ TODO: transform in constructor for graph object from pandas edge list.
+
+    Return the in and out strength sequences for the given network
+    specified by an edge and vertex list as pandas dataframes.
+
+    If a group_col is given then it returns a vector for each strength where
+    each element is the strength related to each group. You can specify
+    whether the grouping applies only to the 'in', 'out', or 'all' edges
+    through group_dir. It also returns a dictionary that returns the group
+    index give the node index and a another that given the identifier of the
+    node, returns the index of it.
+    """
+
+    # Check that there are no duplicates in vertex definitions
+    if any(vertices.loc[:, 'id'].duplicated()):
+        raise ValueError('Duplicated node definitions.')
+
+    # Check no duplicate edges
+    if any(edges.loc[:, ['src', 'dst']].duplicated()):
+        raise ValueError('There are duplicated edges.')
+
+    # Construct dictionaries
+    if group_col is None:
+        i = 0
+        index_dict = {}
+        for index, row in vertices.iterrows():
+            index_dict[row.id] = i
+            i += 1
+        N = len(vertices)
+
+        out_temp = edges.groupby(['src']).agg({'weight': sum})
+        out_strength = np.zeros(N)
+        for index, row in out_temp.iterrows():
+            out_strength[index_dict[index]] = row.weight
+
+        in_temp = edges.groupby(['dst']).agg({'weight': sum})
+        in_strength = np.zeros(N)
+        for index, row in in_temp.iterrows():
+            in_strength[index_dict[index]] = row.weight
+
+        return out_strength, in_strength, index_dict
+
+    else:
+        i = 0
+        j = 0
+        index_dict = {}
+        group_dict = {}
+        group_list = vertices.loc[:, group_col].unique().tolist()
+        for index, row in vertices.iterrows():
+            index_dict[row.id] = i
+            group_dict[i] = group_list.index(row[group_col])
+            i += 1
+            j += 1
+        N = len(vertices)
+        G = len(group_list)
+
+        if group_dir in ['out', 'all']:
+            out_strength = np.zeros((N, G))
+            for index, row in edges.iterrows():
+                i = index_dict[row.src]
+                j = group_dict[index_dict[row.src]]
+                out_strength[i, j] += row.weight
+        else:
+            out_temp = edges.groupby(['src']).agg({'weight': sum})
+            out_strength = np.zeros(N)
+            for index, row in out_temp.iterrows():
+                out_strength[index_dict[index]] = row.weight
+
+        if group_dir in ['in', 'all']:
+            in_strength = np.zeros((N, G))
+            for index, row in edges.iterrows():
+                i = index_dict[row.dst]
+                j = group_dict[index_dict[row.src]]
+                in_strength[i, j] += row.weight
+        else:
+            in_temp = edges.groupby(['dst']).agg({'weight': sum})
+            in_strength = np.zeros(N)
+            for index, row in in_temp.iterrows():
+                in_strength[index_dict[index]] = row.weight
+
+        return out_strength, in_strength, index_dict, group_dict
+
+
 class Graph():
     """ Simple graph class """
     def __init__(self, *args):
@@ -42,14 +126,7 @@ class VectorFitnessModel(GraphModel):
             # TODO: extract relevant data from graph
             pass
 
-        elif num_args == 2:
-            if any([isinstance(x, dict) for x in args]):
-                raise ValueError('Missing one argument, probably either the'
-                                 ' in or out strength sequence.')
-            else:
-                raise ValueError('Missing group dictionary.')
-
-        elif num_args == 3:
+        elif num_args == 4:
             if isinstance(args[0], np.ndarray):
                 self.out_strength = args[0]
             else:
@@ -58,20 +135,45 @@ class VectorFitnessModel(GraphModel):
                 self.in_strength = args[1]
             else:
                 raise ValueError('In degree provided is not a numpy array.')
-            if isinstance(args[2], dict):
-                self.group_dict = args[2]
+            if isinstance(args[2], int):
+                self.L = args[2]
+            else:
+                raise ValueError('Number of links is not an integer.')
+            if isinstance(args[3], dict):
+                self.group_dict = args[3]
             else:
                 raise ValueError('Group dict provided is not a dict.')
 
         else:
-            raise ValueError('Too many arguments.')
+            raise ValueError('Wrong number of arguments.')
 
-    def solve(self):
+    def solve(self, z0=1):
         """ Fit parameters to match the ensemble to the provided data."""
-        pass
+        self.z = density_solver(lambda x: vector_fitness_link_prob(
+                                    self.out_strength,
+                                    self.in_strength,
+                                    x,
+                                    self.group_dict),
+                                self.L,
+                                z0)
+
+    @property
+    def probability_matrix(self):
+        if hasattr(self, 'z'):
+            return vector_fitness_link_prob(self.out_strength,
+                                            self.in_strength,
+                                            self.z,
+                                            self.group_dict)
+        else:
+            print('Running solver before returning matrix.')
+            self.solve()
+            return vector_fitness_link_prob(self.out_strength,
+                                            self.in_strength,
+                                            self.z,
+                                            self.group_dict)
 
 
-def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
+def vector_fitness_link_prob(out_strength, in_strength, z, group_dict=None):
     """Compute the link probability matrix given the in and out strength
     sequence, the density parameter z, and the number of vertices N.
 
@@ -103,6 +205,15 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
     all indices. Consider allowing for sparse matrices in case of groups and
     to avoid iteration over all indices.
     """
+    # Check consistency in number of vertices
+    N = max(out_strength.shape)
+    if N != max(in_strength.shape):
+        raise ValueError('Number of nodes according to data provided does not'
+                         ' match.')
+    if group_dict is not None:
+        if N != len(group_dict):
+            raise ValueError('Number of nodes according to data provided does'
+                             'not match.')
 
     # Initialize empty result
     p = sp.lil_matrix((N, N), dtype=np.float64)
@@ -150,6 +261,11 @@ def fitness_link_prob(out_strength, in_strength, z, N, group_dict=None):
 def density_solver(p_fun, L, z0):
     """ Return the optimal z to match a given number of links L.
 
+    Note it is assumed that the probability matrix expresses the probability
+    of extracting each edge as an independent Bernoulli trial. Such that the
+    expected number of links in the network is the sum of the elements of the
+    probability matrix.
+
     Parameters
     ----------
     p_fun: function
@@ -167,5 +283,8 @@ def density_solver(p_fun, L, z0):
     TODO: Currently implemented with general solver, consider iterative
     approach.
     """
-
-    return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
+    p_mat = p_fun(z0)
+    if isinstance(p_mat, np.ndarray):
+        return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
+    elif isinstance(p_mat, sp.spmatrix):
+        return fsolve(lambda x: p_fun(x).sum() - L, z0)
