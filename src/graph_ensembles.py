@@ -91,12 +91,6 @@ def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
         return out_strength, in_strength, index_dict, group_dict
 
 
-class Graph():
-    """ Simple graph class """
-    def __init__(self, *args):
-        pass
-
-
 class GraphModel():
     """ General class for graph models. """
 
