@@ -7,90 +7,6 @@ from scipy.optimize import fsolve
 import scipy.sparse as sp
 
 
-def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
-    """ TODO: transform in constructor for graph object from pandas edge list.
-
-    Return the in and out strength sequences for the given network
-    specified by an edge and vertex list as pandas dataframes.
-
-    If a group_col is given then it returns a vector for each strength where
-    each element is the strength related to each group. You can specify
-    whether the grouping applies only to the 'in', 'out', or 'all' edges
-    through group_dir. It also returns a dictionary that returns the group
-    index give the node index and a another that given the identifier of the
-    node, returns the index of it.
-    """
-
-    # Check that there are no duplicates in vertex definitions
-    if any(vertices.loc[:, 'id'].duplicated()):
-        raise ValueError('Duplicated node definitions.')
-
-    # Check no duplicate edges
-    if any(edges.loc[:, ['src', 'dst']].duplicated()):
-        raise ValueError('There are duplicated edges.')
-
-    # Construct dictionaries
-    if group_col is None:
-        i = 0
-        index_dict = {}
-        for index, row in vertices.iterrows():
-            index_dict[row.id] = i
-            i += 1
-        N = len(vertices)
-
-        out_temp = edges.groupby(['src']).agg({'weight': sum})
-        out_strength = np.zeros(N)
-        for index, row in out_temp.iterrows():
-            out_strength[index_dict[index]] = row.weight
-
-        in_temp = edges.groupby(['dst']).agg({'weight': sum})
-        in_strength = np.zeros(N)
-        for index, row in in_temp.iterrows():
-            in_strength[index_dict[index]] = row.weight
-
-        return out_strength, in_strength, index_dict
-
-    else:
-        i = 0
-        j = 0
-        index_dict = {}
-        group_dict = {}
-        group_list = vertices.loc[:, group_col].unique().tolist()
-        for index, row in vertices.iterrows():
-            index_dict[row.id] = i
-            group_dict[i] = group_list.index(row[group_col])
-            i += 1
-            j += 1
-        N = len(vertices)
-        G = len(group_list)
-
-        if group_dir in ['out', 'all']:
-            out_strength = np.zeros((N, G))
-            for index, row in edges.iterrows():
-                i = index_dict[row.src]
-                j = group_dict[index_dict[row.src]]
-                out_strength[i, j] += row.weight
-        else:
-            out_temp = edges.groupby(['src']).agg({'weight': sum})
-            out_strength = np.zeros(N)
-            for index, row in out_temp.iterrows():
-                out_strength[index_dict[index]] = row.weight
-
-        if group_dir in ['in', 'all']:
-            in_strength = np.zeros((N, G))
-            for index, row in edges.iterrows():
-                i = index_dict[row.dst]
-                j = group_dict[index_dict[row.src]]
-                in_strength[i, j] += row.weight
-        else:
-            in_temp = edges.groupby(['dst']).agg({'weight': sum})
-            in_strength = np.zeros(N)
-            for index, row in in_temp.iterrows():
-                in_strength[index_dict[index]] = row.weight
-
-        return out_strength, in_strength, index_dict, group_dict
-
-
 class GraphModel():
     """ General class for graph models. """
 
@@ -99,47 +15,69 @@ class GraphModel():
 
 
 class VectorFitnessModel(GraphModel):
-    """ A generalized fitness model that allows vector strength sequences."""
+    """ A generalized fitness model that allows for vector strength sequences.
 
-    def __init__(self, *args):
+    Attributes
+    ----------
+    out_strength: np.ndarray or scipy.sparse matrix
+        the out strength matrix
+    in_strength: np.ndarray or scipy.sparse matrix
+        the in strength matrix
+    num_links: np.int
+        the total number of links
+    num_nodes: np.int
+        the total number of nodes
+    num_groups: np.int
+        the total number of groups by which the vector strengths are computed
+    """
+
+    def __init__(self, out_strength, in_strength, num_links):
         """ Return a VectorFitnessModel for the given marginal graph data.
 
-        Accepts either a graph class object or three arguments (out_strength,
-        in_strength, group_dict) as input.
+        The assumption is that the row number of the strength matrices
+        represent the node number, while the column index relates to the
+        group.
+
+        Parameters
+        ----------
+        out_strength: np.ndarray or scipy.sparse matrix
+            the out strength matrix of a graph
+        in_strength: np.ndarray or scipy.sparse matrix
+            the in strength matrix of a graph
+        num_links: np.int
+            the number of links in the graph
+        param: np.ndarray
+            array of parameters to be fitted by the model
+
+        Returns
+        -------
+        VectorFitnessModel
+            the model for the given input data
         """
-        num_args = len(args)
-        if num_args < 1:
-            self.out_strength = None
-            self.in_strength = None
-            self.group_dict = None
 
-        elif num_args == 1:
-            if not isinstance(args[0], Graph):
-                raise ValueError('Only one argument was given but it is not a'
-                                 ' graph.')
-            # TODO: extract relevant data from graph
-            pass
-
-        elif num_args == 4:
-            if isinstance(args[0], np.ndarray):
-                self.out_strength = args[0]
-            else:
-                raise ValueError('Out degree provided is not a numpy array.')
-            if isinstance(args[1], np.ndarray):
-                self.in_strength = args[1]
-            else:
-                raise ValueError('In degree provided is not a numpy array.')
-            if isinstance(args[2], int):
-                self.L = args[2]
-            else:
-                raise ValueError('Number of links is not an integer.')
-            if isinstance(args[3], dict):
-                self.group_dict = args[3]
-            else:
-                raise ValueError('Group dict provided is not a dict.')
-
+        # Check that inputs are numpy arrays or scipy.sparse matrices
+        if isinstance(out_strength, (np.ndarray, sp.spmatrix)):
+            self.out_strength = out_strength
         else:
-            raise ValueError('Wrong number of arguments.')
+            raise TypeError('Out degree provided is neither a numpy array, '
+                            'nor a scipy sparse matrix.')
+
+        if isinstance(in_strength, (np.ndarray, sp.spmatrix)):
+            self.in_strength = in_strength
+        else:
+            raise TypeError('Out degree provided is neither a numpy array, '
+                            'nor a scipy sparse matrix.')
+
+        if isinstance(num_links, int):
+            self.num_links = num_links
+        else:
+            raise TypeError('Number of links not an integer.')
+
+        # Check that dimensions are consistent
+        msg = 'In and out strength do not have the same dimensions.'
+        assert in_strength.shape == out_strength.shape, msg
+        self.num_nodes = out_strength.shape[0]
+        self.num_groups = out_strength.shape[1]
 
     def solve(self, z0=1):
         """ Fit parameters to match the ensemble to the provided data."""
@@ -282,3 +220,88 @@ def density_solver(p_fun, L, z0):
         return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
     elif isinstance(p_mat, sp.spmatrix):
         return fsolve(lambda x: p_fun(x).sum() - L, z0)
+
+
+
+def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
+    """ TODO: transform in constructor for graph object from pandas edge list.
+
+    Return the in and out strength sequences for the given network
+    specified by an edge and vertex list as pandas dataframes.
+
+    If a group_col is given then it returns a vector for each strength where
+    each element is the strength related to each group. You can specify
+    whether the grouping applies only to the 'in', 'out', or 'all' edges
+    through group_dir. It also returns a dictionary that returns the group
+    index give the node index and a another that given the identifier of the
+    node, returns the index of it.
+    """
+
+    # Check that there are no duplicates in vertex definitions
+    if any(vertices.loc[:, 'id'].duplicated()):
+        raise ValueError('Duplicated node definitions.')
+
+    # Check no duplicate edges
+    if any(edges.loc[:, ['src', 'dst']].duplicated()):
+        raise ValueError('There are duplicated edges.')
+
+    # Construct dictionaries
+    if group_col is None:
+        i = 0
+        index_dict = {}
+        for index, row in vertices.iterrows():
+            index_dict[row.id] = i
+            i += 1
+        N = len(vertices)
+
+        out_temp = edges.groupby(['src']).agg({'weight': sum})
+        out_strength = np.zeros(N)
+        for index, row in out_temp.iterrows():
+            out_strength[index_dict[index]] = row.weight
+
+        in_temp = edges.groupby(['dst']).agg({'weight': sum})
+        in_strength = np.zeros(N)
+        for index, row in in_temp.iterrows():
+            in_strength[index_dict[index]] = row.weight
+
+        return out_strength, in_strength, index_dict
+
+    else:
+        i = 0
+        j = 0
+        index_dict = {}
+        group_dict = {}
+        group_list = vertices.loc[:, group_col].unique().tolist()
+        for index, row in vertices.iterrows():
+            index_dict[row.id] = i
+            group_dict[i] = group_list.index(row[group_col])
+            i += 1
+            j += 1
+        N = len(vertices)
+        G = len(group_list)
+
+        if group_dir in ['out', 'all']:
+            out_strength = np.zeros((N, G))
+            for index, row in edges.iterrows():
+                i = index_dict[row.src]
+                j = group_dict[index_dict[row.src]]
+                out_strength[i, j] += row.weight
+        else:
+            out_temp = edges.groupby(['src']).agg({'weight': sum})
+            out_strength = np.zeros(N)
+            for index, row in out_temp.iterrows():
+                out_strength[index_dict[index]] = row.weight
+
+        if group_dir in ['in', 'all']:
+            in_strength = np.zeros((N, G))
+            for index, row in edges.iterrows():
+                i = index_dict[row.dst]
+                j = group_dict[index_dict[row.src]]
+                in_strength[i, j] += row.weight
+        else:
+            in_temp = edges.groupby(['dst']).agg({'weight': sum})
+            in_strength = np.zeros(N)
+            for index, row in in_temp.iterrows():
+                in_strength[index_dict[index]] = row.weight
+
+        return out_strength, in_strength, index_dict, group_dict
