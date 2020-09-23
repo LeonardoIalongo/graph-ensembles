@@ -105,15 +105,14 @@ class VectorFitnessModel(GraphModel):
                                             self.group_dict)
 
 
-def vector_fitness_link_prob(out_strength, in_strength, z, group_dict=None):
+def vector_fitness_link_prob(out_strength, in_strength, z):
     """Compute the link probability matrix given the in and out strength
-    sequence, the density parameter z, and the number of vertices N.
+    sequence, and the density parameter z.
 
-    The out and in strength sequences should be numpy arrays of 1 dimension.
-    If a group dictionary is specified then it will be assumed that the
-    array will now be 2-dimensional and that the row relates to the node index
-    while the column refers to the group. If there is only one dimension it is
-    assumed that it is the total strength.
+    The out and in strength sequences should be numpy arrays or scipy.sparse
+    matrices of one or two dimension. It is assumed that the index along the
+    first dimension identifies the node, while the index along the second
+    dimension relates to the grouping by which the strength is computed.
 
     Parameters
     ----------
@@ -123,69 +122,34 @@ def vector_fitness_link_prob(out_strength, in_strength, z, group_dict=None):
         the in strength sequence of graph
     z: np.float64
         the density parameter of the fitness model
-    N: np.int64
-        the number of vertices in the graph
-    group_dict: dict
-        a dictionary that given the index of a node returns its group
 
     Returns
     -------
-    scipy.sparse.lil_matrix
+    numpy.ndarray
         the link probability matrix
 
     TODO: Currently implemented with numpy arrays and standard iteration over
     all indices. Consider allowing for sparse matrices in case of groups and
     to avoid iteration over all indices.
     """
-    # Check consistency in number of vertices
-    N = max(out_strength.shape)
-    if N != max(in_strength.shape):
-        raise ValueError('Number of nodes according to data provided does not'
-                         ' match.')
-    if group_dict is not None:
-        if N != len(group_dict):
-            raise ValueError('Number of nodes according to data provided does'
-                             'not match.')
+    # Check that dimensions are consistent
+    msg = 'In and out strength do not have the same dimensions.'
+    assert in_strength.shape == out_strength.shape, msg
+
+    # Get number of nodes and groups
+    N = out_strength.shape[0]
+    G = out_strength.shape[1]
 
     # Initialize empty result
-    p = sp.lil_matrix((N, N), dtype=np.float64)
+    p = np.zeros((N, N, G), dtype=np.float64)
 
-    if group_dict is None:
-        if (out_strength.ndim > 1) or (in_strength.ndim > 1):
-            raise ValueError('A group dict was not provided but the strength '
-                             + 'sequence is a vector.')
-        else:
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i]
-                        s_j = in_strength[j]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-    else:
-        if (out_strength.ndim > 1) and (in_strength.ndim > 1):
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i, group_dict[j]]
-                        s_j = in_strength[j, group_dict[i]]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-        elif (out_strength.ndim > 1) and (in_strength.ndim == 1):
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i, group_dict[j]]
-                        s_j = in_strength[j]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-        elif (out_strength.ndim == 1) and (in_strength.ndim > 1):
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i]
-                        s_j = in_strength[j, group_dict[i]]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-        else:
-            raise ValueError('A group dict was provided but no vector' +
-                             ' strength sequence is available.')
+    for i in np.arange(N):
+        for j in np.arange(N):
+            for k in np.arange(G):
+                if i != j:
+                    s_i = out_strength[i, k]
+                    s_j = in_strength[j, k]
+                    p[i, j, k] = z*s_i*s_j / (1 + z*s_i*s_j)
 
     return p
 
