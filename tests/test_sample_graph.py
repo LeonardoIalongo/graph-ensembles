@@ -20,7 +20,11 @@ adjacency = np.array([[0, 0, 0, 2],
                       [3, 3, 0, 0],
                       [1, 0, 0, 0]]
                      )
-out_strength = np.array([2, 5, 6, 1])
+
+out_strength = np.array([[2, 0, 0],
+                        [0, 5, 0],
+                        [0, 0, 6],
+                        [0, 0, 1]])
 
 in_strength = np.array([[0, 5, 4],
                         [0, 0, 3],
@@ -29,13 +33,13 @@ in_strength = np.array([[0, 5, 4],
 
 num_links = 5
 
-group_dict = {0: 0, 1: 1, 2: 2, 3: 2}
-
 
 class TestVectorFitnessModel():
     def test_issubclass(self):
         """ Check that the vfm is a graph model."""
-        model = ge.VectorFitnessModel()
+        model = ge.VectorFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links)
         assert isinstance(model, ge.GraphModel)
 
     def test_model_init(self):
@@ -43,28 +47,16 @@ class TestVectorFitnessModel():
         """
         model = ge.VectorFitnessModel(out_strength,
                                       in_strength,
-                                      num_links,
-                                      group_dict)
+                                      num_links)
         assert np.all(model.out_strength == out_strength)
         assert np.all(model.in_strength == in_strength)
-        assert model.L == num_links
-        assert model.group_dict == group_dict
-
-    def test_model_init_graph(self):
-        """ Check that the vfm can be correctly initialized with graph obj."""
-        graph = ge.Graph()
-        model = ge.VectorFitnessModel(graph)
-        assert np.all(model.out_strength == out_strength)
-        assert np.all(model.in_strength == in_strength)
-        assert model.L == num_links
-        assert model.group_dict == group_dict
+        assert model.num_links == num_links
 
     def test_solver(self):
         """ Check that the solver is fitting the parameter z correctly. """
         model = ge.VectorFitnessModel(out_strength,
                                       in_strength,
-                                      num_links,
-                                      group_dict)
+                                      num_links)
         model.solve(z0=1)
         np.testing.assert_almost_equal(model.z, 0.730334, decimal=6)
 
@@ -77,8 +69,7 @@ class TestVectorFitnessModel():
 
         model = ge.VectorFitnessModel(out_strength,
                                       in_strength,
-                                      num_links,
-                                      group_dict)
+                                      num_links)
         np.testing.assert_allclose(model.probability_matrix.toarray(),
                                    true_value,
                                    rtol=1e-6)
@@ -86,7 +77,6 @@ class TestVectorFitnessModel():
     def test_expected_num_links(self):
         model = ge.VectorFitnessModel(out_strength,
                                       in_strength,
-                                      num_links,
-                                      group_dict)
+                                      num_links)
         exp_num_links = model.probability_matrix.sum()
         assert exp_num_links == num_links

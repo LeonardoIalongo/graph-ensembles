@@ -129,8 +129,8 @@ def vector_fitness_link_prob(out_strength, in_strength, z):
         the link probability matrix
 
     TODO: Currently implemented with numpy arrays and standard iteration over
-    all indices. Consider allowing for sparse matrices in case of groups and
-    to avoid iteration over all indices.
+    all indices. Consider avoiding computation of zeros and to return
+    function or iterator.
     """
     # Check that dimensions are consistent
     msg = 'In and out strength do not have the same dimensions.'
@@ -184,7 +184,6 @@ def density_solver(p_fun, L, z0):
         return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
     elif isinstance(p_mat, sp.spmatrix):
         return fsolve(lambda x: p_fun(x).sum() - L, z0)
-
 
 
 def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
