@@ -70,7 +70,7 @@ class TestVectorFitnessModel():
         model = ge.VectorFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
-        np.testing.assert_allclose(model.probability_matrix.toarray(),
+        np.testing.assert_allclose(model.probability_matrix,
                                    true_value,
                                    rtol=1e-6)
 

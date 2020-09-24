@@ -84,9 +84,8 @@ class VectorFitnessModel(GraphModel):
         self.z = density_solver(lambda x: vector_fitness_link_prob(
                                     self.out_strength,
                                     self.in_strength,
-                                    x,
-                                    self.group_dict),
-                                self.L,
+                                    x),
+                                self.num_links,
                                 z0)
 
     @property
@@ -94,25 +93,26 @@ class VectorFitnessModel(GraphModel):
         if hasattr(self, 'z'):
             return vector_fitness_link_prob(self.out_strength,
                                             self.in_strength,
-                                            self.z,
-                                            self.group_dict)
+                                            self.z)
         else:
             print('Running solver before returning matrix.')
             self.solve()
             return vector_fitness_link_prob(self.out_strength,
                                             self.in_strength,
-                                            self.z,
-                                            self.group_dict)
+                                            self.z)
 
 
-def vector_fitness_link_prob(out_strength, in_strength, z):
-    """Compute the link probability matrix given the in and out strength
+def vector_fitness_prob_array(out_strength, in_strength, z):
+    """Compute the link probability array given the in and out strength
     sequence, and the density parameter z.
 
     The out and in strength sequences should be numpy arrays or scipy.sparse
-    matrices of one or two dimension. It is assumed that the index along the
+    matrices of two dimension. It is assumed that the index along the
     first dimension identifies the node, while the index along the second
     dimension relates to the grouping by which the strength is computed.
+
+    Note the returned array is a three dimensional array whose (i,j,k) element
+    is the probability of observing a link of type k from node i to node j.
 
     Parameters
     ----------
@@ -126,7 +126,7 @@ def vector_fitness_link_prob(out_strength, in_strength, z):
     Returns
     -------
     numpy.ndarray
-        the link probability matrix
+        the link probability 3d matrix
 
     TODO: Currently implemented with numpy arrays and standard iteration over
     all indices. Consider avoiding computation of zeros and to return
@@ -152,6 +152,61 @@ def vector_fitness_link_prob(out_strength, in_strength, z):
                     p[i, j, k] = z*s_i*s_j / (1 + z*s_i*s_j)
 
     return p
+
+
+def vector_fitness_link_prob(out_strength, in_strength, z):
+    """ Compute the probability matrix whose (i,j) element is the probability
+    of observing a link from node i to node j.
+
+    The out and in strength sequences should be numpy arrays or scipy.sparse
+    matrices of two dimension. It is assumed that the index along the
+    first dimension identifies the node, while the index along the second
+    dimension relates to the grouping by which the strength is computed.
+
+
+    Parameters
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence of graph
+    in_strength: np.ndarray
+        the in strength sequence of graph
+    z: np.float64
+        the density parameter of the fitness model
+
+    Returns
+    -------
+    numpy.ndarray
+        the link probability matrix
+
+    TODO: Currently implemented with numpy arrays and standard iteration over
+    all indices. Consider avoiding computation of zeros and to return
+    function or iterator.
+
+    """
+
+    # Check that dimensions are consistent
+    msg = 'In and out strength do not have the same dimensions.'
+    assert in_strength.shape == out_strength.shape, msg
+
+    # Get number of nodes and groups
+    N = out_strength.shape[0]
+    G = out_strength.shape[1]
+
+    # The element i,j of the matrix p here gives the probability that no link
+    # of any of the G types exists between node i and j.
+    # We initialize to all ones to ensure that we can multiply correctly
+    p = np.ones((N, N), dtype=np.float64)
+
+    for i in np.arange(N):
+        for j in np.arange(N):
+            for k in np.arange(G):
+                if i != j:
+                    s_i = out_strength[i, k]
+                    s_j = in_strength[j, k]
+                    p[i, j] *= 1 - (z*s_i*s_j / (1 + z*s_i*s_j))
+
+    # Return probability of observing at least one link (out of the G types)
+    return 1 - p
 
 
 def density_solver(p_fun, L, z0):
@@ -187,7 +242,7 @@ def density_solver(p_fun, L, z0):
 
 
 def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
-    """ TODO: transform in constructor for graph object from pandas edge list.
+    """ OUTDATED: does not conform to new format
 
     Return the in and out strength sequences for the given network
     specified by an edge and vertex list as pandas dataframes.
