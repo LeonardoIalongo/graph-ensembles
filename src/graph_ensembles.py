@@ -3,7 +3,7 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
-from scipy.optimize import fsolve
+from scipy.optimize import least_squares
 
 
 class GraphModel():
@@ -235,4 +235,6 @@ def vector_density_solver(p_fun, L, z0):
     TODO: Currently implemented with general solver, consider iterative
     approach.
     """
-    return fsolve(lambda x: np.sum(p_fun(x), axis=(0, 1)) - L, z0)
+    return least_squares(lambda x: np.sum(p_fun(x), axis=(0, 1)) - L,
+                         z0,
+                         method='lm').x
