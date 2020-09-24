@@ -41,7 +41,7 @@ class TestVectorFitnessModel():
         model = ge.VectorFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
-        model.solve(z0=1)
+        model.solve()
         np.testing.assert_almost_equal(model.z, 0.730334, decimal=6)
 
     def test_probability_array(self):

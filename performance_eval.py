@@ -54,7 +54,7 @@ for n, l, g, w in zip(N, L, G, W):
     # Solve and check that solution is admissible
     start = time.perf_counter()
     model.solve()
-    exp_num_links = model.probability_matrix.sum()
+    exp_num_links = np.sum(model.probability_array, axis=(0, 1))
     comp_time.append(time.perf_counter() - start)
     np.testing.assert_almost_equal(real_l, exp_num_links, decimal=5)
 

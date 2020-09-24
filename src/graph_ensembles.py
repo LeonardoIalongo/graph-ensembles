@@ -28,6 +28,8 @@ class VectorFitnessModel(GraphModel):
         the total number of nodes
     num_groups: np.int
         the total number of groups by which the vector strengths are computed
+    z: np.ndarray
+        the vector of density parameters
     """
 
     def __init__(self, out_strength, in_strength, num_links):
@@ -68,8 +70,11 @@ class VectorFitnessModel(GraphModel):
         self.num_nodes = out_strength.shape[0]
         self.num_groups = out_strength.shape[1]
 
-    def solve(self, z0=1):
+    def solve(self, z0=None):
         """ Fit parameters to match the ensemble to the provided data."""
+        if z0 is None:
+            z0 = np.ones(self.num_groups)
+
         self.z = vector_density_solver(
             lambda x: vector_fitness_prob_array(
                 self.out_strength,
@@ -85,7 +90,6 @@ class VectorFitnessModel(GraphModel):
                                              self.in_strength,
                                              self.z)
         else:
-            print('Running solver before returning matrix.')
             self.solve()
             return vector_fitness_prob_array(self.out_strength,
                                              self.in_strength,
@@ -98,7 +102,6 @@ class VectorFitnessModel(GraphModel):
                                             self.in_strength,
                                             self.z)
         else:
-            print('Running solver before returning matrix.')
             self.solve()
             return vector_fitness_link_prob(self.out_strength,
                                             self.in_strength,
@@ -123,8 +126,8 @@ def vector_fitness_prob_array(out_strength, in_strength, z):
         the out strength sequence of graph
     in_strength: np.ndarray
         the in strength sequence of graph
-    z: np.float64
-        the density parameter of the fitness model
+    z: np.ndarray
+        the group density parameter of the fitness model
 
     Returns
     -------
@@ -152,7 +155,7 @@ def vector_fitness_prob_array(out_strength, in_strength, z):
                 if i != j:
                     s_i = out_strength[i, k]
                     s_j = in_strength[j, k]
-                    p[i, j, k] = z*s_i*s_j / (1 + z*s_i*s_j)
+                    p[i, j, k] = z[k]*s_i*s_j / (1 + z[k]*s_i*s_j)
 
     return p
 
@@ -206,7 +209,7 @@ def vector_fitness_link_prob(out_strength, in_strength, z):
                 if i != j:
                     s_i = out_strength[i, k]
                     s_j = in_strength[j, k]
-                    p[i, j] *= 1 - (z*s_i*s_j / (1 + z*s_i*s_j))
+                    p[i, j] *= 1 - (z[k]*s_i*s_j / (1 + z[k]*s_i*s_j))
 
     # Return probability of observing at least one link (out of the G types)
     return 1 - p
@@ -221,8 +224,8 @@ def vector_density_solver(p_fun, L, z0):
         the function returning the probability array implied by a z value
     L : np.ndarray
         number of links per group to be matched by expectation
-    z0: np.float64
-        initial conditions for z
+    z0: np.ndarray
+        initial conditions for z vector
 
     Returns
     -------
