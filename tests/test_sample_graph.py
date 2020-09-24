@@ -14,7 +14,7 @@ in_strength = np.array([[0, 5, 4],
                         [2, 0, 0]])
 
 num_nodes = 4
-num_links = 5
+num_links = np.array([1, 1, 3])
 num_groups = 3
 
 
@@ -34,7 +34,7 @@ class TestVectorFitnessModel():
                                       num_links)
         assert np.all(model.out_strength == out_strength)
         assert np.all(model.in_strength == in_strength)
-        assert model.num_links == num_links
+        assert np.all(model.num_links == num_links)
 
     def test_solver(self):
         """ Check that the solver is fitting the parameter z correctly. """

@@ -4,7 +4,6 @@ reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
 from scipy.optimize import fsolve
-import scipy.sparse as sp
 
 
 class GraphModel():
@@ -23,8 +22,8 @@ class VectorFitnessModel(GraphModel):
         the out strength matrix
     in_strength: np.ndarray or scipy.sparse matrix
         the in strength matrix
-    num_links: np.int
-        the total number of links
+    num_links: np.ndarray
+        the total number of links per group
     num_nodes: np.int
         the total number of nodes
     num_groups: np.int
@@ -44,7 +43,7 @@ class VectorFitnessModel(GraphModel):
             the out strength matrix of a graph
         in_strength: np.ndarray or scipy.sparse matrix
             the in strength matrix of a graph
-        num_links: np.int
+        num_links: np.ndarray
             the number of links in the graph
         param: np.ndarray
             array of parameters to be fitted by the model
@@ -58,6 +57,9 @@ class VectorFitnessModel(GraphModel):
         # Check that dimensions are consistent
         msg = 'In and out strength do not have the same dimensions.'
         assert in_strength.shape == out_strength.shape, msg
+        msg = ('Number of groups implied by number of links input does not'
+               'match strength input.')
+        assert len(num_links) == out_strength.shape[1], msg
 
         # Initialize attributes
         self.out_strength = out_strength
@@ -68,12 +70,13 @@ class VectorFitnessModel(GraphModel):
 
     def solve(self, z0=1):
         """ Fit parameters to match the ensemble to the provided data."""
-        self.z = density_solver(lambda x: vector_fitness_link_prob(
-                                    self.out_strength,
-                                    self.in_strength,
-                                    x),
-                                self.num_links,
-                                z0)
+        self.z = vector_density_solver(
+            lambda x: vector_fitness_prob_array(
+                self.out_strength,
+                self.in_strength,
+                x),
+            self.num_links,
+            z0)
 
     @property
     def probability_array(self):
@@ -209,20 +212,15 @@ def vector_fitness_link_prob(out_strength, in_strength, z):
     return 1 - p
 
 
-def density_solver(p_fun, L, z0):
-    """ Return the optimal z to match a given number of links L.
-
-    Note it is assumed that the probability matrix expresses the probability
-    of extracting each edge as an independent Bernoulli trial. Such that the
-    expected number of links in the network is the sum of the elements of the
-    probability matrix.
+def vector_density_solver(p_fun, L, z0):
+    """ Return the optimal z to match a given number of links vector (L).
 
     Parameters
     ----------
     p_fun: function
-        the function returning the probability matrix implied by a z value
-    L : int
-        number of links to be matched by expectation
+        the function returning the probability array implied by a z value
+    L : np.ndarray
+        number of links per group to be matched by expectation
     z0: np.float64
         initial conditions for z
 
@@ -234,8 +232,4 @@ def density_solver(p_fun, L, z0):
     TODO: Currently implemented with general solver, consider iterative
     approach.
     """
-    p_mat = p_fun(z0)
-    if isinstance(p_mat, np.ndarray):
-        return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
-    elif isinstance(p_mat, sp.spmatrix):
-        return fsolve(lambda x: p_fun(x).sum() - L, z0)
+    return fsolve(lambda x: np.sum(p_fun(x), axis=(0, 1)) - L, z0)

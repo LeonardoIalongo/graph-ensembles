@@ -11,8 +11,8 @@ import numpy as np
 # Number of nodes series
 N = np.logspace(1, 1, num=1, dtype=np.int64)
 
-# Corresponding number of edges
-L = N * 2
+# Corresponding approximate number of edges across all groups
+L = N * 5
 
 # Corresponding number of groups
 G = np.floor(N / 3).astype('int')
@@ -34,14 +34,14 @@ for n, l, g, w in zip(N, L, G, W):
     indexes = set()
     out_strength = np.zeros((n, g))
     in_strength = np.zeros((n, g))
+    real_l = np.zeros(g)
     for link in adj:
-        if (link[0], link[1]) not in indexes:
-            indexes.add((link[0], link[1]))
+        if (link[0], link[1], link[2]) not in indexes:
+            indexes.add((link[0], link[1], link[2]))
+            real_l[link[2]] += 1
 
         out_strength[link[0], link[2]] += link[3]
         in_strength[link[1], link[2]] += link[3]
-
-    real_l = len(indexes)
 
     # Check that the in and out strengths match per group
     assert all(np.sum(out_strength, axis=0) == np.sum(in_strength, axis=0))
