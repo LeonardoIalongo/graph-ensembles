@@ -6,8 +6,7 @@ setup(
     py_modules=['graph_ensembles'],
     package_dir={'': 'src'},
     install_requires=["numpy>=1.19",
-                      "scipy>=1.5",
-                      "pandas>=1.0"],
+                      "scipy>=1.5"],
     extras_require={
         "dev": ["pytest==6.0.1",
                 "coverage==5.2.1",
