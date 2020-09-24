@@ -55,27 +55,14 @@ class VectorFitnessModel(GraphModel):
             the model for the given input data
         """
 
-        # Check that inputs are numpy arrays or scipy.sparse matrices
-        if isinstance(out_strength, (np.ndarray, sp.spmatrix)):
-            self.out_strength = out_strength
-        else:
-            raise TypeError('Out degree provided is neither a numpy array, '
-                            'nor a scipy sparse matrix.')
-
-        if isinstance(in_strength, (np.ndarray, sp.spmatrix)):
-            self.in_strength = in_strength
-        else:
-            raise TypeError('Out degree provided is neither a numpy array, '
-                            'nor a scipy sparse matrix.')
-
-        if isinstance(num_links, int):
-            self.num_links = num_links
-        else:
-            raise TypeError('Number of links not an integer.')
-
         # Check that dimensions are consistent
         msg = 'In and out strength do not have the same dimensions.'
         assert in_strength.shape == out_strength.shape, msg
+
+        # Initialize attributes
+        self.out_strength = out_strength
+        self.in_strength = in_strength
+        self.num_links = num_links
         self.num_nodes = out_strength.shape[0]
         self.num_groups = out_strength.shape[1]
 
