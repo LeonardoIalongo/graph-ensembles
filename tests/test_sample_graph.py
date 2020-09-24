@@ -1,26 +1,8 @@
 """ Test graph ensemble model classes on simple sample graph. """
 import graph_ensembles as ge
 import numpy as np
-import pandas as pd
 
-# Define graph and its marginals to check computation
-edges = pd.DataFrame({
-    'src': [2, 3, 1, 4, 3],
-    'dst': [1, 2, 4, 1, 1],
-    'weight': [5, 3, 2, 1, 3]}, dtype=np.int8)
-
-edges = edges.astype({'weight': 'float64'})
-
-vertices = pd.DataFrame({
-    'id': [1, 2, 3, 4],
-    'group': [1, 2, 3, 3]}, dtype=np.int8)
-
-adjacency = np.array([[0, 0, 0, 2],
-                      [5, 0, 0, 0],
-                      [3, 3, 0, 0],
-                      [1, 0, 0, 0]]
-                     )
-
+# Define graph marginals to check computation
 out_strength = np.array([[2, 0, 0],
                         [0, 5, 0],
                         [0, 0, 6],
@@ -31,7 +13,9 @@ in_strength = np.array([[0, 5, 4],
                         [0, 0, 0],
                         [2, 0, 0]])
 
+num_nodes = 4
 num_links = 5
+num_groups = 3
 
 
 class TestVectorFitnessModel():
@@ -59,6 +43,24 @@ class TestVectorFitnessModel():
                                       num_links)
         model.solve(z0=1)
         np.testing.assert_almost_equal(model.z, 0.730334, decimal=6)
+
+    def test_probability_array(self):
+        """ Check that the returned probability array is correct. """
+        true_value = np.zeros((num_nodes, num_nodes, num_groups),
+                              dtype=np.float64)
+        true_value[0, 3, 0] = 0.744985
+        true_value[1, 0, 1] = 0.948075
+        true_value[2, 0, 2] = 0.946028
+        true_value[2, 1, 2] = 0.929309
+        true_value[3, 0, 2] = 0.744985
+        true_value[3, 1, 2] = 0.686619
+
+        model = ge.VectorFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links)
+        np.testing.assert_allclose(model.probability_array,
+                                   true_value,
+                                   rtol=1e-6)
 
     def test_probability_matrix(self):
         """ Check that the returned probability matrix is the correct one. """

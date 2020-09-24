@@ -89,6 +89,19 @@ class VectorFitnessModel(GraphModel):
                                 z0)
 
     @property
+    def probability_array(self):
+        if hasattr(self, 'z'):
+            return vector_fitness_prob_array(self.out_strength,
+                                             self.in_strength,
+                                             self.z)
+        else:
+            print('Running solver before returning matrix.')
+            self.solve()
+            return vector_fitness_prob_array(self.out_strength,
+                                             self.in_strength,
+                                             self.z)
+
+    @property
     def probability_matrix(self):
         if hasattr(self, 'z'):
             return vector_fitness_link_prob(self.out_strength,
