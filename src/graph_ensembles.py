@@ -3,98 +3,7 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
-from scipy.optimize import fsolve
-import scipy.sparse as sp
-
-
-def from_pandas_edge_list(edges, vertices, group_col=None, group_dir='in'):
-    """ TODO: transform in constructor for graph object from pandas edge list.
-
-    Return the in and out strength sequences for the given network
-    specified by an edge and vertex list as pandas dataframes.
-
-    If a group_col is given then it returns a vector for each strength where
-    each element is the strength related to each group. You can specify
-    whether the grouping applies only to the 'in', 'out', or 'all' edges
-    through group_dir. It also returns a dictionary that returns the group
-    index give the node index and a another that given the identifier of the
-    node, returns the index of it.
-    """
-
-    # Check that there are no duplicates in vertex definitions
-    if any(vertices.loc[:, 'id'].duplicated()):
-        raise ValueError('Duplicated node definitions.')
-
-    # Check no duplicate edges
-    if any(edges.loc[:, ['src', 'dst']].duplicated()):
-        raise ValueError('There are duplicated edges.')
-
-    # Construct dictionaries
-    if group_col is None:
-        i = 0
-        index_dict = {}
-        for index, row in vertices.iterrows():
-            index_dict[row.id] = i
-            i += 1
-        N = len(vertices)
-
-        out_temp = edges.groupby(['src']).agg({'weight': sum})
-        out_strength = np.zeros(N)
-        for index, row in out_temp.iterrows():
-            out_strength[index_dict[index]] = row.weight
-
-        in_temp = edges.groupby(['dst']).agg({'weight': sum})
-        in_strength = np.zeros(N)
-        for index, row in in_temp.iterrows():
-            in_strength[index_dict[index]] = row.weight
-
-        return out_strength, in_strength, index_dict
-
-    else:
-        i = 0
-        j = 0
-        index_dict = {}
-        group_dict = {}
-        group_list = vertices.loc[:, group_col].unique().tolist()
-        for index, row in vertices.iterrows():
-            index_dict[row.id] = i
-            group_dict[i] = group_list.index(row[group_col])
-            i += 1
-            j += 1
-        N = len(vertices)
-        G = len(group_list)
-
-        if group_dir in ['out', 'all']:
-            out_strength = np.zeros((N, G))
-            for index, row in edges.iterrows():
-                i = index_dict[row.src]
-                j = group_dict[index_dict[row.src]]
-                out_strength[i, j] += row.weight
-        else:
-            out_temp = edges.groupby(['src']).agg({'weight': sum})
-            out_strength = np.zeros(N)
-            for index, row in out_temp.iterrows():
-                out_strength[index_dict[index]] = row.weight
-
-        if group_dir in ['in', 'all']:
-            in_strength = np.zeros((N, G))
-            for index, row in edges.iterrows():
-                i = index_dict[row.dst]
-                j = group_dict[index_dict[row.src]]
-                in_strength[i, j] += row.weight
-        else:
-            in_temp = edges.groupby(['dst']).agg({'weight': sum})
-            in_strength = np.zeros(N)
-            for index, row in in_temp.iterrows():
-                in_strength[index_dict[index]] = row.weight
-
-        return out_strength, in_strength, index_dict, group_dict
-
-
-class Graph():
-    """ Simple graph class """
-    def __init__(self, *args):
-        pass
+from scipy.optimize import least_squares
 
 
 class GraphModel():
@@ -105,83 +14,161 @@ class GraphModel():
 
 
 class VectorFitnessModel(GraphModel):
-    """ A generalized fitness model that allows vector strength sequences."""
+    """ A generalized fitness model that allows for vector strength sequences.
 
-    def __init__(self, *args):
+    Attributes
+    ----------
+    out_strength: np.ndarray or scipy.sparse matrix
+        the out strength matrix
+    in_strength: np.ndarray or scipy.sparse matrix
+        the in strength matrix
+    num_links: np.ndarray
+        the total number of links per group
+    num_nodes: np.int
+        the total number of nodes
+    num_groups: np.int
+        the total number of groups by which the vector strengths are computed
+    z: np.ndarray
+        the vector of density parameters
+    """
+
+    def __init__(self, out_strength, in_strength, num_links):
         """ Return a VectorFitnessModel for the given marginal graph data.
 
-        Accepts either a graph class object or three arguments (out_strength,
-        in_strength, group_dict) as input.
+        The assumption is that the row number of the strength matrices
+        represent the node number, while the column index relates to the
+        group.
+
+        Parameters
+        ----------
+        out_strength: np.ndarray or scipy.sparse matrix
+            the out strength matrix of a graph
+        in_strength: np.ndarray or scipy.sparse matrix
+            the in strength matrix of a graph
+        num_links: np.ndarray
+            the number of links in the graph
+        param: np.ndarray
+            array of parameters to be fitted by the model
+
+        Returns
+        -------
+        VectorFitnessModel
+            the model for the given input data
         """
-        num_args = len(args)
-        if num_args < 1:
-            self.out_strength = None
-            self.in_strength = None
-            self.group_dict = None
 
-        elif num_args == 1:
-            if not isinstance(args[0], Graph):
-                raise ValueError('Only one argument was given but it is not a'
-                                 ' graph.')
-            # TODO: extract relevant data from graph
-            pass
+        # Check that dimensions are consistent
+        msg = 'In and out strength do not have the same dimensions.'
+        assert in_strength.shape == out_strength.shape, msg
+        msg = ('Number of groups implied by number of links input does not'
+               'match strength input.')
+        assert len(num_links) == out_strength.shape[1], msg
 
-        elif num_args == 4:
-            if isinstance(args[0], np.ndarray):
-                self.out_strength = args[0]
-            else:
-                raise ValueError('Out degree provided is not a numpy array.')
-            if isinstance(args[1], np.ndarray):
-                self.in_strength = args[1]
-            else:
-                raise ValueError('In degree provided is not a numpy array.')
-            if isinstance(args[2], int):
-                self.L = args[2]
-            else:
-                raise ValueError('Number of links is not an integer.')
-            if isinstance(args[3], dict):
-                self.group_dict = args[3]
-            else:
-                raise ValueError('Group dict provided is not a dict.')
+        # Initialize attributes
+        self.out_strength = out_strength
+        self.in_strength = in_strength
+        self.num_links = num_links
+        self.num_nodes = out_strength.shape[0]
+        self.num_groups = out_strength.shape[1]
 
-        else:
-            raise ValueError('Wrong number of arguments.')
-
-    def solve(self, z0=1):
+    def solve(self, z0=None):
         """ Fit parameters to match the ensemble to the provided data."""
-        self.z = density_solver(lambda x: vector_fitness_link_prob(
-                                    self.out_strength,
-                                    self.in_strength,
-                                    x,
-                                    self.group_dict),
-                                self.L,
-                                z0)
+        if z0 is None:
+            z0 = np.ones(self.num_groups)
+
+        self.z = vector_density_solver(
+            lambda x: vector_fitness_prob_array(
+                self.out_strength,
+                self.in_strength,
+                x),
+            self.num_links,
+            z0)
+
+    @property
+    def probability_array(self):
+        if hasattr(self, 'z'):
+            return vector_fitness_prob_array(self.out_strength,
+                                             self.in_strength,
+                                             self.z)
+        else:
+            self.solve()
+            return vector_fitness_prob_array(self.out_strength,
+                                             self.in_strength,
+                                             self.z)
 
     @property
     def probability_matrix(self):
         if hasattr(self, 'z'):
             return vector_fitness_link_prob(self.out_strength,
                                             self.in_strength,
-                                            self.z,
-                                            self.group_dict)
+                                            self.z)
         else:
-            print('Running solver before returning matrix.')
             self.solve()
             return vector_fitness_link_prob(self.out_strength,
                                             self.in_strength,
-                                            self.z,
-                                            self.group_dict)
+                                            self.z)
 
 
-def vector_fitness_link_prob(out_strength, in_strength, z, group_dict=None):
-    """Compute the link probability matrix given the in and out strength
-    sequence, the density parameter z, and the number of vertices N.
+def vector_fitness_prob_array(out_strength, in_strength, z):
+    """Compute the link probability array given the in and out strength
+    sequence, and the density parameter z.
 
-    The out and in strength sequences should be numpy arrays of 1 dimension.
-    If a group dictionary is specified then it will be assumed that the
-    array will now be 2-dimensional and that the row relates to the node index
-    while the column refers to the group. If there is only one dimension it is
-    assumed that it is the total strength.
+    The out and in strength sequences should be numpy arrays or scipy.sparse
+    matrices of two dimension. It is assumed that the index along the
+    first dimension identifies the node, while the index along the second
+    dimension relates to the grouping by which the strength is computed.
+
+    Note the returned array is a three dimensional array whose (i,j,k) element
+    is the probability of observing a link of type k from node i to node j.
+
+    Parameters
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence of graph
+    in_strength: np.ndarray
+        the in strength sequence of graph
+    z: np.ndarray
+        the group density parameter of the fitness model
+
+    Returns
+    -------
+    numpy.ndarray
+        the link probability 3d matrix
+
+    TODO: Currently implemented with numpy arrays and standard iteration over
+    all indices. Consider avoiding computation of zeros and to return
+    function or iterator.
+    """
+    # Check that dimensions are consistent
+    msg = 'In and out strength do not have the same dimensions.'
+    assert in_strength.shape == out_strength.shape, msg
+
+    # Get number of nodes and groups
+    N = out_strength.shape[0]
+    G = out_strength.shape[1]
+
+    # Initialize empty result
+    p = np.zeros((N, N, G), dtype=np.float64)
+
+    for i in np.arange(N):
+        for j in np.arange(N):
+            for k in np.arange(G):
+                if i != j:
+                    s_i = out_strength[i, k]
+                    s_j = in_strength[j, k]
+                    p[i, j, k] = z[k]*s_i*s_j / (1 + z[k]*s_i*s_j)
+
+    return p
+
+
+def vector_fitness_link_prob(out_strength, in_strength, z):
+    """ Compute the probability matrix whose (i,j) element is the probability
+    of observing a link from node i to node j.
+
+    The out and in strength sequences should be numpy arrays or scipy.sparse
+    matrices of two dimension. It is assumed that the index along the
+    first dimension identifies the node, while the index along the second
+    dimension relates to the grouping by which the strength is computed.
+
 
     Parameters
     ----------
@@ -191,89 +178,54 @@ def vector_fitness_link_prob(out_strength, in_strength, z, group_dict=None):
         the in strength sequence of graph
     z: np.float64
         the density parameter of the fitness model
-    N: np.int64
-        the number of vertices in the graph
-    group_dict: dict
-        a dictionary that given the index of a node returns its group
 
     Returns
     -------
-    scipy.sparse.lil_matrix
+    numpy.ndarray
         the link probability matrix
 
     TODO: Currently implemented with numpy arrays and standard iteration over
-    all indices. Consider allowing for sparse matrices in case of groups and
-    to avoid iteration over all indices.
+    all indices. Consider avoiding computation of zeros and to return
+    function or iterator.
+
     """
-    # Check consistency in number of vertices
-    N = max(out_strength.shape)
-    if N != max(in_strength.shape):
-        raise ValueError('Number of nodes according to data provided does not'
-                         ' match.')
-    if group_dict is not None:
-        if N != len(group_dict):
-            raise ValueError('Number of nodes according to data provided does'
-                             'not match.')
 
-    # Initialize empty result
-    p = sp.lil_matrix((N, N), dtype=np.float64)
+    # Check that dimensions are consistent
+    msg = 'In and out strength do not have the same dimensions.'
+    assert in_strength.shape == out_strength.shape, msg
 
-    if group_dict is None:
-        if (out_strength.ndim > 1) or (in_strength.ndim > 1):
-            raise ValueError('A group dict was not provided but the strength '
-                             + 'sequence is a vector.')
-        else:
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i]
-                        s_j = in_strength[j]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-    else:
-        if (out_strength.ndim > 1) and (in_strength.ndim > 1):
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i, group_dict[j]]
-                        s_j = in_strength[j, group_dict[i]]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-        elif (out_strength.ndim > 1) and (in_strength.ndim == 1):
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i, group_dict[j]]
-                        s_j = in_strength[j]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-        elif (out_strength.ndim == 1) and (in_strength.ndim > 1):
-            for i in np.arange(N):
-                for j in np.arange(N):
-                    if i != j:
-                        s_i = out_strength[i]
-                        s_j = in_strength[j, group_dict[i]]
-                        p[i, j] = z*s_i*s_j / (1 + z*s_i*s_j)
-        else:
-            raise ValueError('A group dict was provided but no vector' +
-                             ' strength sequence is available.')
+    # Get number of nodes and groups
+    N = out_strength.shape[0]
+    G = out_strength.shape[1]
 
-    return p
+    # The element i,j of the matrix p here gives the probability that no link
+    # of any of the G types exists between node i and j.
+    # We initialize to all ones to ensure that we can multiply correctly
+    p = np.ones((N, N), dtype=np.float64)
+
+    for i in np.arange(N):
+        for j in np.arange(N):
+            for k in np.arange(G):
+                if i != j:
+                    s_i = out_strength[i, k]
+                    s_j = in_strength[j, k]
+                    p[i, j] *= 1 - (z[k]*s_i*s_j / (1 + z[k]*s_i*s_j))
+
+    # Return probability of observing at least one link (out of the G types)
+    return 1 - p
 
 
-def density_solver(p_fun, L, z0):
-    """ Return the optimal z to match a given number of links L.
-
-    Note it is assumed that the probability matrix expresses the probability
-    of extracting each edge as an independent Bernoulli trial. Such that the
-    expected number of links in the network is the sum of the elements of the
-    probability matrix.
+def vector_density_solver(p_fun, L, z0):
+    """ Return the optimal z to match a given number of links vector (L).
 
     Parameters
     ----------
     p_fun: function
-        the function returning the probability matrix implied by a z value
-    L : int
-        number of links to be matched by expectation
-    z0: np.float64
-        initial conditions for z
+        the function returning the probability array implied by a z value
+    L : np.ndarray
+        number of links per group to be matched by expectation
+    z0: np.ndarray
+        initial conditions for z vector
 
     Returns
     -------
@@ -283,8 +235,6 @@ def density_solver(p_fun, L, z0):
     TODO: Currently implemented with general solver, consider iterative
     approach.
     """
-    p_mat = p_fun(z0)
-    if isinstance(p_mat, np.ndarray):
-        return fsolve(lambda x: np.sum(p_fun(x)) - L, z0)
-    elif isinstance(p_mat, sp.spmatrix):
-        return fsolve(lambda x: p_fun(x).sum() - L, z0)
+    return least_squares(lambda x: np.sum(p_fun(x), axis=(0, 1)) - L,
+                         z0,
+                         method='lm').x
