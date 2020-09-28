@@ -3,6 +3,9 @@
 It plots how the computation time evolves with increasing number of links and
 edges. The results are platform dependent but the relative performance of
 improvements to the models should be tested.
+
+Current worst case scenario:
+500 0.1 0.1 100 Done in:  9.167050301
 """
 import time
 import graph_ensembles as ge
@@ -12,13 +15,13 @@ import matplotlib.pyplot as plt
 
 # Specify parameters' space for graph construction
 # Number of nodes
-N = [10, 50, 100]
+N = [10, 50, 100, 500]
 
 # Density of links as a fraction of max value N*(N-1)
 L = [0.001, 0.01, 0.1]
 
 # Number of groups as percentage of N
-G = [0.1, 0.2]
+G = [0.1, 0.25, 0.5]
 
 # Max strength for a node
 W = [100]
@@ -73,7 +76,9 @@ for n, l, g, w in product(N, L, G, W):
 
 # Plot results grouping series by L, G, and W
 for l, g, w in product(L, G, W):  # noqa: E741
-    plt.plot(N, comp_time[:, L.index(l), G.index(g), W.index(w)],
-             label=f"L={l}, G={g}, W={w}")
+    plt.loglog(N, comp_time[:, L.index(l), G.index(g), W.index(w)],
+               label=f"L={l}, G={g}, W={w}")
 plt.legend(title='Parameters:')
+plt.xlabel('Number of nodes')
+plt.ylabel('Computation time (s)')
 plt.show()
