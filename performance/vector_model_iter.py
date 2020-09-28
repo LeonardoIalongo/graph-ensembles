@@ -8,6 +8,7 @@ import time
 import graph_ensembles as ge
 import numpy as np
 from itertools import product
+import matplotlib.pyplot as plt
 
 # Specify parameters' space for graph construction
 # Number of nodes
@@ -69,3 +70,10 @@ for n, l, g, w in product(N, L, G, W):
     eval_time = time.perf_counter() - start
     comp_time[N.index(n), L.index(l), G.index(g), W.index(w)] = eval_time
     print('Done in: ', eval_time)
+
+# Plot results grouping series by L, G, and W
+for l, g, w in product(L, G, W):  # noqa: E741
+    plt.plot(N, comp_time[:, L.index(l), G.index(g), W.index(w)],
+             label=f"L={l}, G={g}, W={w}")
+plt.legend(title='Parameters:')
+plt.show()
