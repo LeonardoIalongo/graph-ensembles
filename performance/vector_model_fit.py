@@ -1,4 +1,4 @@
-""" This script is used to evaluate the performance of the network models.
+""" Evaluate the performance of fitting the vector fitness model.
 
 It plots how the computation time evolves with increasing number of links and
 edges. The results are platform dependent but the relative performance of

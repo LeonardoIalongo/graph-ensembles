@@ -12,6 +12,7 @@ setup(
                 "coverage==5.2.1",
                 "pytest-cov==2.10.1",
                 "flake8==3.8.3",
-                "wheel==0.35.1"],
+                "wheel==0.35.1",
+		"matplotlib==3.3.2"],
         },
     )
