@@ -35,7 +35,7 @@ def vector_fitness_link_prob_block_multiple_z(out_strength, in_strength, z):
     p = np.zeros(shape=(n_sector,n_sector),dtype=np.float)
     z = np.reshape(z,newshape=(n_sector,n_sector))
     for i in np.arange(out_strength.shape[0]):
-        ind_out = out_strength[i,0]
+        ind_out = int(out_strength[i,0])
         sect_out = int(out_strength[i,1])
         s_out = out_strength[i,2]
         for j in prange(in_strength.shape[0]):
