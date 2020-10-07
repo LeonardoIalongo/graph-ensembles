@@ -25,7 +25,7 @@ def vector_fitness_prob_array_block_one_z(out_strength, in_strength, z, dict_sec
             if (ind_out != ind_in)&(sect_out==sect_node2)&(sect_in==sect_node1):
                 tmp = s_out*s_in
                 tmp2 = z*tmp
-                p[ind_out, ind_in] = tmp / (1 + tmp)
+                p[ind_out, ind_in] = tmp2 / (1 + tmp2)
     return p
 
 
