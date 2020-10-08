@@ -28,7 +28,7 @@ def vector_fitness_prob_array_stripe_one_z(out_strength, in_strength, z, N):
 
 
 @jit(forceobj=True, parallel=True)
-def vector_fitness_link_prob_stripe_one_z(out_strength, in_strength, z):
+def expected_links_stripe_one_z(out_strength, in_strength, z):
     """
     Function computing the expeceted number of links, under the Cimi
     stripe model, given the parameter z controlling for the density.
@@ -73,7 +73,7 @@ def vector_fitness_prob_array_stripe_mult_z(out_strength, in_strength, z, N):
 
 
 @jit(forceobj=True, parallel=True)
-def vector_fitness_link_prob_stripe_mult_z(out_strength, in_strength, z):
+def expected_links_stripe_mult_z(out_strength, in_strength, z):
     """
     Function computing the expeceted number of links, under the Cimi
     stripe model, given the N parameters z controlling for the density
@@ -97,13 +97,12 @@ def vector_fitness_link_prob_stripe_mult_z(out_strength, in_strength, z):
 
 @jit(nopython=True, parallel=True)
 def vector_fitness_prob_array_block_one_z(out_strength, in_strength,
-                                          z, dict_sectors):
+                                          z, dict_sectors, N):
     """
     Function computing the Probability Matrix of the Cimi block model
     with just one parameter controlling for the density.
     """
 
-    N = len(np.unique(out_strength[:, 0]))
     p = np.zeros((N, N), dtype=np.float64)
 
     for i in np.arange(out_strength.shape[0]):
@@ -125,7 +124,7 @@ def vector_fitness_prob_array_block_one_z(out_strength, in_strength,
 
 
 @jit(forceobj=True, parallel=True)
-def vector_fitness_link_prob_block_one_z(out_strength, in_strength,
+def expected_links_block_one_z(out_strength, in_strength,
                                          z, dict_sectors):
     """
     Function computing the expeceted number of links, under the Cimi
@@ -176,7 +175,7 @@ def vector_fitness_prob_array_block_multiple_z(out_strength, in_strength,
 
 
 @jit(forceobj=True, parallel=True)
-def vector_fitness_link_prob_block_multiple_z(out_strength, in_strength, z):
+def expected_links_block_multiple_z(out_strength, in_strength, z):
     """
     Function computing the expeceted number of links, under the Cimi
     stripe model, given the parameter z controlling for the density.
