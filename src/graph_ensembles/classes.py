@@ -14,42 +14,58 @@ class GraphModel():
         pass
 
 
-class VectorFitnessModel(GraphModel):
+class FitnessModel(GraphModel):
+    pass
+
+
+class StripeFitnessModel(GraphModel):
     """ A generalized fitness model that allows for vector strength sequences.
+
+    This model allows to take into account labels of the edges and include
+    this information as part of the model. The strength sequence is therefore
+    now subdivided in strength per label. To quantities can be preserved by
+    the ensemble: either the total number of links, or the number of links per
+    label.
 
     Attributes
     ----------
-    out_strength: np.ndarray or scipy.sparse matrix
+    out_strength: np.ndarray
         the out strength matrix
-    in_strength: np.ndarray or scipy.sparse matrix
+    in_strength: np.ndarray
         the in strength matrix
-    num_links: np.ndarray
-        the total number of links per group
+    num_links: int (or np.ndarray)
+        the total number of links (per label)
     num_nodes: np.int
         the total number of nodes
-    num_groups: np.int
-        the total number of groups by which the vector strengths are computed
-    z: np.ndarray
+    num_labels: np.int
+        the total number of labels by which the vector strengths are computed
+    z: float or np.ndarray
         the vector of density parameters
     """
 
     def __init__(self, out_strength, in_strength, num_links):
         """ Return a VectorFitnessModel for the given marginal graph data.
 
-        The assumption is that the row number of the strength matrices
-        represent the node number, while the column index relates to the
-        group.
+        The model accepts the strength sequence as numpy arrays. The first
+        column must contain the node index, the second column the label index
+        to which the strength refers, and in the third column must have the
+        value of the strength for the node label pair. All node label pairs
+        not included are assumed zero.
+
+        Note that the number of links given implicitly determines if the
+        quantity preserved is the total number of links or the number of links
+        per label. Pass only one integer for the first and a numpy array for
+        the second. Note that if an array is passed then the index must be the
+        same as the one in the strength sequence.
 
         Parameters
         ----------
-        out_strength: np.ndarray or scipy.sparse matrix
+        out_strength: np.ndarray
             the out strength matrix of a graph
-        in_strength: np.ndarray or scipy.sparse matrix
+        in_strength: np.ndarray
             the in strength matrix of a graph
-        num_links: np.ndarray
-            the number of links in the graph
-        param: np.ndarray
-            array of parameters to be fitted by the model
+        num_links: int (or np.ndarray)
+            the number of links in the graph (per label)
 
         Returns
         -------
@@ -57,19 +73,48 @@ class VectorFitnessModel(GraphModel):
             the model for the given input data
         """
 
-        # Check that dimensions are consistent
-        msg = 'In and out strength do not have the same dimensions.'
-        assert in_strength.shape == out_strength.shape, msg
-        msg = ('Number of groups implied by number of links input does not'
-               'match strength input.')
-        assert len(num_links) == out_strength.shape[1], msg
+        # Ensure that strengths passed adhere to format
+        msg = 'Out strength does not have three columns.'
+        assert out_strength.shape[1] == 3, msg
+        msg = 'In strength does not have three columns.'
+        assert in_strength.shape[1] == 3, msg
+
+        # Get number of nodes and labels implied by the strengths
+        num_nodes_out = np.max(out_strength[:, 0])
+        num_nodes_in = np.max(in_strength[:, 0])
+        num_nodes = max(num_nodes_out, num_nodes_in) + 1
+
+        num_labels_out = np.max(out_strength[:, 1])
+        num_labels_in = np.max(in_strength[:, 1])
+        num_labels = max(num_labels_out, num_labels_in) + 1
+
+        # Ensure that number of constraint matches number of labels
+        if isinstance(num_links, np.ndarray):
+            msg = ('Number of links array does not have the number of'
+                   ' elements equal to the number of labels.')
+            assert len(num_links) == num_labels, msg
+
+        # Check that sum of in and out strengths are equal per label
+        tot_out = np.zeros((num_labels))
+        for row in out_strength:
+            tot_out[row[1]] += row[2]
+        tot_in = np.zeros((num_labels))
+        for row in in_strength:
+            tot_in[row[1]] += row[2]
+
+        msg = 'Sum of strengths per label do not match.'
+        assert np.all(tot_out == tot_in), msg
 
         # Initialize attributes
-        self.out_strength = sp.csc_matrix(out_strength)
-        self.in_strength = sp.csc_matrix(in_strength)
+        self.out_strength = out_strength
+        self.in_strength = in_strength
         self.num_links = num_links
-        self.num_nodes = out_strength.shape[0]
-        self.num_groups = out_strength.shape[1]
+        self.num_nodes = num_nodes
+        self.num_labels = num_labels
+
+
+class BlockFitnessModel(GraphModel):
+    pass
 
     def solve(self, z0=None):
         """ Fit parameters to match the ensemble to the provided data."""

@@ -1,27 +1,27 @@
 """ Test graph ensemble model classes on simple sample graph. """
-import graph_ensembles as ge
+import graph_ensembles.classes as ge
 import numpy as np
 
 # Define graph marginals to check computation
-out_strength = np.array([[2, 0, 0],
-                        [0, 5, 0],
-                        [0, 0, 6],
-                        [0, 0, 1]])
+out_strength = np.array([[0, 0, 2],
+                        [1, 1, 5],
+                        [2, 2, 6],
+                        [3, 2, 1]])
 
-in_strength = np.array([[0, 5, 4],
-                        [0, 0, 3],
-                        [0, 0, 0],
-                        [2, 0, 0]])
+in_strength = np.array([[0, 1, 5],
+                        [0, 2, 4],
+                        [1, 2, 3],
+                        [3, 0, 2]])
 
 num_nodes = 4
 num_links = np.array([1, 1, 3])
 num_groups = 3
 
 
-class TestVectorFitnessModel():
+class TestStripeFitnessModel():
     def test_issubclass(self):
         """ Check that the vfm is a graph model."""
-        model = ge.VectorFitnessModel(out_strength,
+        model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         assert isinstance(model, ge.GraphModel)
@@ -29,7 +29,7 @@ class TestVectorFitnessModel():
     def test_model_init(self):
         """ Check that the vfm can be correctly initialized with margins data.
         """
-        model = ge.VectorFitnessModel(out_strength,
+        model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         assert np.all(model.out_strength == out_strength)
@@ -38,7 +38,7 @@ class TestVectorFitnessModel():
 
     def test_solver(self):
         """ Check that the solver is fitting the parameter z correctly. """
-        model = ge.VectorFitnessModel(out_strength,
+        model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         model.solve(z0=[0, 0, 0])
@@ -57,7 +57,7 @@ class TestVectorFitnessModel():
         true_value[3, 0, 2] = 0.634848
         true_value[3, 1, 2] = 0.565961
 
-        model = ge.VectorFitnessModel(out_strength,
+        model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         np.testing.assert_allclose(model.probability_array,
@@ -71,7 +71,7 @@ class TestVectorFitnessModel():
                               [0.912523, 0.886668, 0., 0.],
                               [0.634848, 0.565961, 0., 0.]])
 
-        model = ge.VectorFitnessModel(out_strength,
+        model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         np.testing.assert_allclose(model.probability_matrix,
@@ -79,7 +79,7 @@ class TestVectorFitnessModel():
                                    rtol=1e-6)
 
     def test_expected_num_links(self):
-        model = ge.VectorFitnessModel(out_strength,
+        model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         exp_num_links = np.sum(model.probability_array, axis=(0, 1))
