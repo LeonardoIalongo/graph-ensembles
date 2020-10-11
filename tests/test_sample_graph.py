@@ -1,6 +1,7 @@
 """ Test graph ensemble model classes on simple sample graph. """
 import graph_ensembles.classes as ge
 import numpy as np
+import pytest
 
 # Define graph marginals to check computation
 out_strength = np.array([[0, 0, 2],
@@ -15,19 +16,32 @@ in_strength = np.array([[0, 1, 5],
 
 num_nodes = 4
 num_links = np.array([1, 1, 3])
+num_links_tot = 5
 num_groups = 3
 
 
 class TestStripeFitnessModel():
     def test_issubclass(self):
-        """ Check that the vfm is a graph model."""
+        """ Check that the stripe model is a graph model."""
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         assert isinstance(model, ge.GraphModel)
 
-    def test_model_init(self):
-        """ Check that the vfm can be correctly initialized with margins data.
+    def test_model_init_single(self):
+        """ Check that the stripe model can be correctly initialized with a
+        single number of links.
+        """
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        assert np.all(model.out_strength == out_strength)
+        assert np.all(model.in_strength == in_strength)
+        assert np.all(model.num_links == num_links_tot)
+
+    def test_model_init_multi(self):
+        """ Check that the stripe model can be correctly initialized with
+        an array of number of links.
         """
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
@@ -35,6 +49,22 @@ class TestStripeFitnessModel():
         assert np.all(model.out_strength == out_strength)
         assert np.all(model.in_strength == in_strength)
         assert np.all(model.num_links == num_links)
+
+    def test_model_wrong_init(self):
+        """ Check that the stripe model raises exceptions for wrong inputs."""
+        with pytest.raises(Exception) as e_info:
+            ge.StripeFitnessModel(out_strength,
+                                  in_strength,
+                                  np.array([1, 2]))
+        msg = ('Number of links array does not have the number of'
+               ' elements equal to the number of labels.')
+        assert e_info.value.args[0] == msg
+
+        with pytest.raises(Exception) as e_info:
+            ge.StripeFitnessModel(out_strength,
+                                  in_strength,
+                                  [1, 2])
+        assert e_info.value.args[0] == 'Number of links is not a number.'
 
     def test_solver(self):
         """ Check that the solver is fitting the parameter z correctly. """

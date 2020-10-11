@@ -93,6 +93,11 @@ class StripeFitnessModel(GraphModel):
             msg = ('Number of links array does not have the number of'
                    ' elements equal to the number of labels.')
             assert len(num_links) == num_labels, msg
+        else:
+            try:
+                int(num_links)
+            except TypeError:
+                assert False, 'Number of links is not a number.'
 
         # Check that sum of in and out strengths are equal per label
         tot_out = np.zeros((num_labels))
