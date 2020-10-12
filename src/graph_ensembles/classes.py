@@ -127,9 +127,8 @@ class StripeFitnessModel(GraphModel):
 
         TODO: Currently implemented with general solver, consider iterative
         approach.
-        TODO: No checks on solver effectively solving
+        TODO: No checks on solver solution and convergence
         """
-        """ Fit parameters to match the ensemble to the provided data."""
         if z0 is None:
             if isinstance(self.num_links, np.ndarray):
                 z0 = np.ones(self.num_labels)

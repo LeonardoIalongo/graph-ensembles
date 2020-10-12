@@ -8,7 +8,7 @@ def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the
     single parameter z controlling for the density.
     """
-    p = np.zeros((N, N), dtype=np.float64)
+    p = np.ones((N, N), dtype=np.float64)
 
     for i in np.arange(out_strength.shape[0]):
         ind_out = int(out_strength[i, 0])
@@ -21,9 +21,9 @@ def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
             if (ind_out != ind_in) & (sect_out == sect_in):
                 tmp = s_out*s_in
                 tmp2 = z*tmp
-                p[ind_out, ind_in] = tmp2 / (1 + tmp2)
+                p[ind_out, ind_in] *= 1 - tmp2 / (1 + tmp2)
 
-    return p
+    return 1 - p
 
 
 @jit(nopython=True, parallel=True)
@@ -54,7 +54,7 @@ def expected_links_stripe_one_z(out_strength, in_strength, z):
     """ Compute the expected number of links of the stripe fitness model
     given the single parameter z controlling for the density.
     """
-    p = 0.0
+    tot = 0.0
 
     for i in np.arange(out_strength.shape[0]):
         ind_out = int(out_strength[i, 0])
@@ -67,8 +67,8 @@ def expected_links_stripe_one_z(out_strength, in_strength, z):
             if (ind_out != ind_in) & (sect_out == sect_in):
                 tmp = s_out*s_in
                 tmp2 = z*tmp
-                p += tmp2 / (1 + tmp2)
-    return p
+                tot += tmp2 / (1 + tmp2)
+    return tot
 
 
 @jit(nopython=True)
@@ -140,7 +140,8 @@ def prob_matrix_stripe_mult_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model with one
     parameter controlling for the density for each label.
     """
-    p = np.zeros((N, N), dtype=np.float64)
+    p = np.ones((N, N), dtype=np.float64)
+
     for i in np.arange(out_strength.shape[0]):
         ind_out = int(out_strength[i, 0])
         sect_out = int(out_strength[i, 1])
@@ -151,8 +152,8 @@ def prob_matrix_stripe_mult_z(out_strength, in_strength, z, N):
             s_in = in_strength[j, 2]
             if (ind_out != ind_in) & (sect_out == sect_in):
                 tmp = z[sect_out]*s_out*s_in
-                p[ind_out, ind_in] = tmp / (1 + tmp)
-    return p
+                p[ind_out, ind_in] *= 1 - tmp / (1 + tmp)
+    return 1 - p
 
 
 @jit(nopython=True, parallel=True)
