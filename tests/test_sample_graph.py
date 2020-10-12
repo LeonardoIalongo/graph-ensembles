@@ -66,7 +66,17 @@ class TestStripeFitnessModel():
                                   [1, 2])
         assert e_info.value.args[0] == 'Number of links is not a number.'
 
-    def test_solver(self):
+    def test_solver_single(self):
+        """ Check that the solver is fitting the parameter z correctly. """
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        model.fit(z0=0)
+        np.testing.assert_allclose(model.z,
+                                   0.77,
+                                   rtol=1e-6)
+
+    def test_solver_multi(self):
         """ Check that the solver is fitting the parameter z correctly. """
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
@@ -76,7 +86,25 @@ class TestStripeFitnessModel():
                                    [1.006638e+08, 1.610613e+07, 4.346469e-01],
                                    rtol=1e-6)
 
-    def test_probability_array(self):
+    def test_probability_array_single(self):
+        """ Check that the returned probability array is correct. """
+        true_value = np.zeros((num_nodes, num_nodes, num_groups),
+                              dtype=np.float64)
+        true_value[0, 3, 0] = 1.
+        true_value[1, 0, 1] = 1.
+        true_value[2, 0, 2] = 0.912523
+        true_value[2, 1, 2] = 0.886668
+        true_value[3, 0, 2] = 0.634848
+        true_value[3, 1, 2] = 0.565961
+
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        np.testing.assert_allclose(model.probability_array,
+                                   true_value,
+                                   rtol=1e-6)
+
+    def test_probability_array_multi(self):
         """ Check that the returned probability array is correct. """
         true_value = np.zeros((num_nodes, num_nodes, num_groups),
                               dtype=np.float64)
@@ -94,7 +122,21 @@ class TestStripeFitnessModel():
                                    true_value,
                                    rtol=1e-6)
 
-    def test_probability_matrix(self):
+    def test_probability_matrix_single(self):
+        """ Check that the returned probability matrix is the correct one. """
+        true_value = np.array([[0., 0., 0., 1.],
+                              [1., 0., 0., 0.],
+                              [0.912523, 0.886668, 0., 0.],
+                              [0.634848, 0.565961, 0., 0.]])
+
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        np.testing.assert_allclose(model.probability_matrix,
+                                   true_value,
+                                   rtol=1e-6)
+
+    def test_probability_matrix_multi(self):
         """ Check that the returned probability matrix is the correct one. """
         true_value = np.array([[0., 0., 0., 1.],
                               [1., 0., 0., 0.],
@@ -108,11 +150,20 @@ class TestStripeFitnessModel():
                                    true_value,
                                    rtol=1e-6)
 
-    def test_expected_num_links(self):
+    def test_expected_num_links_single(self):
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        exp_num_links = model.probability_matrix.sum()
+        np.testing.assert_allclose(num_links_tot,
+                                   exp_num_links,
+                                   rtol=1e-6)
+
+    def test_expected_num_links_multi(self):
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
         exp_num_links = np.sum(model.probability_array, axis=(0, 1))
-        np.testing.assert_allclose(model.num_links,
+        np.testing.assert_allclose(num_links,
                                    exp_num_links,
                                    rtol=1e-6)
