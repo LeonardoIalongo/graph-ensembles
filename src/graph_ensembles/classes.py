@@ -3,8 +3,8 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
-import scipy.sparse as sp
 from scipy.optimize import least_squares
+from . import methods
 
 
 class GraphModel():
@@ -23,16 +23,16 @@ class StripeFitnessModel(GraphModel):
 
     This model allows to take into account labels of the edges and include
     this information as part of the model. The strength sequence is therefore
-    now subdivided in strength per label. To quantities can be preserved by
+    now subdivided in strength per label. Two quantities can be preserved by
     the ensemble: either the total number of links, or the number of links per
     label.
 
     Attributes
     ----------
     out_strength: np.ndarray
-        the out strength matrix
+        the out strength sequence
     in_strength: np.ndarray
-        the in strength matrix
+        the in strength sequence
     num_links: int (or np.ndarray)
         the total number of links (per label)
     num_nodes: np.int
@@ -69,7 +69,7 @@ class StripeFitnessModel(GraphModel):
 
         Returns
         -------
-        VectorFitnessModel
+        StripeFitnessModel
             the model for the given input data
         """
 
@@ -117,190 +117,86 @@ class StripeFitnessModel(GraphModel):
         self.num_nodes = num_nodes
         self.num_labels = num_labels
 
+    def fit(self, z0=None):
+        """ Compute the optimal z to match the given number of links.
 
-class BlockFitnessModel(GraphModel):
-    pass
+        Parameters
+        ----------
+        z0: np.ndarray
+            optional initial conditions for z vector
 
-    def solve(self, z0=None):
+        TODO: Currently implemented with general solver, consider iterative
+        approach.
+        TODO: No checks on solver effectively solving
+        """
         """ Fit parameters to match the ensemble to the provided data."""
         if z0 is None:
-            z0 = np.ones(self.num_groups)
+            if isinstance(self.num_links, np.ndarray):
+                z0 = np.ones(self.num_labels)
+            else:
+                z0 = 1.0
 
-        self.z = vector_density_solver(
-            lambda x: vector_fitness_prob_array(
-                self.out_strength,
-                self.in_strength,
-                x),
-            self.num_links,
-            z0)
+        if isinstance(self.num_links, np.ndarray):
+            self.z = least_squares(
+                lambda x: methods.expected_links_stripe_mult_z(
+                    self.out_strength,
+                    self.in_strength,
+                    x) - self.num_links,
+                z0,
+                method='lm').x
+        else:
+            self.z = least_squares(
+                lambda x: methods.expected_links_stripe_one_z(
+                    self.out_strength,
+                    self.in_strength,
+                    x) - self.num_links,
+                z0,
+                method='lm').x
 
     @property
     def probability_array(self):
-        if hasattr(self, 'z'):
-            return vector_fitness_prob_array(self.out_strength,
-                                             self.in_strength,
-                                             self.z)
+        """ Return the probability array of the model.
+
+        The (i,j,k) element of this array is the probability of observing a
+        link of type k from node i to j.
+        """
+        if not hasattr(self, 'z'):
+            self.fit()
+
+        if isinstance(self.num_links, np.ndarray):
+            return methods.prob_array_stripe_mult_z(self.out_strength,
+                                                    self.in_strength,
+                                                    self.z,
+                                                    self.num_nodes,
+                                                    self.num_labels)
         else:
-            self.solve()
-            return vector_fitness_prob_array(self.out_strength,
-                                             self.in_strength,
-                                             self.z)
+            return methods.prob_array_stripe_one_z(self.out_strength,
+                                                   self.in_strength,
+                                                   self.z,
+                                                   self.num_nodes,
+                                                   self.num_labels)
 
     @property
     def probability_matrix(self):
-        if hasattr(self, 'z'):
-            return vector_fitness_link_prob(self.out_strength,
-                                            self.in_strength,
-                                            self.z)
+        """ Return the probability matrix of the model.
+
+        The (i,j) element of this matrix is the probability of observing a
+        link from node i to j of any kind.
+        """
+        if not hasattr(self, 'z'):
+            self.fit()
+
+        if isinstance(self.num_links, np.ndarray):
+            return methods.prob_matrix_stripe_mult_z(self.out_strength,
+                                                     self.in_strength,
+                                                     self.z,
+                                                     self.num_nodes)
         else:
-            self.solve()
-            return vector_fitness_link_prob(self.out_strength,
-                                            self.in_strength,
-                                            self.z)
+            return methods.prob_matrix_stripe_one_z(self.out_strength,
+                                                    self.in_strength,
+                                                    self.z,
+                                                    self.num_nodes)
 
 
-def vector_fitness_prob_array(out_strength, in_strength, z):
-    """Compute the link probability array given the in and out strength
-    sequence, and the density parameter z.
-
-    The out and in strength sequences should be numpy arrays or scipy.sparse
-    matrices of two dimension. It is assumed that the index along the
-    first dimension identifies the node, while the index along the second
-    dimension relates to the grouping by which the strength is computed.
-
-    Note the returned array is a three dimensional array whose (i,j,k) element
-    is the probability of observing a link of type k from node i to node j.
-
-    Parameters
-    ----------
-    out_strength: scipy.sparse.csc_matrix
-        the out strength sequence of graph
-    in_strength: scipy.sparse.csc_matrix
-        the in strength sequence of graph
-    z: np.ndarray
-        the group density parameter of the fitness model
-
-    Returns
-    -------
-    numpy.ndarray
-        the link probability 3d matrix
-
-    """
-    # Check that dimensions are consistent
-    msg = 'In and out strength do not have the same dimensions.'
-    assert in_strength.shape == out_strength.shape, msg
-
-    # Check that the input is a csc_matrix
-    if not isinstance(out_strength, sp.csc_matrix):
-        out_strength = sp.csc_matrix(out_strength)
-    if not isinstance(in_strength, sp.csc_matrix):
-        in_strength = sp.csc_matrix(in_strength)
-
-    # Get number of nodes and groups
-    N = out_strength.shape[0]
-    G = out_strength.shape[1]
-
-    # Initialize empty result
-    p = np.zeros((N, N, G), dtype=np.float64)
-
-    for k in np.arange(G):
-        out_index = out_strength[:, k].nonzero()[0]
-        in_index = in_strength[:, k].nonzero()[0]
-        out_data = out_strength[:, k].data
-        in_data = in_strength[:, k].data
-
-        for i, s_i in zip(out_index, out_data):
-            for j, s_j in zip(in_index, in_data):
-                if i != j:
-                    p[i, j, k] = z[k]*s_i*s_j / (1 + z[k]*s_i*s_j)
-
-    return p
-
-
-def vector_fitness_link_prob(out_strength, in_strength, z):
-    """ Compute the probability matrix whose (i,j) element is the probability
-    of observing a link from node i to node j.
-
-    The out and in strength sequences should be numpy arrays or scipy.sparse
-    matrices of two dimension. It is assumed that the index along the
-    first dimension identifies the node, while the index along the second
-    dimension relates to the grouping by which the strength is computed.
-
-
-    Parameters
-    ----------
-    out_strength: np.ndarray
-        the out strength sequence of graph
-    in_strength: np.ndarray
-        the in strength sequence of graph
-    z: np.float64
-        the density parameter of the fitness model
-
-    Returns
-    -------
-    numpy.ndarray
-        the link probability matrix
-
-    TODO: Currently implemented with numpy arrays and standard iteration over
-    all indices. Consider avoiding computation of zeros and to return
-    function or iterator.
-
-    """
-
-    # Check that dimensions are consistent
-    msg = 'In and out strength do not have the same dimensions.'
-    assert in_strength.shape == out_strength.shape, msg
-
-    # Check that the input is a csc_matrix
-    if not isinstance(out_strength, sp.csc_matrix):
-        out_strength = sp.csc_matrix(out_strength)
-    if not isinstance(in_strength, sp.csc_matrix):
-        in_strength = sp.csc_matrix(in_strength)
-
-    # Get number of nodes and groups
-    N = out_strength.shape[0]
-    G = out_strength.shape[1]
-
-    # The element i,j of the matrix p here gives the probability that no link
-    # of any of the G types exists between node i and j.
-    # We initialize to all ones to ensure that we can multiply correctly
-    p = np.ones((N, N), dtype=np.float64)
-
-    for k in np.arange(G):
-        out_index = out_strength[:, k].nonzero()[0]
-        in_index = in_strength[:, k].nonzero()[0]
-        out_data = out_strength[:, k].data
-        in_data = in_strength[:, k].data
-
-        for i, s_i in zip(out_index, out_data):
-            for j, s_j in zip(in_index, in_data):
-                if i != j:
-                    p[i, j] *= 1 - z[k]*s_i*s_j / (1 + z[k]*s_i*s_j)
-
-    # Return probability of observing at least one link (out of the G types)
-    return 1 - p
-
-
-def vector_density_solver(p_fun, L, z0):
-    """ Return the optimal z to match a given number of links vector (L).
-
-    Parameters
-    ----------
-    p_fun: function
-        the function returning the probability array implied by a z value
-    L : np.ndarray
-        number of links per group to be matched by expectation
-    z0: np.ndarray
-        initial conditions for z vector
-
-    Returns
-    -------
-    np.float64
-        the optimal z value solving L = <L>
-
-    TODO: Currently implemented with general solver, consider iterative
-    approach.
-    """
-    return least_squares(lambda x: np.sum(p_fun(x), axis=(0, 1)) - L,
-                         z0,
-                         method='lm').x
+class BlockFitnessModel(GraphModel):
+    pass

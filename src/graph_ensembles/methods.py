@@ -4,10 +4,9 @@ from numba import prange
 
 
 @jit(nopython=True, parallel=True)
-def vector_fitness_prob_array_stripe_one_z(out_strength, in_strength, z, N):
-    """
-    Function computing the Probability Matrix of the Cimi stripe model
-    with just one parameter controlling for the density.
+def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
+    """ Compute the probability matrix of the stripe fitness model given the
+    single parameter z controlling for the density.
     """
     p = np.zeros((N, N), dtype=np.float64)
 
@@ -27,11 +26,33 @@ def vector_fitness_prob_array_stripe_one_z(out_strength, in_strength, z, N):
     return p
 
 
-#@jit(forceobj=True, parallel=False)
-def expected_links_stripe_one_z(out_strength, in_strength, z):
+@jit(nopython=True, parallel=True)
+def prob_array_stripe_one_z(out_strength, in_strength, z, N, G):
+    """ Compute the probability array of the stripe fitness model given the
+    single parameter z controlling for the density.
     """
-    Function computing the expeceted number of links, under the Cimi
-    stripe model, given the parameter z controlling for the density.
+    p = np.zeros((N, N, G), dtype=np.float64)
+
+    # for i in np.arange(out_strength.shape[0]):
+    #     ind_out = int(out_strength[i, 0])
+    #     sect_out = int(out_strength[i, 1])
+    #     s_out = out_strength[i, 2]
+    #     for j in prange(in_strength.shape[0]):
+    #         ind_in = int(in_strength[j, 0])
+    #         sect_in = int(in_strength[j, 1])
+    #         s_in = in_strength[j, 2]
+    #         if (ind_out != ind_in) & (sect_out == sect_in):
+    #             tmp = s_out*s_in
+    #             tmp2 = z*tmp
+    #             p[ind_out, ind_in] = tmp2 / (1 + tmp2)
+
+    return p
+
+
+# @jit(forceobj=True, parallel=False)
+def expected_links_stripe_one_z(out_strength, in_strength, z):
+    """ Compute the expected number of links of the stripe fitness model
+    given the single parameter z controlling for the density.
     """
     p = 0.0
 
@@ -51,10 +72,12 @@ def expected_links_stripe_one_z(out_strength, in_strength, z):
 
 
 @jit(nopython=True)
-def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength, N, group_array, expected=True):
-    """Function returning the weighted adjacency matrix of the Cimi stripe model
-    with just one global parameter z controlling for the density. Depending on the value of 
-    "expected" the weighted adjacency matrix can be the expceted one or just an ensemble realisation.
+def assign_weights_stripe_one_z(p, out_strength, in_strength, N,
+                                group_array, expected=True):
+    """ Return the weighted adjacency matrix of the stripe fitness model
+    with just one global parameter z controlling for the density.
+    Depending on the value of "expected" the weighted adjacency matrix is the
+    expceted one or an ensemble realisation.
 
     Parameters
     ----------
@@ -68,6 +91,7 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength, N, group_arra
         a dictionary that given the index of a node returns its group
     expected: bool
         If True the strength of each link is the expected one
+
     Returns
     -------
     np.ndarray
@@ -80,7 +104,7 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength, N, group_arra
     """
 
     W = np.zeros((N, N), dtype=np.float64)
-    strengths_stripe = weights_for_stripe( out_strength, group_array)
+    strengths_stripe = weights_for_stripe(out_strength, group_array)
     if expected:
         for i in np.arange(out_strength.shape[0]):
             ind_out = int(out_strength[i, 0])
@@ -93,8 +117,8 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength, N, group_arra
                 if (ind_out != ind_in) & (sect_out == sect_in):
                     tot_w = strengths_stripe[sect_out]
                     tmp = s_out*s_in
-                    W[ind_out, ind_in] = (tmp)/(tot_w * p[ind_out,ind_in])
-    else:    
+                    W[ind_out, ind_in] = (tmp)/(tot_w * p[ind_out, ind_in])
+    else:
         for i in np.arange(out_strength.shape[0]):
             ind_out = int(out_strength[i, 0])
             sect_out = int(out_strength[i, 1])
@@ -104,7 +128,7 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength, N, group_arra
                 sect_in = int(in_strength[j, 1])
                 s_in = in_strength[j, 2]
                 if (ind_out != ind_in) & (sect_out == sect_in):
-                    if p[ind_out,ind_in] > np.random.random():
+                    if p[ind_out, ind_in] > np.random.random():
                         tot_w = strengths_stripe[sect_out]
                         tmp = s_out*s_in
                         W[ind_out, ind_in] = (tmp)/(tot_w)
@@ -112,11 +136,9 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength, N, group_arra
 
 
 @jit(nopython=True, parallel=True)
-def vector_fitness_prob_array_stripe_mult_z(out_strength, in_strength, z, N):
-    """
-    Function computing the Probability Matrix of the Cimi stripe model
-    with just multiple parameters controlling for the density: one for
-    each sector/stripe.
+def prob_matrix_stripe_mult_z(out_strength, in_strength, z, N):
+    """ Compute the probability matrix of the stripe fitness model with one
+    parameter controlling for the density for each label.
     """
     p = np.zeros((N, N), dtype=np.float64)
     for i in np.arange(out_strength.shape[0]):
@@ -133,12 +155,33 @@ def vector_fitness_prob_array_stripe_mult_z(out_strength, in_strength, z, N):
     return p
 
 
-#@jit(forceobj=True, parallel=True)
-def expected_links_stripe_mult_z(out_strength, in_strength, z):
+@jit(nopython=True, parallel=True)
+def prob_array_stripe_mult_z(out_strength, in_strength, z, N, G):
+    """ Compute the probability array of the stripe fitness model with one
+    parameter controlling for the density for each label.
     """
-    Function computing the expeceted number of links, under the Cimi
-    stripe model, given the N parameters z controlling for the density
-    of each stripe.
+    p = np.zeros((N, N, G), dtype=np.float64)
+
+    # for i in np.arange(out_strength.shape[0]):
+    #     ind_out = int(out_strength[i, 0])
+    #     sect_out = int(out_strength[i, 1])
+    #     s_out = out_strength[i, 2]
+    #     for j in prange(in_strength.shape[0]):
+    #         ind_in = int(in_strength[j, 0])
+    #         sect_in = int(in_strength[j, 1])
+    #         s_in = in_strength[j, 2]
+    #         if (ind_out != ind_in) & (sect_out == sect_in):
+    #             tmp = s_out*s_in
+    #             tmp2 = z*tmp
+    #             p[ind_out, ind_in] = tmp2 / (1 + tmp2)
+
+    return p
+
+
+# @jit(forceobj=True, parallel=True)
+def expected_links_stripe_mult_z(out_strength, in_strength, z):
+    """ Compute the expected number of links for the stripe fitness model
+    with one parameter controlling for the density for each label.
     """
 
     p = np.zeros(len(z))
@@ -326,3 +369,6 @@ def expected_links_block_mult_z(out_strength, in_strength, z):
                 tmp2 = z[sect_out, sect_in]*tmp
                 p[sect_out, sect_in] += tmp2 / (1 + tmp2)
     return np.reshape(p, -1)
+
+
+

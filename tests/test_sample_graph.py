@@ -71,7 +71,7 @@ class TestStripeFitnessModel():
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
-        model.solve(z0=[0, 0, 0])
+        model.fit(z0=[0, 0, 0])
         np.testing.assert_allclose(model.z,
                                    [1.006638e+08, 1.610613e+07, 4.346469e-01],
                                    rtol=1e-6)
