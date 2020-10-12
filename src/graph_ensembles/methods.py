@@ -54,21 +54,8 @@ def expected_links_stripe_one_z(out_strength, in_strength, z):
     """ Compute the expected number of links of the stripe fitness model
     given the single parameter z controlling for the density.
     """
-    tot = 0.0
-
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_out = int(out_strength[i, 1])
-        s_out = out_strength[i, 2]
-        for j in np.arange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_in = int(in_strength[j, 1])
-            s_in = in_strength[j, 2]
-            if (ind_out != ind_in) & (sect_out == sect_in):
-                tmp = s_out*s_in
-                tmp2 = z*tmp
-                tot += tmp2 / (1 + tmp2)
-    return tot
+    N = max(np.max(out_strength[:, 0]), np.max(in_strength[:, 0]))
+    return prob_matrix_stripe_one_z(out_strength, in_strength, z, N).sum()
 
 
 @jit(nopython=True)
@@ -184,8 +171,8 @@ def expected_links_stripe_mult_z(out_strength, in_strength, z):
     """ Compute the expected number of links for the stripe fitness model
     with one parameter controlling for the density for each label.
     """
+    exp_links = np.zeros(len(z))
 
-    p = np.zeros(len(z))
     for i in np.arange(out_strength.shape[0]):
         ind_out = int(out_strength[i, 0])
         sect_out = int(out_strength[i, 1])
@@ -196,8 +183,9 @@ def expected_links_stripe_mult_z(out_strength, in_strength, z):
             s_in = in_strength[j, 2]
             if (ind_out != ind_in) & (sect_out == sect_in):
                 tmp = z[sect_out]*s_out*s_in
-                p[sect_out] += tmp / (1 + tmp)
-    return p
+                exp_links[sect_out] += tmp / (1 + tmp)
+
+    return exp_links
 
 
 @jit(nopython=True, parallel=True)
