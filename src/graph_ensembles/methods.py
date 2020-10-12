@@ -33,18 +33,18 @@ def prob_array_stripe_one_z(out_strength, in_strength, z, N, G):
     """
     p = np.zeros((N, N, G), dtype=np.float64)
 
-    # for i in np.arange(out_strength.shape[0]):
-    #     ind_out = int(out_strength[i, 0])
-    #     sect_out = int(out_strength[i, 1])
-    #     s_out = out_strength[i, 2]
-    #     for j in prange(in_strength.shape[0]):
-    #         ind_in = int(in_strength[j, 0])
-    #         sect_in = int(in_strength[j, 1])
-    #         s_in = in_strength[j, 2]
-    #         if (ind_out != ind_in) & (sect_out == sect_in):
-    #             tmp = s_out*s_in
-    #             tmp2 = z*tmp
-    #             p[ind_out, ind_in] = tmp2 / (1 + tmp2)
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i, 0])
+        sect_out = int(out_strength[i, 1])
+        s_out = out_strength[i, 2]
+        for j in prange(in_strength.shape[0]):
+            ind_in = int(in_strength[j, 0])
+            sect_in = int(in_strength[j, 1])
+            s_in = in_strength[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                tmp = s_out*s_in
+                tmp2 = z*tmp
+                p[ind_out, ind_in, sect_out] = tmp2 / (1 + tmp2)
 
     return p
 
@@ -162,18 +162,18 @@ def prob_array_stripe_mult_z(out_strength, in_strength, z, N, G):
     """
     p = np.zeros((N, N, G), dtype=np.float64)
 
-    # for i in np.arange(out_strength.shape[0]):
-    #     ind_out = int(out_strength[i, 0])
-    #     sect_out = int(out_strength[i, 1])
-    #     s_out = out_strength[i, 2]
-    #     for j in prange(in_strength.shape[0]):
-    #         ind_in = int(in_strength[j, 0])
-    #         sect_in = int(in_strength[j, 1])
-    #         s_in = in_strength[j, 2]
-    #         if (ind_out != ind_in) & (sect_out == sect_in):
-    #             tmp = s_out*s_in
-    #             tmp2 = z*tmp
-    #             p[ind_out, ind_in] = tmp2 / (1 + tmp2)
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i, 0])
+        sect_out = int(out_strength[i, 1])
+        s_out = out_strength[i, 2]
+        for j in prange(in_strength.shape[0]):
+            ind_in = int(in_strength[j, 0])
+            sect_in = int(in_strength[j, 1])
+            s_in = in_strength[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                tmp = s_out*s_in
+                tmp2 = z[sect_out]*tmp
+                p[ind_out, ind_in, sect_out] = tmp2 / (1 + tmp2)
 
     return p
 
