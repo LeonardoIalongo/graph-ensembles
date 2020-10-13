@@ -3,7 +3,7 @@ from numba import jit
 from numba import prange
 
 
-@jit(nopython=True, parallel=True)
+#@jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the
     single parameter z controlling for the density.
@@ -54,8 +54,8 @@ def expected_links_stripe_one_z(out_strength, in_strength, z):
     """ Compute the expected number of links of the stripe fitness model
     given the single parameter z controlling for the density.
     """
-    N = max(np.max(out_strength[:, 0]), np.max(in_strength[:, 0]))
-    return prob_matrix_stripe_one_z(out_strength, in_strength, z, N).sum()
+    N = max(np.max(out_strength[:, 0]), np.max(in_strength[:, 0])) + 1
+    return prob_matrix_stripe_one_z(out_strength, in_strength, z, int(N)).sum()
 
 
 @jit(nopython=True)
