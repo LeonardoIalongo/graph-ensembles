@@ -59,8 +59,8 @@ def expected_links_stripe_one_z(out_strength, in_strength, z):
 
 
 @jit(nopython=True)
-def assign_weights_stripe_one_z(p, out_strength, in_strength, N,
-                                group_array, expected=True):
+def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength,
+                                     N, strengths_stripe, expected=True):
     """ Return the weighted adjacency matrix of the stripe fitness model
     with just one global parameter z controlling for the density.
     Depending on the value of "expected" the weighted adjacency matrix is the
@@ -91,7 +91,6 @@ def assign_weights_stripe_one_z(p, out_strength, in_strength, N,
     """
 
     W = np.zeros((N, N), dtype=np.float64)
-    strengths_stripe = weights_for_stripe(out_strength, group_array)
     if expected:
         for i in np.arange(out_strength.shape[0]):
             ind_out = int(out_strength[i, 0])
@@ -244,7 +243,8 @@ def expected_links_block_one_z(out_strength, in_strength,
 
 
 @jit(nopython=True)
-def assign_weights_cimi_block_one_z(p, out_strength, in_strength, N, strengths_block, expected=True):
+def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
+                                     N, strengths_block, expected=True):
     """Function returning the weighted adjacency matrix of the Cimi block model
     with just one global parameter z controlling for the density. Depending on the value of 
     "expected" the weighted adjacency matrix can be the expceted one or just an ensemble realisation.
@@ -274,7 +274,6 @@ def assign_weights_cimi_block_one_z(p, out_strength, in_strength, N, strengths_b
     """
     
     W = np.zeros((N, N), dtype=np.float64)
-    strengths_block = weights_for_block(out_strength, group_array)
     if expected:
         for i in np.arange(out_strength.shape[0]):
             ind_out = int(out_strength[i, 0])
