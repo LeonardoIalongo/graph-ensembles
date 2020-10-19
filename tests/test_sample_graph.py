@@ -73,7 +73,7 @@ class TestStripeFitnessModel():
                                       num_links_tot)
         model.fit(z0=0)
         np.testing.assert_allclose(model.z,
-                                   0.77,
+                                   0.730334,
                                    rtol=1e-6)
 
     def test_solver_multi(self):
@@ -90,12 +90,13 @@ class TestStripeFitnessModel():
         """ Check that the returned probability array is correct. """
         true_value = np.zeros((num_nodes, num_nodes, num_groups),
                               dtype=np.float64)
-        true_value[0, 3, 0] = 1.
-        true_value[1, 0, 1] = 1.
-        true_value[2, 0, 2] = 0.912523
-        true_value[2, 1, 2] = 0.886668
-        true_value[3, 0, 2] = 0.634848
-        true_value[3, 1, 2] = 0.565961
+
+        true_value[0, 3, 0] = 0.744985
+        true_value[1, 0, 1] = 0.948075
+        true_value[2, 0, 2] = 0.946028
+        true_value[2, 1, 2] = 0.929309
+        true_value[3, 0, 2] = 0.744985
+        true_value[3, 1, 2] = 0.686619
 
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
@@ -124,10 +125,10 @@ class TestStripeFitnessModel():
 
     def test_probability_matrix_single(self):
         """ Check that the returned probability matrix is the correct one. """
-        true_value = np.array([[0., 0., 0., 1.],
-                              [1., 0., 0., 0.],
-                              [0.912523, 0.886668, 0., 0.],
-                              [0.634848, 0.565961, 0., 0.]])
+        true_value = np.array([[0., 0., 0., 0.744985],
+                              [0.948075, 0., 0., 0.],
+                              [0.946028, 0.929309, 0., 0.],
+                              [0.744985, 0.686619, 0., 0.]])
 
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
