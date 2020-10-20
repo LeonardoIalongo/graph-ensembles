@@ -103,7 +103,7 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength,
                 if (ind_out != ind_in) & (sect_out == sect_in):
                     tot_w = strengths_stripe[sect_out]
                     tmp = s_out*s_in
-                    W[ind_out, ind_in] = (tmp)/(tot_w * p[ind_out, ind_in])
+                    W[ind_out, ind_in] = (tmp)/(tot_w)
     else:
         for i in np.arange(out_strength.shape[0]):
             ind_out = int(out_strength[i, 0])
@@ -117,7 +117,7 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength,
                     if p[ind_out, ind_in] > np.random.random():
                         tot_w = strengths_stripe[sect_out]
                         tmp = s_out*s_in
-                        W[ind_out, ind_in] = (tmp)/(tot_w)
+                        W[ind_out, ind_in] = (tmp)/(tot_w* p[ind_out, ind_in])
     return W
 
 
@@ -286,10 +286,10 @@ def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
                 sect_in = int(in_strength[j, 2])
                 s_in = in_strength[j, 3]
                 if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-                   (sect_in == sect_node_i)):
+                    (sect_in == sect_node_i)):
                     tot_w = strengths_block[sect_node_i, sect_node_j]
                     tmp = s_out*s_in
-                    W[ind_out, ind_in] = (tmp)/(tot_w * p[ind_out, ind_in])
+                    W[ind_out, ind_in] = (tmp)/(tot_w)
     else:
         for i in np.arange(out_strength.shape[0]):
             ind_out = int(out_strength[i, 0])
@@ -302,7 +302,7 @@ def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
                 sect_in = int(in_strength[j, 2])
                 s_in = in_strength[j, 3]
                 if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-                   (sect_in == sect_node_i)):
+                    (sect_in == sect_node_i)):
                     if p[ind_out, ind_in] > np.random.random():
                         tot_w = strengths_block[sect_out, sect_in]
                         tmp = s_out*s_in
