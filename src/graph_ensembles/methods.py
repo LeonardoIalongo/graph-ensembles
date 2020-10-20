@@ -74,8 +74,8 @@ def assign_weights_cimi_stripe_one_z(p, out_strength, in_strength,
         the out strength sequence of graph
     in_strength: np.ndarray
         the in strength sequence of graph
-    group_dict: dict
-        a dictionary that given the index of a node returns its group
+    strengths_stripe: np.ndarray
+        strengths for stripe
     expected: bool
         If True the strength of each link is the expected one
 
