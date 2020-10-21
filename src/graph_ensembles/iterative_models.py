@@ -21,6 +21,13 @@ def iterative_stripe_one_z(z, out_str, in_str, L):
     return aux_z
 
 
+def loglikelihood_stripe_one_z(z, out_str, in_str, L):
+    aux1 = 0.0
+    
+    
+    return aux_z
+
+
 @jit(nopython=True)
 def iterative_block_one_z(z, out_str, in_str, L):
     aux1=0.0
@@ -162,7 +169,7 @@ def solver(
         dx = f - x
 
         # Linsearch
-        if linsearch:
+        if False:
             alfa1 = 1
             X = (x, dx, beta, alfa1, f)
             alfa = linsearch_fun(X)
