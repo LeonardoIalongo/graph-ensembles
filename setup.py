@@ -7,7 +7,9 @@ setup(
     package_dir={'': 'src'},
     install_requires=["numpy>=1.19",
                       "scipy>=1.5",
-                      "numba>=0.51"],
+                      "numba>=0.51",
+                      "networkx>=2.5"
+                      ],
     extras_require={
         "dev": ["pytest==6.0.1",
                 "coverage==5.2.1",
