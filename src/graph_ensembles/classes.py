@@ -4,7 +4,7 @@ reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
 from scipy.optimize import least_squares
-from . import methods
+from . import methods, iterative_models
 
 
 class GraphModel():
