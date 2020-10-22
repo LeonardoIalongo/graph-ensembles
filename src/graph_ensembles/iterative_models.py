@@ -5,6 +5,10 @@ from numba import jit,prange
 
 @jit(nopython=True)
 def iterative_stripe_one_z(z, out_str, in_str, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CSM-I model 
+    """
     aux1 = 0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i,0])
@@ -23,6 +27,9 @@ def iterative_stripe_one_z(z, out_str, in_str, L):
 
 @jit(nopython=True)
 def loglikelihood_stripe_one_z(z, out_str, in_str, L):
+    """
+    loglikelihood function of CSM-I model (deprecated)
+    """
     aux1 = 0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i,0])
@@ -39,8 +46,12 @@ def loglikelihood_stripe_one_z(z, out_str, in_str, L):
     return aux_z
 
 
-
+@jit(nopython=True)
 def loglikelihood_prime_stripe_one_z(z, out_str, in_str, L):
+    """
+    first derivative of the loglikelihood function 
+    of the CSM-I model
+    """
     aux1 = 0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i,0])
@@ -57,8 +68,12 @@ def loglikelihood_prime_stripe_one_z(z, out_str, in_str, L):
     return aux_z
 
 
-
+@jit(nopython=True)
 def loglikelihood_hessian_stripe_one_z(z, out_str, in_str):
+    """
+    second derivative of the loglikelihood function 
+    of the CSM-I model
+    """
     aux1 = 0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i,0])
@@ -76,6 +91,10 @@ def loglikelihood_hessian_stripe_one_z(z, out_str, in_str):
 
 @jit(nopython=True)
 def iterative_block_one_z(z, out_str, in_str, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CBM-I model 
+    """
     aux1=0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i, 0])
@@ -96,6 +115,9 @@ def iterative_block_one_z(z, out_str, in_str, L):
 
 @jit(nopython=True)
 def loglikelihood_block_one_z(z, out_str, in_str, L):
+    """
+    loglikelihood function of CBM-I model (deprecated)
+    """
     aux1=0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i, 0])
@@ -114,8 +136,12 @@ def loglikelihood_block_one_z(z, out_str, in_str, L):
     return aux_z
 
 
-
+@jit(nopython=True)
 def loglikelihood_prime_block_one_z(z, out_str, in_str, L):
+    """
+    first derivative of the loglikelihood function 
+    of the CBM-I model
+    """
     aux1=0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i, 0])
@@ -134,8 +160,12 @@ def loglikelihood_prime_block_one_z(z, out_str, in_str, L):
     return aux_z
 
 
-
+@jit(nopython=True)
 def loglikelihood_hessian_block_one_z(z, out_str, in_str):
+    """
+    second derivative of the loglikelihood function 
+    of the CBM-I model
+    """
     aux1 = 0.0
     for i in np.arange(out_str.shape[0]):
         ind_out = int(out_str[i, 0])
@@ -155,6 +185,10 @@ def loglikelihood_hessian_block_one_z(z, out_str, in_str):
 
 @jit(nopython=True)
 def iterative_stripe_mult_z(z, out_strength, in_strength, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CSM-II model 
+    """
     aux1 = np.zeros(len(z))
     for i in np.arange(out_strength.shape[0]):
         ind_out = int(out_strength[i,0])
@@ -173,6 +207,10 @@ def iterative_stripe_mult_z(z, out_strength, in_strength, L):
 
 @jit(nopython=True)
 def iterative_block_mult_z(z, out_strength, in_strength, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CBM-II model 
+    """
     n_sector = int(np.sqrt(max(z.shape)))
     aux1 = np.zeros(shape=(n_sector,n_sector),dtype=np.float)
     z = np.reshape(z,newshape=(n_sector,n_sector))
@@ -203,6 +241,9 @@ def sufficient_decrease_condition(
     return bool(f_new < sup)
 
 def linsearch_fun(X): #, args):
+    """
+    Function searching the descent direction
+    """
     x = X[0]
     dx = X[1]
     beta = X[2]
@@ -210,32 +251,30 @@ def linsearch_fun(X): #, args):
     f = X[4]
     step_fun = X[5]
 
-    # print(alfa)
-
     eps2 = 1e-2
     alfa0 = (eps2 - 1) * x / dx
     if isinstance(alfa0, np.ndarray):
+        # assure that the zetas are positive
         for a in alfa0:
             if a >= 0:
                 alfa = min(alfa, a)
-            i = 0
-            s_old = step_fun(x)
-            while (
-                sufficient_decrease_condition(
-                    s_old, step_fun(x + alfa * dx), alfa, f, dx
-                )
-                == False
-                and i < 50
-            ):
-                alfa *= beta
-                i += 1
+            #i = 0
+            #s_old = step_fun(x)
+            #while (
+            #    sufficient_decrease_condition(
+            #        s_old, step_fun(x + alfa * dx), alfa, f, dx
+            #    )
+            #    == False
+            #    and i < 50
+            #):
+            #    alfa *= beta
+            #    i += 1
     else:
+        # assure that zeta is positive
         if alfa0 > 0:
             alfa = min(alfa, alfa0)
     
     return alfa
-
-
 
 
 def solver(
@@ -246,11 +285,11 @@ def solver(
            tol=1e-6,
            eps=1e-14,
            max_steps=100,
-           #method="newton",
+           method="newton",
            full_return=False,
            linsearch=True,
            ):
-    """Find roots of eq. f = 0, using newton, quasinewton or dianati."""
+    """Find roots of eq. f = 0, using newton or fixed-point."""
 
     # algorithm
     beta = 0.5  # to compute alpha
@@ -270,11 +309,10 @@ def solver(
     ):
         x_old = x  # save previous iteration
 
-        #print(f,x)
         if method == "newton":
             H = fun_jac(x)
             dx = - f/H
-        elif method == "fixed":    
+        elif method == "fixed-point":    
             dx = f - x
 
         # Linsearch
@@ -346,13 +384,13 @@ def iterative_fit(z0, model, method, nz_out_str,
     mod_method = mod_method.join([model, method])
 
     d_fun = {
-        'CSM-I-fixed' : lambda x: iterative_stripe_one_z(x, nz_out_str,
+        'CSM-I-fixed-point' : lambda x: iterative_stripe_one_z(x, nz_out_str,
                                                          nz_in_str, L),
-        'CSM-II-fixed' : lambda x: iterative_stripe_mult_z(x, nz_out_str,
+        'CSM-II-fixed-point' : lambda x: iterative_stripe_mult_z(x, nz_out_str,
                                                            nz_in_str, L),
-        'CBM-I-fixed' : lambda x: iterative_block_one_z(x, nz_out_str,
+        'CBM-I-fixed-point' : lambda x: iterative_block_one_z(x, nz_out_str,
                                                         nz_in_str, L),
-        'CBM-II-fixed': lambda x: iterative_block_mult_z(x, nz_out_str,
+        'CBM-II-fixed-point': lambda x: iterative_block_mult_z(x, nz_out_str,
                                                          nz_in_str, L),
         'CSM-I-newton': lambda x: loglikelihood_prime_stripe_one_z(x, nz_out_str,
                                                                    nz_in_str, L),
@@ -363,12 +401,12 @@ def iterative_fit(z0, model, method, nz_out_str,
     }
 
     d_fun_step = {
-        'CSM-I-fixed' : lambda x: loglikelihood_stripe_one_z(x, nz_out_str,
+        'CSM-I-fixed-point' : lambda x: loglikelihood_stripe_one_z(x, nz_out_str,
                                                              nz_in_str, L),
-        'CSM-II-fixed' : None,
-        'CBM-I-fixed' : lambda x: loglikelihood_block_one_z(x, nz_out_str,
+        'CSM-II-fixed-point' : None,
+        'CBM-I-fixed-point' : lambda x: loglikelihood_block_one_z(x, nz_out_str,
                                                             nz_in_str, L),
-        'CBM-II-fixed': None,
+        'CBM-II-fixed-point': None,
         'CSM-I-newton' : lambda x: loglikelihood_stripe_one_z(x, nz_out_str,
                                                              nz_in_str, L),
         'CSM-II-newton' : None,
@@ -378,10 +416,10 @@ def iterative_fit(z0, model, method, nz_out_str,
     }
 
     d_fun_jac = {
-        'CSM-I-fixed' : None,
-        'CSM-II-fixed' : None,
-        'CBM-I-fixed' : None,
-        'CBM-II-fixed': None,
+        'CSM-I-fixed-point' : None,
+        'CSM-II-fixed-point' : None,
+        'CBM-I-fixed-point' : None,
+        'CBM-II-fixed-point': None,
         'CSM-I-newton' : lambda x: loglikelihood_hessian_stripe_one_z(x, nz_out_str,
                                                                       nz_in_str),
         'CSM-II-newton' : None,
@@ -402,7 +440,7 @@ def iterative_fit(z0, model, method, nz_out_str,
                tol = tol,
                eps = eps,
                max_steps = max_steps,
-               #method="newton",
+               method = method,
                full_return = True,
                linsearch = True,
               )
