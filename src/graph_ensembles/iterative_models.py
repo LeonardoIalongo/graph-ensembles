@@ -21,11 +21,57 @@ def iterative_stripe_one_z(z, out_str, in_str, L):
     return aux_z
 
 
+@jit(nopython=True)
 def loglikelihood_stripe_one_z(z, out_str, in_str, L):
     aux1 = 0.0
-    
-    
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i,0])
+        sect_out = int(out_str[i,1])
+        s_out = out_str[i,2]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j,0])
+            sect_in = int(in_str[j,1])
+            s_in = in_str[j,2]
+            if (ind_out != ind_in)&(sect_out==sect_in):
+                aux2 = z*s_out*s_in
+                aux1 += np.log(1+aux2)/np.log(aux2)
+    aux_z = L - aux1
     return aux_z
+
+
+
+def loglikelihood_prime_stripe_one_z(z, out_str, in_str, L):
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i,0])
+        sect_out = int(out_str[i,1])
+        s_out = out_str[i,2]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j,0])
+            sect_in = int(in_str[j,1])
+            s_in = in_str[j,2]
+            if (ind_out != ind_in)&(sect_out==sect_in):
+                aux2 = z*s_out*s_in
+                aux1 += aux2/(1+aux2)
+    aux_z = L - aux1
+    return aux_z
+
+
+
+def loglikelihood_hessian_stripe_one_z(z, out_str, in_str):
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i,0])
+        sect_out = int(out_str[i,1])
+        s_out = out_str[i,2]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j,0])
+            sect_in = int(in_str[j,1])
+            s_in = in_str[j,2]
+            if (ind_out != ind_in)&(sect_out==sect_in):
+                aux2 = s_out*s_in
+                aux1 -= aux2 / (1 + z*aux2)**2
+    return aux1
 
 
 @jit(nopython=True)
@@ -36,19 +82,75 @@ def iterative_block_one_z(z, out_str, in_str, L):
         sect_out = int(out_str[i, 1])
         sect_node_i = int(out_str[i, 2])
         s_out = out_str[i, 3]
-        
         for j in np.arange(in_str.shape[0]):
             ind_in = int(in_str[j, 0])
             sect_in = int(in_str[j, 1])
             sect_node_j = int(in_str[j, 2])
             s_in = in_str[j, 3]
-            
-            #print(ind_out,ind_in,sect_out,sect_node2,sect_in,sect_node1)
             if (ind_out != ind_in)&(sect_out == sect_node_j)&(sect_in == sect_node_i):
                 aux2 = s_out*s_in
                 aux1 += aux2/(1+z*aux2)
     aux_z = L/aux1
     return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_block_one_z(z, out_str, in_str, L):
+    aux1=0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        sect_node_i = int(out_str[i, 2])
+        s_out = out_str[i, 3]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            sect_node_j = int(in_str[j, 2])
+            s_in = in_str[j, 3]
+            if (ind_out != ind_in)&(sect_out == sect_node_j)&(sect_in == sect_node_i):
+                aux2 = z*s_out*s_in
+                aux1 += np.log(1 + z*s_out*s_in)/np.log(z*s_out*s_in)
+    aux_z = L - aux1
+    return aux_z
+
+
+
+def loglikelihood_prime_block_one_z(z, out_str, in_str, L):
+    aux1=0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        sect_node_i = int(out_str[i, 2])
+        s_out = out_str[i, 3]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            sect_node_j = int(in_str[j, 2])
+            s_in = in_str[j, 3]
+            if (ind_out != ind_in)&(sect_out == sect_node_j)&(sect_in == sect_node_i):
+                aux2 = z*s_out*s_in
+                aux1 += aux2/(1+aux2)
+    aux_z = L - aux1
+    return aux_z
+
+
+
+def loglikelihood_hessian_block_one_z(z, out_str, in_str):
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        sect_node_i = int(out_str[i, 2])
+        s_out = out_str[i, 3]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            sect_node_j = int(in_str[j, 2])
+            s_in = in_str[j, 3]
+            if (ind_out != ind_in)&(sect_out == sect_node_j)&(sect_in == sect_node_i):
+                aux2 = s_out*s_in
+                aux1 -= aux2 / (1 + z*aux2)**2
+    return aux1
 
 
 @jit(nopython=True)
@@ -90,10 +192,14 @@ def iterative_block_mult_z(z, out_strength, in_strength, L):
 
 
 def sufficient_decrease_condition(
-    f_old, f_new, alpha, grad_f, p, c1=1e-04, c2=0.9
+    f_old, f_new, alpha, grad_f, p, c1=1e-4, c2=0.9
 ):
     """return boolean indicator if upper wolfe condition are respected."""
-    sup = f_old + c1 * alpha * grad_f @ p.T
+    
+    if isinstance(p, np.ndarray):
+        sup = f_old + c1 * alpha * grad_f @ p.T
+    else:
+        sup = f_old + c1 * alpha * grad_f * p
     return bool(f_new < sup)
 
 def linsearch_fun(X): #, args):
@@ -102,7 +208,7 @@ def linsearch_fun(X): #, args):
     beta = X[2]
     alfa = X[3]
     f = X[4]
-    #step_fun = args[0]
+    step_fun = X[5]
 
     # print(alfa)
 
@@ -112,22 +218,21 @@ def linsearch_fun(X): #, args):
         for a in alfa0:
             if a >= 0:
                 alfa = min(alfa, a)
+            i = 0
+            s_old = step_fun(x)
+            while (
+                sufficient_decrease_condition(
+                    s_old, step_fun(x + alfa * dx), alfa, f, dx
+                )
+                == False
+                and i < 50
+            ):
+                alfa *= beta
+                i += 1
     else:
         if alfa0 > 0:
             alfa = min(alfa, alfa0)
-    # print(alfa)
-    i = 0
-    s_old = step_fun(x)
-    while (
-        sufficient_decrease_condition(
-            s_old, step_fun(x + alfa * dx), alfa, f, dx
-        )
-        == False
-        and i < 50
-    ):
-        alfa *= beta
-        i += 1
-    # print(alfa)
+    
     return alfa
 
 
@@ -158,6 +263,7 @@ def solver(
 
     if full_return:
         norm_seq = [norm]
+        alfa_seq = [1]
 
     while (
         norm > tol and n_steps < max_steps and diff > eps
@@ -165,14 +271,19 @@ def solver(
         x_old = x  # save previous iteration
 
         #print(f,x)
-
-        dx = f - x
+        if method == "newton":
+            H = fun_jac(x)
+            dx = - f/H
+        elif method == "fixed":    
+            dx = f - x
 
         # Linsearch
-        if False:
+        if True:
             alfa1 = 1
-            X = (x, dx, beta, alfa1, f)
+            X = (x, dx, beta, alfa1, f, step_fun)
             alfa = linsearch_fun(X)
+            if full_return:
+                alfa_seq.append(alfa)
         else:
             alfa = 1
 
@@ -191,7 +302,7 @@ def solver(
         n_steps += 1
 
     if full_return:
-        return (x, n_steps, np.array(norm_seq))
+        return (x, n_steps, np.array(norm_seq), np.array(alfa_seq))
     else:
         return x
     
@@ -236,20 +347,34 @@ def iterative_fit(z0, model, method, nz_out_str,
 
     d_fun = {
         'CSM-I-fixed' : lambda x: iterative_stripe_one_z(x, nz_out_str,
-                                                   nz_in_str, L),
+                                                         nz_in_str, L),
         'CSM-II-fixed' : lambda x: iterative_stripe_mult_z(x, nz_out_str,
-                                                     nz_in_str, L),
+                                                           nz_in_str, L),
         'CBM-I-fixed' : lambda x: iterative_block_one_z(x, nz_out_str,
-                                                  nz_in_str, L),
+                                                        nz_in_str, L),
         'CBM-II-fixed': lambda x: iterative_block_mult_z(x, nz_out_str,
-                                                   nz_in_str, L),
+                                                         nz_in_str, L),
+        'CSM-I-newton': lambda x: loglikelihood_prime_stripe_one_z(x, nz_out_str,
+                                                                   nz_in_str, L),
+        'CSM-II-newton': None,
+        'CBM-I-newton': lambda x: loglikelihood_prime_block_one_z(x, nz_out_str,
+                                                                  nz_in_str, L),
+        'CBM-II-newton': None,
     }
 
     d_fun_step = {
-        'CSM-I-fixed' : None,
+        'CSM-I-fixed' : lambda x: loglikelihood_stripe_one_z(x, nz_out_str,
+                                                             nz_in_str, L),
         'CSM-II-fixed' : None,
-        'CBM-I-fixed' : None,
+        'CBM-I-fixed' : lambda x: loglikelihood_block_one_z(x, nz_out_str,
+                                                            nz_in_str, L),
         'CBM-II-fixed': None,
+        'CSM-I-newton' : lambda x: loglikelihood_stripe_one_z(x, nz_out_str,
+                                                             nz_in_str, L),
+        'CSM-II-newton' : None,
+        'CBM-I-newton' : lambda x: loglikelihood_block_one_z(x, nz_out_str,
+                                                            nz_in_str, L),
+        'CBM-II-newton': None,
     }
 
     d_fun_jac = {
@@ -257,6 +382,12 @@ def iterative_fit(z0, model, method, nz_out_str,
         'CSM-II-fixed' : None,
         'CBM-I-fixed' : None,
         'CBM-II-fixed': None,
+        'CSM-I-newton' : lambda x: loglikelihood_hessian_stripe_one_z(x, nz_out_str,
+                                                                      nz_in_str),
+        'CSM-II-newton' : None,
+        'CBM-I-newton' : lambda x: loglikelihood_hessian_block_one_z(x, nz_out_str,
+                                                                     nz_in_str),
+        'CBM-II-newton': None,
     }
 
     fun = d_fun[mod_method]
