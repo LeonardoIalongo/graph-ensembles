@@ -73,4 +73,4 @@ For testing:
 Credits
 -------
 This is a project by `Leonardo Niccolò Ialongo <https://datasciencephd.eu/students/leonardo-niccol%C3%B2-ialongo/>`_ and `Emiliano Marchese <https://www.imtlucca.it/en/emiliano.marchese/>`_, under 
-the supervision of `Diego Garlaschelli <https://networks.imtlucca.it/members/diego/>`_.
+the supervision of `Diego Garlaschelli <https://networks.imtlucca.it/members/diego>`_.
