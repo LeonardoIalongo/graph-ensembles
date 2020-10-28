@@ -50,21 +50,27 @@ examples folder.
 Development
 -----------
 Please work on a feature branch and create a pull request to the development 
-branch. If necessary to merge manually do so without fast forward:: bash
+branch. If necessary to merge manually do so without fast forward:
+
+.. code-block:: bash
 
     git merge --no-ff myfeature
 
-To build a development environment run:: bash
+To build a development environment run:
+
+.. code-block:: bash
 
     python3 -m venv venv 
     source venv/bin/activate 
     pip install -e '.[dev]'
 
-For testing::
+For testing:
 
-    pytest` or `pytest --cov
+.. code-block:: bash
+
+    pytest --cov
 
 Credits
 -------
-This is a project by Leonardo Niccolò Ialongo and Emiliano Marchese, under 
-the supervision of Diego Garlaschelli.
+This is a project by `Leonardo Niccolò Ialongo <https://datasciencephd.eu/students/leonardo-niccol%C3%B2-ialongo/>`_ and `Emiliano Marchese <https://www.imtlucca.it/en/emiliano.marchese/>`_, under 
+the supervision of `Diego Garlaschelli <https://networks.imtlucca.it/members/diego/>`_.
