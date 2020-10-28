@@ -6,3 +6,4 @@ build/
 temp.py
 graph_ensembles.egg-info/
 .coverage*
+.ipynb_checkpoints/
