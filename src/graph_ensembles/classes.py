@@ -82,11 +82,11 @@ class StripeFitnessModel(GraphModel):
         # Get number of nodes and labels implied by the strengths
         num_nodes_out = np.max(out_strength[:, 0])
         num_nodes_in = np.max(in_strength[:, 0])
-        num_nodes = max(num_nodes_out, num_nodes_in) + 1
+        num_nodes = int(max(num_nodes_out, num_nodes_in) + 1)
 
         num_labels_out = np.max(out_strength[:, 1])
         num_labels_in = np.max(in_strength[:, 1])
-        num_labels = max(num_labels_out, num_labels_in) + 1
+        num_labels = int(max(num_labels_out, num_labels_in) + 1)
 
         # Ensure that number of constraint matches number of labels
         if isinstance(num_links, np.ndarray):
