@@ -11,6 +11,7 @@ build randomized ensembles preserving the marginal information provided.
 Installation
 ------------
 Install using:
+
 .. code-block:: python
 
    pip install graph_ensembles
