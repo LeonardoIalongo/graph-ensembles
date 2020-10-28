@@ -1,9 +1,9 @@
 from setuptools import setup
 
-with open('README.rst', 'r') as readme_file:
+with open('README.rst', encoding='utf-8') as readme_file:
     readme = readme_file.read()
 
-with open('HISTORY.rst', 'r') as history_file:
+with open('HISTORY.rst', encoding='utf-8') as history_file:
     history = history_file.read()
 
 setup(
@@ -44,6 +44,7 @@ setup(
                 "matplotlib==3.3.2",
                 "networkx==2.5",
                 "check-manifest==0.44",
+                "setuptools==47.1.0"
                 "twine==3.2.0"],
         },
     )

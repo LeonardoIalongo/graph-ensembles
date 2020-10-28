@@ -2,8 +2,9 @@
 Graph ensembles
 =================
 
-The graph ensemble package contains a set of methods to build fitness based graph ensembles from marginal information. These methods can be used to
-build randomized ensembles preserving the marginal information provided. 
+The graph ensemble package contains a set of methods to build fitness based 
+graph ensembles from marginal information. These methods can be used to build 
+randomized ensembles preserving the marginal information provided. 
 
 * Free software: GNU General Public License v3
 * Documentation: https://graph-ensembles.readthedocs.io.
