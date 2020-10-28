@@ -1,9 +1,9 @@
 from setuptools import setup
 
-with open('README.rst', 'r') as readme_file:
+with open('README.rst', encoding='utf-8') as readme_file:
     readme = readme_file.read()
 
-with open('HISTORY.rst', 'r') as history_file:
+with open('HISTORY.rst', encoding='utf-8') as history_file:
     history = history_file.read()
 
 setup(
@@ -12,11 +12,12 @@ setup(
     author_email='leonardo.ialongo@gmail.com',
     python_requires='>=3.0',
     version='0.0.1',
-    url='https://github.com/LeonardoIalongo/graph_ensembles',
+    url='https://github.com/LeonardoIalongo/graph-ensembles',
     description=("The graph ensemble package contains a set of methods to"
                  " build fitness based graph ensembles from marginal"
                  " information."),
     long_description=readme + '\n\n' + history,
+    long_description_content_type='text/x-rst',
     license="GNU General Public License v3",
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
@@ -44,6 +45,7 @@ setup(
                 "matplotlib==3.3.2",
                 "networkx==2.5",
                 "check-manifest==0.44",
+                "setuptools==47.1.0"
                 "twine==3.2.0"],
         },
     )
