@@ -112,8 +112,8 @@ class StripeFitnessModel(GraphModel):
         assert np.all(tot_out == tot_in), msg
 
         # Initialize attributes
-        self.out_strength = out_strength.astype(float)
-        self.in_strength = in_strength.astype(float)
+        self.out_strength = out_strength
+        self.in_strength = in_strength
         self.num_links = num_links
         self.num_nodes = num_nodes
         self.num_labels = num_labels
@@ -150,12 +150,12 @@ class StripeFitnessModel(GraphModel):
             elif method == "newton":
                 self.z = im.solver(z0,
                                 fun = lambda x: im.loglikelihood_prime_stripe_mult_z(x,
-                                                                    self.out_strength,
-                                                                    self.in_strength,
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float),
                                                                     self.num_links),
                                 fun_jac = lambda x: im.loglikelihood_hessian_stripe_mult_z(x,
-                                                                    self.out_strength,
-                                                                    self.in_strength),
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float)),
                                 tol = tol,
                                 eps = eps,
                                 max_steps = max_steps,
@@ -165,8 +165,8 @@ class StripeFitnessModel(GraphModel):
             elif method == "fixed-point":
                 self.z = im.solver(z0,
                                 fun = lambda x: im.iterative_stripe_mult_z(x,
-                                                            self.out_strength,
-                                                            self.in_strength,
+                                                            self.out_strength.astype(float),
+                                                            self.in_strength.astype(float),
                                                             self.num_links),
                                 fun_jac = None,
                                 tol = tol,
@@ -189,12 +189,12 @@ class StripeFitnessModel(GraphModel):
             elif method == "newton":
                 self.z = im.solver(z0,
                                 fun = lambda x: im.loglikelihood_prime_stripe_one_z(x,
-                                                                    self.out_strength,
-                                                                    self.in_strength,
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float),
                                                                     self.num_links),
                                 fun_jac = lambda x: im.loglikelihood_hessian_stripe_one_z(x,
-                                                                    self.out_strength,
-                                                                    self.in_strength),
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float)),
                                 tol = tol,
                                 eps = eps,
                                 max_steps = max_steps,
@@ -204,8 +204,8 @@ class StripeFitnessModel(GraphModel):
             elif method == "fixed-point":
                 self.z = im.solver(z0,
                                 fun = lambda x: im.iterative_stripe_one_z(x,
-                                                            self.out_strength,
-                                                            self.in_strength,
+                                                            self.out_strength.astype(float),
+                                                            self.in_strength.astype(float),
                                                             self.num_links),
                                 fun_jac = None,
                                 tol = tol,
