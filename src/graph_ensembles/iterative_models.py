@@ -251,7 +251,8 @@ def linsearch_fun(X): #, args):
     alfa = X[2]
 
     eps2 = 1e-4
-    alfa0 = (eps2 - 1) * x / dx
+    ind = dx!=0
+    alfa0 = (eps2 - 1) * x[ind] / dx[ind]
     if isinstance(alfa0, np.ndarray):
         # assure that the zetas are positive
         for a in alfa0:
@@ -276,9 +277,10 @@ def solver(
            method="newton",
            full_return=False,
            linsearch=True,
+           verbose = False
            ):
     """Find roots of eq. f = 0, using newton or fixed-point."""
-    verbose = False
+    
     # algorithm
     n_steps = 0
     x = x0  # initial point
@@ -287,9 +289,9 @@ def solver(
     norm = np.linalg.norm(f)
     diff = 1
 
-    if verbose:
-        print("\nx0 = {}".format(x))
-        print("|f(x0)| = {}".format(norm))
+    #if verbose:
+    #    print("\nx0 = {}".format(x))
+    #    print("|f(x0)| = {}".format(norm))
 
     if full_return:
         norm_seq = [norm]
@@ -331,12 +333,12 @@ def solver(
         n_steps += 1
         if verbose == True:
             print("\nstep {}".format(n_steps))
-            print("fun = {}".format(f))
-            print("dx = {}".format(dx))
-            print("x = {}".format(x))
-            print("alpha = {}".format(alfa))
-            print("|f(x)| = {}".format(norm))
-            print("diff = {}".format(diff))
+        #    print("fun = {}".format(f))
+        #    print("dx = {}".format(dx))
+        #    print("x = {}".format(x))
+        #    print("alpha = {}".format(alfa))
+        #    print("|f(x)| = {}".format(norm))
+        #    print("diff = {}".format(diff))
 
     if full_return:
         return (x, n_steps, np.array(norm_seq), np.array(alfa_seq))

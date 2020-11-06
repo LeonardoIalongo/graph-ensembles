@@ -119,7 +119,7 @@ class StripeFitnessModel(GraphModel):
         self.num_labels = num_labels
 
     def fit(self, method="least-squares", z0=None, tol=1e-8,
-            eps=1e-14, max_steps=100):
+            eps=1e-14, max_steps=100, verbose=False):
         """ Compute the optimal z to match the given number of links.
 
         Parameters
@@ -159,7 +159,8 @@ class StripeFitnessModel(GraphModel):
                                 tol = tol,
                                 eps = eps,
                                 max_steps = max_steps,
-                                method = "newton"
+                                method = "newton",
+                                verbose = verbose
                 )
             
             elif method == "fixed-point":
@@ -172,7 +173,8 @@ class StripeFitnessModel(GraphModel):
                                 tol = tol,
                                 eps = eps,
                                 max_steps = max_steps,
-                                method = "fixed-point"
+                                method = "fixed-point",
+                                verbose = verbose
                 )
             
             else:
@@ -198,7 +200,8 @@ class StripeFitnessModel(GraphModel):
                                 tol = tol,
                                 eps = eps,
                                 max_steps = max_steps,
-                                method = "newton"
+                                method = "newton",
+                                verbose = verbose
                 )
             
             elif method == "fixed-point":
@@ -211,7 +214,8 @@ class StripeFitnessModel(GraphModel):
                                 tol = tol,
                                 eps = eps,
                                 max_steps = max_steps,
-                                method = "fixed-point"
+                                method = "fixed-point",
+                                verbose = verbose
                 )
 
             else:
