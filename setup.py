@@ -45,6 +45,7 @@ setup(
                 "check-manifest==0.44",
                 "setuptools==47.1.0",
                 "twine==3.2.0",
-                "tox==3.20.1"],
+                "tox==3.20.1",
+                "sphinx==3.3.1"],
         },
     )

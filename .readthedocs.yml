@@ -1,0 +1,8 @@
+# Configuration file for readthedocs.io build
+version: 2
+
+sphinx:
+  configuration: docs/conf.py
+
+python:
+  version: 3
