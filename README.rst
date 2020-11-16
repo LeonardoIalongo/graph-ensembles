@@ -1,5 +1,10 @@
 .. image:: https://travis-ci.com/LeonardoIalongo/graph-ensembles.svg?branch=master
     :target: https://travis-ci.com/LeonardoIalongo/graph-ensembles
+    :alt: Build Status
+
+.. image:: https://readthedocs.org/projects/graph-ensembles/badge/?version=latest
+    :target: https://graph-ensembles.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
 
 =================
 Graph ensembles
