@@ -24,16 +24,14 @@ setup(
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
         'Natural Language :: English',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.5',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Operating System :: OS Independent',
     ],
     packages=['graph_ensembles'],
     package_dir={'': 'src'},
-    install_requires=["numpy>=1.19",
-                      "scipy>=1.5",
+    install_requires=["numpy>=1.15",
+                      "scipy>=1.0",
                       "numba>=0.51"
                       ],
     extras_require={
@@ -46,6 +44,7 @@ setup(
                 "networkx==2.5",
                 "check-manifest==0.44",
                 "setuptools==47.1.0",
-                "twine==3.2.0"],
-        },    
+                "twine==3.2.0",
+                "tox==3.20.1"],
+        },
     )

@@ -1,3 +1,6 @@
+.. image:: https://travis-ci.com/LeonardoIalongo/graph-ensembles.svg?branch=master
+    :target: https://travis-ci.com/LeonardoIalongo/graph-ensembles
+
 =================
 Graph ensembles
 =================
