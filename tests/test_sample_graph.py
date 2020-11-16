@@ -66,25 +66,65 @@ class TestStripeFitnessModel():
                                   [1, 2])
         assert e_info.value.args[0] == 'Number of links is not a number.'
 
-    def test_solver_single(self):
-        """ Check that the solver is fitting the parameter z correctly. """
+    def test_solver_single_LS(self):
+        """ Check that the scipy least-squares solver is fitting the parameter z correctly. """
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links_tot)
-        model.fit(z0=0)
+        model.fit(z0=0, method="least-squares")
         np.testing.assert_allclose(model.z,
                                    0.730334,
                                    rtol=1e-6)
 
-    def test_solver_multi(self):
-        """ Check that the solver is fitting the parameter z correctly. """
+    def test_solver_single_fixed_point(self):
+        """ Check that the fixed-point solver is fitting the parameter z correctly. """
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        model.fit(z0=0.1, method="fixed-point")
+        np.testing.assert_allclose(model.z,
+                                   0.730334,
+                                   rtol=1e-6)
+
+    def test_solver_single_newton(self):
+        """ Check that the newton solver is fitting the parameter z correctly. """
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links_tot)
+        model.fit(z0=0.1, method="newton")
+        np.testing.assert_allclose(model.z,
+                                   0.730334,
+                                   rtol=1e-6)
+
+    def test_solver_multi_LS(self):
+        """ Check that the scipy least-squares solver is fitting the parameter z correctly. """
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
-        model.fit(z0=[0, 0, 0])
+        model.fit(z0=[0, 0, 0], method="least-squares")
         np.testing.assert_allclose(model.z,
                                    [1.006638e+08, 1.610613e+07, 4.346469e-01],
                                    rtol=1e-6)
+    
+    def test_solver_multi_fixed_point(self):
+        """ Check that the fixed-point solver is fitting the parameter z correctly. """
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links)
+        model.fit(z0=np.array([0.1, 0.1, 0.1]), method="fixed-point", max_steps=10000)
+        np.testing.assert_allclose(model.probability_matrix.sum(),
+                                   model.num_links.sum(),
+                                   rtol=1e-3)
+
+    def test_solver_multi_newton(self):
+        """ Check that the newton solver is fitting the parameter z correctly. """
+        model = ge.StripeFitnessModel(out_strength,
+                                      in_strength,
+                                      num_links)
+        model.fit(z0=np.array([0.1, 0.1, 0.1]), method="newton")
+        np.testing.assert_allclose(model.probability_matrix.sum(),
+                                   model.num_links.sum(),
+                                   rtol=1e-4)
 
     def test_probability_array_single(self):
         """ Check that the returned probability array is correct. """

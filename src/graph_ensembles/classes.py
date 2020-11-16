@@ -4,7 +4,8 @@ reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
 from scipy.optimize import least_squares
-from . import methods, iterative_models
+from . import methods
+from . import iterative_models as im
 
 
 class GraphModel():
@@ -117,7 +118,8 @@ class StripeFitnessModel(GraphModel):
         self.num_nodes = num_nodes
         self.num_labels = num_labels
 
-    def fit(self, z0=None):
+    def fit(self, method="least-squares", z0=None, tol=1e-8,
+            eps=1e-14, max_steps=100, verbose=False):
         """ Compute the optimal z to match the given number of links.
 
         Parameters
@@ -136,21 +138,88 @@ class StripeFitnessModel(GraphModel):
                 z0 = 1.0
 
         if isinstance(self.num_links, np.ndarray):
-            self.z = least_squares(
-                lambda x: methods.expected_links_stripe_mult_z(
-                    self.out_strength,
-                    self.in_strength,
-                    x) - self.num_links,
-                z0,
-                method='lm').x
+            if method == "least-squares":
+                self.z = least_squares(
+                    lambda x: methods.expected_links_stripe_mult_z(
+                        self.out_strength,
+                        self.in_strength,
+                        x) - self.num_links,
+                    z0,
+                    method='lm').x
+            
+            elif method == "newton":
+                self.z = im.solver(z0,
+                                fun = lambda x: im.loglikelihood_prime_stripe_mult_z(x,
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float),
+                                                                    self.num_links),
+                                fun_jac = lambda x: im.loglikelihood_hessian_stripe_mult_z(x,
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float)),
+                                tol = tol,
+                                eps = eps,
+                                max_steps = max_steps,
+                                method = "newton",
+                                verbose = verbose
+                )
+            
+            elif method == "fixed-point":
+                self.z = im.solver(z0,
+                                fun = lambda x: im.iterative_stripe_mult_z(x,
+                                                            self.out_strength.astype(float),
+                                                            self.in_strength.astype(float),
+                                                            self.num_links),
+                                fun_jac = None,
+                                tol = tol,
+                                eps = eps,
+                                max_steps = max_steps,
+                                method = "fixed-point",
+                                verbose = verbose
+                )
+            
+            else:
+                raise ValueError("The selected method is not valid.")
         else:
-            self.z = least_squares(
-                lambda x: methods.expected_links_stripe_one_z(
-                    self.out_strength,
-                    self.in_strength,
-                    x) - self.num_links,
-                z0,
-                method='lm').x
+            if method == "least-squares":
+                self.z = least_squares(
+                    lambda x: methods.expected_links_stripe_one_z(
+                        self.out_strength,
+                        self.in_strength,
+                        x) - self.num_links,
+                    z0,
+                    method='lm').x
+            elif method == "newton":
+                self.z = im.solver(z0,
+                                fun = lambda x: im.loglikelihood_prime_stripe_one_z(x,
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float),
+                                                                    self.num_links),
+                                fun_jac = lambda x: im.loglikelihood_hessian_stripe_one_z(x,
+                                                                    self.out_strength.astype(float),
+                                                                    self.in_strength.astype(float)),
+                                tol = tol,
+                                eps = eps,
+                                max_steps = max_steps,
+                                method = "newton",
+                                verbose = verbose
+                )
+            
+            elif method == "fixed-point":
+                self.z = im.solver(z0,
+                                fun = lambda x: im.iterative_stripe_one_z(x,
+                                                            self.out_strength.astype(float),
+                                                            self.in_strength.astype(float),
+                                                            self.num_links),
+                                fun_jac = None,
+                                tol = tol,
+                                eps = eps,
+                                max_steps = max_steps,
+                                method = "fixed-point",
+                                verbose = verbose
+                )
+
+            else:
+                raise ValueError("The selected method is not valid.")
 
     @property
     def probability_array(self):
