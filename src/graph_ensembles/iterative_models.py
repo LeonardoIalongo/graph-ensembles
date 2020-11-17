@@ -214,8 +214,8 @@ def iterative_block_mult_z(z, out_strength, in_strength, L):
     the fixed point method for CBM-II model 
     """
     n_sector = int(np.sqrt(max(z.shape)))
-    aux1 = np.zeros(shape=(n_sector,n_sector),dtype=np.float)
-    z = np.reshape(z,newshape=(n_sector,n_sector))
+    aux1 = np.zeros(shape=(n_sector,n_sector))
+    z = np.reshape(z,(n_sector,n_sector))
     for i in np.arange(out_strength.shape[0]):
         ind_out = int(out_strength[i,0])
         sect_out = int(out_strength[i,1])
@@ -227,8 +227,59 @@ def iterative_block_mult_z(z, out_strength, in_strength, L):
             if (ind_out != ind_in):
                 aux2 = s_out * s_in
                 aux1[sect_out,sect_in] += aux2/(1+z[sect_out,sect_in]*aux2)
-    aux_z = L/aux1
-    return aux_z
+    aux_z = np.zeros(shape=(n_sector,n_sector))
+    for i in np.arange(n_sector):
+        for j in np.arange(n_sector):
+            if L[i,j]!=0:
+                aux_z[i,j] = L[i,j]/aux1[i,j]
+    return np.reshape(aux_z, -1)
+
+
+#@jit(nopython=True)
+def loglikelihood_prime_block_mult_z(z, out_strength, in_strength, L):
+    """
+    Function computing the first derivative of the
+    loglikelihood function for the CBM-II model
+    """
+    n_sector = int(np.sqrt(max(z.shape)))
+    aux1 = np.zeros(shape=(n_sector,n_sector))
+    z = np.reshape(z,newshape=(n_sector,n_sector))
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i,0])
+        sect_out = int(out_strength[i,1])
+        s_out = out_strength[i,2]
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = int(in_strength[j,0])
+            sect_in = int(in_strength[j,1])
+            s_in = in_strength[j,2]
+            if (ind_out != ind_in):
+                aux2 = z[sect_out,sect_in] * s_out * s_in
+                aux1[sect_out,sect_in] += aux2/(1+aux2)
+    aux_z = L - aux1
+    return np.reshape(aux_z, -1)
+
+
+@jit(nopython=True)
+def loglikelihood_hessian_block_mult_z(z, out_strength, in_strength):
+    """
+    Function computing the second derivative of the
+    loglikelihood function for the CBM-II model
+    """
+    n_sector = int(np.sqrt(max(z.shape)))
+    aux1 = np.zeros(shape=(n_sector,n_sector))
+    z = np.reshape(z,(n_sector,n_sector))
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i,0])
+        sect_out = int(out_strength[i,1])
+        s_out = out_strength[i,2]
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = int(in_strength[j,0])
+            sect_in = int(in_strength[j,1])
+            s_in = in_strength[j,2]
+            if (ind_out != ind_in):
+                aux2 = s_out * s_in
+                aux1[sect_out,sect_in] -= aux2/((1+z[sect_out,sect_in]*aux2)**2)
+    return np.reshape(aux1, -1)
 
 
 def sufficient_decrease_condition(
@@ -304,6 +355,7 @@ def solver(
 
         if method == "newton":
             H = fun_jac(x)
+            H = H + 1e-12
             dx = - f/H
         elif method == "fixed-point":    
             dx = f - x
@@ -413,7 +465,10 @@ def iterative_fit(z0, model, method, nz_out_str,
                                                                 nz_out_str,
                                                                 nz_in_str,
                                                                 L),
-        'CBM-II-newton': None,
+        'CBM-II-newton': lambda x: loglikelihood_prime_block_mult_z(x,
+                                                            nz_out_str,
+                                                            nz_in_str,
+                                                            L),
     }
 
     d_fun_jac = {
@@ -430,7 +485,9 @@ def iterative_fit(z0, model, method, nz_out_str,
         'CBM-I-newton' : lambda x: loglikelihood_hessian_block_one_z(x,
                                                                     nz_out_str,
                                                                     nz_in_str),
-        'CBM-II-newton': None,
+        'CBM-II-newton': lambda x: loglikelihood_hessian_block_mult_z(x,
+                                                                    nz_out_str,
+                                                                    nz_in_str),
     }
 
     fun = d_fun[mod_method]
