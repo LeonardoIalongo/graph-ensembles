@@ -95,41 +95,9 @@ def random_edge_list(N, L, W, G=None, self_loops=False):
                                ('label', np.int),
                                ('value', np.float)])
 
-    # # Initialise empty results
-    # s_out = np.zeros((max(np.max(edges['src']), np.max(edges['dst'])),
-    #                   np.max(edges['label'])))
-    # s_in = np.zeros((max(np.max(edges['src']), np.max(edges['dst'])),
-    #                  np.max(edges['label'])))
 
-
-# @jit(nopython=True)
+@jit(nopython=True)
 def _get_strengths_label(edges):
-    # Iterate over all unique values of index and label
-    s_out = []
-    i_out = edges[['src', 'label']].unique()
-
-    for i in np.arange(len(i_out)):
-        src = i_out[i][0]
-        label = i_out[i][1]
-        s_out.append((i_out[i] +
-                      (np.sum(edges[(edges['src'] == src) &
-                                    (edges['label'] == label)]['value']),)))
-
-    s_in = []
-    i_in = edges[['dst', 'label']].unique()
-
-    for i in np.arange(len(i_in)):
-        dst = i_in[i][0]
-        label = i_in[i][1]
-        s_in.append((i_in[i] +
-                    (np.sum(edges[(edges['dst'] == dst) &
-                                  (edges['label'] == label)]['value']),)))
-
-    return s_out, s_in
-
-
-# @jit(nopython=True)
-def _get_strengths_label_dict(edges):
     s_out = []
     s_in = []
     out_loc = {}
@@ -140,30 +108,26 @@ def _get_strengths_label_dict(edges):
     # Iterate over all non-zero edges
     for i in np.arange(len(edges)):
         # Check if index pair has already occurred
-        i_out = edges[['src', 'label']][i]
+        i_out = (edges['src'][i], edges['label'][i])
 
         if i_out not in out_loc:
             out_loc[i_out] = out_c
             out_c += 1
-            s_out.append(i_out + (edges[i][3],))
+            s_out.append(i_out + (edges['value'][i],))
         else:
-            s_out[out_loc[i_out]] = i_out + (edges[i][3] +
+            s_out[out_loc[i_out]] = i_out + (edges['value'][i] +
                                              s_out[out_loc[i_out]][2],)
 
         # Repeat for in index
-        i_in = edges[['dst', 'label']][i]
+        i_in = (edges['dst'][i], edges['label'][i])
 
         if i_in not in in_loc:
             in_loc[i_in] = in_c
             in_c += 1
-            s_in.append(i_in + (edges[i][3],))
+            s_in.append(i_in + (edges['value'][i],))
         else:
-            s_in[in_loc[i_in]][2] += edges[i][3]
-
-        # Debug
-        print(edges[i])
-        print(s_out)
-        print(s_in)
+            s_in[in_loc[i_in]] = i_in + (edges['value'][i] +
+                                         s_in[in_loc[i_in]][2],)
 
     return s_out, s_in
 
@@ -190,6 +154,11 @@ def get_strengths(edges):
     in_strength: np.ndarray
         the in strength sequence
     """
+    # # Initialise empty results
+    # s_out = np.zeros((max(np.max(edges['src']), np.max(edges['dst'])),
+    #                   np.max(edges['label'])))
+    # s_in = np.zeros((max(np.max(edges['src']), np.max(edges['dst'])),
+    #                  np.max(edges['label'])))
 
     if G is None:
         return np.array(_random_edge_list(N, L, W),
