@@ -32,7 +32,8 @@ setup(
     package_dir={'': 'src'},
     install_requires=["numpy>=1.15",
                       "scipy>=1.0",
-                      "numba>=0.51"
+                      "numba>=0.51",
+                      "pandas>=1.1"
                       ],
     extras_require={
         "dev": ["pytest==6.0.1",

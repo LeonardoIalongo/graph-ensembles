@@ -6,6 +6,52 @@ import random as rd
 from numba import jit
 
 
+def _generate_id_dict(v, id_col):
+    """ Return id dictionary. """
+    id_dict = {}
+    rep_msg = 'There is at least one repeated id in the vertices dataframe.'
+
+    if isinstance(id_col, list):
+        if len(id_col) > 1:
+            # Id is a tuple
+            i = 0
+            for x in v[id_col].itertuples(index=False):
+                if x in id_dict:
+                    raise Exception(rep_msg)
+                else:
+                    id_dict[x] = i
+                    i += 1
+
+        elif len(id_col) == 1:
+            # Extract series
+            i = 0
+            for x in v[id_col[0]]:
+                if x in id_dict:
+                    raise Exception(rep_msg)
+                else:
+                    id_dict[x] = i
+                    i += 1
+
+        else:
+            # No column passed
+            raise ValueError('At least one id column must be given.')
+
+    elif isinstance(id_col, str):
+        # Extract series
+        i = 0
+        for x in v[id_col]:
+            if x in id_dict:
+                raise Exception(rep_msg)
+            else:
+                id_dict[x] = i
+                i += 1
+
+    else:
+        raise ValueError('id_col must be string or list of strings.')
+
+    return id_dict
+
+
 @jit(nopython=True)
 def _random_edge_list(N, L, W, self_loops):
     edges = []
@@ -97,6 +143,42 @@ def random_edge_list(N, L, W, G=None, self_loops=False):
 
 
 @jit(nopython=True)
+def _get_strengths(edges):
+    s_out = []
+    s_in = []
+    out_loc = {}
+    in_loc = {}
+    out_c = 0
+    in_c = 0
+
+    # Iterate over all non-zero edges
+    for i in np.arange(len(edges)):
+        # Check if index pair has already occurred
+        i_out = edges['src'][i]
+
+        if i_out not in out_loc:
+            out_loc[i_out] = out_c
+            out_c += 1
+            s_out.append((i_out, edges['value'][i]))
+        else:
+            s_out[out_loc[i_out]] = (i_out, edges['value'][i] +
+                                     s_out[out_loc[i_out]][1])
+
+        # Repeat for in index
+        i_in = edges['dst'][i]
+
+        if i_in not in in_loc:
+            in_loc[i_in] = in_c
+            in_c += 1
+            s_in.append((i_in, edges['value'][i]))
+        else:
+            s_in[in_loc[i_in]] = (i_in, edges['value'][i] +
+                                  s_in[in_loc[i_in]][1])
+
+    return s_out, s_in
+
+
+@jit(nopython=True)
 def _get_strengths_label(edges):
     s_out = []
     s_in = []
@@ -132,19 +214,22 @@ def _get_strengths_label(edges):
     return s_out, s_in
 
 
-def get_strengths(edges):
+def get_strengths(edges, bylabel=True):
     """ Get the in and out strength sequence from the edge list provided.
 
     It require as input a structured array with 3 or 4 columns (src, dst,
     label, value) with the label one being optional. It returns two structured
     arrays with columns (id, label, value), with the label column being
-    present if it was provided in the edge list.
+    present if it was provided in the edge list and bylabel is True.
 
     Parameters
     ----------
     edges: np.ndarray
         the edge list with columns (src, dst, value) or
         (src, dst, label, value)
+
+    bylable: bool
+        flag for computing strength by label
 
     Returns
     -------
@@ -160,14 +245,12 @@ def get_strengths(edges):
     # s_in = np.zeros((max(np.max(edges['src']), np.max(edges['dst'])),
     #                  np.max(edges['label'])))
 
-    if G is None:
-        return np.array(_random_edge_list(N, L, W),
-                        dtype=[('src', np.int),
-                               ('dst', np.int),
+    if bylabel and ('label' in edges.dtype.names):
+        return np.array(_get_strengths_label(edges),
+                        dtype=[('id', np.int),
+                               ('label', np.int),
                                ('value', np.float)])
     else:
-        return np.array(_random_edge_list(N, L, W, G),
-                        dtype=[('src', np.int),
-                               ('dst', np.int),
-                               ('label', np.int),
+        return np.array(_get_strengths(edges),
+                        dtype=[('id', np.int),
                                ('value', np.float)])

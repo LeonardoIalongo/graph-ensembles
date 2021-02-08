@@ -4,8 +4,48 @@ reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
 from scipy.optimize import least_squares
+from . import helper as hp
 from . import methods
 from . import iterative_models as im
+
+
+class Graph():
+    """ General class for graphs. """
+
+    def __init__(self, v, e, id_col='id', src_col='src', dst_col='dst'):
+        """Return a Graph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+
+        Returns
+        -------
+        Graph
+            the graph object
+        """
+
+        # Determine size of indices
+        self.num_vertices = len(v.index)
+        num_bytes = str(2**np.ceil(np.log2(np.log2(self.num_vertices + 1)/8)))
+        self.id_dtype = np.dtype('u' + num_bytes)
+
+        # Get dictionary of id to internal id (_id)
+        self.id_dict = hp._generate_id_dict(v, id_col)
+
+        # Generate optimized edge list
+        self._e = np.rec.array(
+            (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
+             e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
+            dtypes=[('src', self.id_dtype), ('dst', self.id_dtype)]
+            )
+
+        # Save original dataframes
+        self.vertices = v
+        self.edges = e
 
 
 class GraphModel():
@@ -36,9 +76,9 @@ class StripeFitnessModel(GraphModel):
         the in strength sequence
     num_links: int (or np.ndarray)
         the total number of links (per label)
-    num_nodes: np.int
+    num_nodes: int
         the total number of nodes
-    num_labels: np.int
+    num_labels: int
         the total number of labels by which the vector strengths are computed
     z: float or np.ndarray
         the vector of density parameters
