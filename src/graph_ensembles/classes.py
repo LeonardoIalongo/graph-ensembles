@@ -10,7 +10,7 @@ from . import iterative_models as im
 
 
 class Graph():
-    """ General class for graphs. """
+    """ General class for directed graphs. """
 
     def __init__(self, v, e, id_col='id', src_col='src', dst_col='dst'):
         """Return a Graph object given vertices and edges.
@@ -30,22 +30,29 @@ class Graph():
 
         # Determine size of indices
         self.num_vertices = len(v.index)
-        num_bytes = str(2**np.ceil(np.log2(np.log2(self.num_vertices + 1)/8)))
-        self.id_dtype = np.dtype('u' + num_bytes)
+        num_bytes = max(2**np.ceil(np.log2(np.log2(self.num_vertices + 1)/8)),
+                        1)
+        self.id_dtype = np.dtype('u' + str(num_bytes))
 
         # Get dictionary of id to internal id (_id)
         self.id_dict = hp._generate_id_dict(v, id_col)
 
-        # Generate optimized edge list
-        self._e = np.rec.array(
-            (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
-             e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
-            dtypes=[('src', self.id_dtype), ('dst', self.id_dtype)]
-            )
+        # Check that the vertices list is complete
 
-        # Save original dataframes
-        self.vertices = v
-        self.edges = e
+
+        # # Generate optimized edge list and sort it
+        # self._e = np.rec.array(
+        #     (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
+        #      e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
+        #     dtypes=[('src', self.id_dtype), ('dst', self.id_dtype)]
+        #     ).sort()
+
+        # # Check that there are no repeated pair in the edge list
+        # hp._check_unique_edges(self._e)
+
+        # # Save original dataframes
+        # self.vertices = v
+        # self.edges = e
 
 
 class GraphModel():

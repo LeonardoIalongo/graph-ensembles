@@ -1,5 +1,5 @@
 """ Test graph ensemble model classes on simple sample graph. """
-import graph_ensembles.classes as ge
+import graph_ensembles as ge
 import numpy as np
 import pytest
 
@@ -87,7 +87,8 @@ class TestStripeFitnessModel():
                                    rtol=1e-6)
 
     def test_solver_single_newton(self):
-        """ Check that the newton solver is fitting the parameter z correctly. """
+        """ Check that the newton solver is fitting the parameter z
+        correctly. """
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links_tot)
@@ -97,7 +98,8 @@ class TestStripeFitnessModel():
                                    rtol=1e-6)
 
     def test_solver_multi_LS(self):
-        """ Check that the scipy least-squares solver is fitting the parameter z correctly. """
+        """ Check that the scipy least-squares solver is fitting the
+        parameter z correctly. """
         model = ge.StripeFitnessModel(out_strength,
                                       in_strength,
                                       num_links)
@@ -105,7 +107,7 @@ class TestStripeFitnessModel():
         np.testing.assert_allclose(model.z,
                                    [1.006638e+08, 1.610613e+07, 4.346469e-01],
                                    rtol=1e-6)
-    
+
     def test_solver_multi_fixed_point(self):
         """ Check that the fixed-point solver is fitting the parameter z correctly. """
         model = ge.StripeFitnessModel(out_strength,
@@ -208,3 +210,14 @@ class TestStripeFitnessModel():
         np.testing.assert_allclose(num_links,
                                    exp_num_links,
                                    rtol=1e-6)
+
+
+class TestHelper():
+    def test_random_edge_list_noself(self):
+        """ Check that the randomly generated edge list is consistent."""
+        N = 10
+        L = 50
+        W = 30
+        G = 5
+        edges = ge.helper.random_edge_list(N, L, W, G=G, self_loops=False)
+        assert np.all([i != j for (i, j) in edges[['src', 'dst']]])

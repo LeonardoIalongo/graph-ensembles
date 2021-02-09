@@ -30,9 +30,9 @@ setup(
     ],
     packages=['graph_ensembles'],
     package_dir={'': 'src'},
-    install_requires=["numpy>=1.15",
+    install_requires=["numpy>=1.20",
                       "scipy>=1.0",
-                      "numba>=0.51",
+                      "numba>=0.52",
                       "pandas>=1.1"
                       ],
     extras_require={
