@@ -17,12 +17,15 @@ class TestSimpleGraph():
                      ['ABN', 'ING', 4e5, 'external']],
                      columns=['creditor', 'debtor', 'value', 'type'])
 
-    def test_instanciation(self):
+    def test_wrong_input(self):
+        with pytest.raises(Exception) as e_info:
+            ge.Graph([[1], [2], [3]], [[1, 2], [3, 1]])
+
+        msg = 'Only dataframe input supported.'
+        assert e_info.value.args[0] == msg
+
+    def test_instanciation_names(self):
         g = ge.Graph(self.v, self.e, id_col='name', src_col='creditor',
                      dst_col='debtor')
 
         assert isinstance(g, ge.Graph)
-
-
-# class TestRandomGraphs():
-    

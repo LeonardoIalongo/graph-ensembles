@@ -14,14 +14,6 @@ def _check_unique_edges(e):
             assert False, 'There are repeated edges'
 
 
-@jit(nopython=True)
-def _check_completeness_vertices(id_dict, e):
-    """ Check that the edges are not repeated in the sorted edge list."""
-    for i in np.arange(len(e)-1):
-        if (e[i].src == e[i+1].src) and (e[i].dst == e[i+1].dst):
-            assert False, 'There are repeated edges'
-
-
 def _generate_id_dict(v, id_col):
     """ Return id dictionary. """
     id_dict = {}

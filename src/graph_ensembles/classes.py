@@ -3,6 +3,7 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
+import pandas as pd
 from scipy.optimize import least_squares
 from . import helper as hp
 from . import methods
@@ -28,6 +29,9 @@ class Graph():
             the graph object
         """
 
+        assert isinstance(v, pd.DataFrame), 'Only dataframe input supported.'
+        assert isinstance(e, pd.DataFrame), 'Only dataframe input supported.'
+
         # Determine size of indices
         self.num_vertices = len(v.index)
         num_bytes = max(2**np.ceil(np.log2(np.log2(self.num_vertices + 1)/8)),
@@ -35,24 +39,27 @@ class Graph():
         self.id_dtype = np.dtype('u' + str(num_bytes))
 
         # Get dictionary of id to internal id (_id)
+        # also checks that no id in v is repeated
         self.id_dict = hp._generate_id_dict(v, id_col)
 
-        # Check that the vertices list is complete
+        # Check that no node id in e is not present in v
+        assert e[src_col].isin(self.id_dict).all(), ('Some source nodes are'
+                                                     ' not in v.')
+        assert e[dst_col].isin(self.id_dict).all(), ('Some destination nodes'
+                                                     ' are not in v.')
 
+        # Generate optimized edge list and sort it
+        self._e = np.sort(np.rec.array(
+            (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
+             e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
+            dtype=[('src', self.id_dtype), ('dst', self.id_dtype)]
+            ))
 
-        # # Generate optimized edge list and sort it
-        # self._e = np.rec.array(
-        #     (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
-        #      e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
-        #     dtypes=[('src', self.id_dtype), ('dst', self.id_dtype)]
-        #     ).sort()
+        # Check that there are no repeated pair in the edge list
+        hp._check_unique_edges(self._e)
 
-        # # Check that there are no repeated pair in the edge list
-        # hp._check_unique_edges(self._e)
-
-        # # Save original dataframes
-        # self.vertices = v
-        # self.edges = e
+        # Compute degree (undirected) to ensure all nodes have one link
+        #
 
 
 class GraphModel():
