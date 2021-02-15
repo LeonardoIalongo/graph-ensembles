@@ -56,7 +56,15 @@ class Graph():
 class sGraph():
     """ General class for graphs.
     """
-    pass
+    def num_(self):
+        """ Compute the number of edges per vertex.
+
+            Warning: this is not the degree sequence.
+            This is the number of edges per vertex irrespective
+            of the direction, weight, or any edge label, such that having
+            a reciprocated edge counts two instead of one.
+        """
+        return mt._compute_num_edges(self.e, self.num_vertices)
 
 
 class DirectedGraph(sGraph):
@@ -65,7 +73,7 @@ class DirectedGraph(sGraph):
     Attributes
     ----------
     num_vertices: int
-        number of nodes in the graph
+        number of vertices in the graph
     num_edges: int
         number of edges in the graph
     v: numpy.rec.array
@@ -90,11 +98,11 @@ class DirectedGraph(sGraph):
         e: pandas.dataframe
             list of edges and their properties
         id_col: str or list of str
-            specifies which column uniquely identifies a node
+            specifies which column uniquely identifies a vertex
         src_col: str (list of str not yet supported)
-            identifier column for the source node
+            identifier column for the source vertex
         dst_col: str (list of str not yet supported)
-            identifier column for the destination node
+            identifier column for the destination vertex
 
         Returns
         -------
@@ -114,10 +122,10 @@ class DirectedGraph(sGraph):
         # also checks that no id in v is repeated
         self.id_dict, self.id_list = hp._generate_id_dict(v, v_id)
 
-        # Check that no node id in e is not present in v
-        assert e[src].isin(self.id_dict).all(), ('Some source nodes are'
+        # Check that no vertex id in e is not present in v
+        assert e[src].isin(self.id_dict).all(), ('Some source vertices are'
                                                  ' not in v.')
-        assert e[dst].isin(self.id_dict).all(), ('Some destination nodes'
+        assert e[dst].isin(self.id_dict).all(), ('Some destination vertices'
                                                  ' are not in v.')
 
         # Generate optimized edge list and sort it
@@ -136,7 +144,7 @@ class DirectedGraph(sGraph):
         dtype = 'u' + str(hp._get_num_bytes(np.max(d)))
         self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
 
-        # Warn if nodes have no links
+        # Warn if vertices have no edges
         zero_idx = np.nonzero(d == 0)[0]
         if len(zero_idx) == 1:
             warnings.warn(str(self.id_list[zero_idx[0]]) +
@@ -154,16 +162,6 @@ class DirectedGraph(sGraph):
         """
         return mt._compute_degree(self.e, self.num_vertices)
 
-    def num_links(self):
-        """ Compute the number of links per node.
-
-            Warning: this is not the degree sequence.
-            This is the number of links per node irrespective
-            of the direction, weight, or any link label, such that having
-            a reciprocated link counts two instead of one.
-        """
-        return mt._compute_num_links(self.e, self.num_vertices)
-
 
 class GraphModel():
     """ General class for graph models. """
@@ -180,7 +178,7 @@ class StripeFitnessModel(GraphModel):
     This model allows to take into account labels of the edges and include
     this information as part of the model. The strength sequence is therefore
     now subdivided in strength per label. Two quantities can be preserved by
-    the ensemble: either the total number of links, or the number of links per
+    the ensemble: either the total number of edges, or the number of edges per
     label.
 
     Attributes
@@ -189,8 +187,8 @@ class StripeFitnessModel(GraphModel):
         the out strength sequence
     in_strength: np.ndarray
         the in strength sequence
-    num_links: int (or np.ndarray)
-        the total number of links (per label)
+    num_edges: int (or np.ndarray)
+        the total number of edges (per label)
     num_nodes: int
         the total number of nodes
     num_labels: int

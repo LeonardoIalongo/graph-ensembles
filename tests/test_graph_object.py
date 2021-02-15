@@ -25,7 +25,7 @@ class TestMinimalGraph():
         assert isinstance(g, ge.sGraph)
         assert (g.e == self._e).all(), g.e == self._e
 
-    def test_duplicated_nodes(self):
+    def test_duplicated_vertices(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['ABN']],
                          columns=['name'])
 
@@ -49,7 +49,7 @@ class TestMinimalGraph():
             msg = 'There are repeated edges'
             assert e_info.value.args[0] == msg
 
-    def test_nodes_in_e_not_v(self):
+    def test_vertices_in_e_not_v(self):
         e = pd.DataFrame([['ING', 'ABN'],
                          ['BNP', 'ABN'],
                          ['RAB', 'ABN'],
@@ -60,7 +60,7 @@ class TestMinimalGraph():
         with pytest.raises(Exception) as e_info:
             ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
-            msg = 'Some source nodes are not in v.'
+            msg = 'Some source vertices are not in v.'
             assert e_info.value.args[0] == msg
 
         e = pd.DataFrame([['ING', 'ABN'],
@@ -73,7 +73,7 @@ class TestMinimalGraph():
         with pytest.raises(Exception) as e_info:
             ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
-            msg = 'Some destination nodes are not in v.'
+            msg = 'Some destination vertices are not in v.'
             assert e_info.value.args[0] == msg
 
     def test_degree_init(self):
@@ -86,7 +86,7 @@ class TestMinimalGraph():
 
             assert np.all(g.v.degree == d), g.v.degree
 
-    def test_nodes_with_no_edge(self):
+    def test_vertices_with_no_edge(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
                          columns=['name'])
 
