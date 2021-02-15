@@ -91,7 +91,7 @@ class TestMinimalGraph():
         assert np.all(g.v.degree == d), g.v.degree
 
     def test_nodes_with_no_edge(self):
-        v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
+        v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
                          columns=['name'])
 
         with pytest.warns(UserWarning)as w_info:

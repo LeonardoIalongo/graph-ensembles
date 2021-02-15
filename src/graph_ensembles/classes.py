@@ -25,6 +25,8 @@ class Graph():
         array containing the edge list in a condensed format
     id_dict: dict
         dictionary to convert original identifiers to positions in v
+    id_list: list
+        list containing the original identifiers in order
     id_type: numpy.dtype
         type of the id (e.g. np.uint16)
     """
@@ -61,7 +63,7 @@ class Graph():
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict = hp._generate_id_dict(v, id_col)
+        self.id_dict, self.id_list = hp._generate_id_dict(v, id_col)
 
         # Check that no node id in e is not present in v
         assert e[src_col].isin(self.id_dict).all(), ('Some source nodes are'
