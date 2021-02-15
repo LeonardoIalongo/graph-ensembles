@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 
-class TestMinimalGraph():
+class TestDirectedGraph():
     v = pd.DataFrame([['ING'], ['ABN'], ['BNP']],
                      columns=['name'])
 
@@ -98,6 +98,13 @@ class TestMinimalGraph():
 
         with pytest.warns(UserWarning, match=r' vertices have no edges.'):
             ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
+
+    def test_out_degree(self):
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
+        d_out = np.array([1, 1, 2])
+
+        assert np.all(g.out_degree() == d_out), g.out_degree()
 
 
 # class TestSimpleGraph():

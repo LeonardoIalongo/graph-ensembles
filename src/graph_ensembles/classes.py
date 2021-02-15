@@ -38,13 +38,33 @@ class Graph():
             dst_col = kwargs['dst']
 
         if 'weight' in kwargs:
+            weight_col = kwargs['weight']
             if 'edge_label' in kwargs:
-                pass
+                label_col = kwargs['edge_label']
+                return WeightedEdgelabelGraph(v,
+                                              e,
+                                              v_id=id_col,
+                                              src=src_col,
+                                              dst=dst_col,
+                                              weight=weight_col,
+                                              edge_label=label_col)
             else:
-                pass
+                return WeightedGraph(v,
+                                     e,
+                                     v_id=id_col,
+                                     src=src_col,
+                                     dst=dst_col,
+                                     weight=weight_col)
+
         else:
             if 'edge_label' in kwargs:
-                pass
+                label_col = kwargs['edge_label']
+                return EdgelabelGraph(v,
+                                      e,
+                                      v_id=id_col,
+                                      src=src_col,
+                                      dst=dst_col,
+                                      edge_label=label_col)
             else:
                 return DirectedGraph(v,
                                      e,
@@ -56,15 +76,7 @@ class Graph():
 class sGraph():
     """ General class for graphs.
     """
-    def num_edges_per_vertex(self):
-        """ Compute the number of edges per vertex.
-
-            Warning: this is not the degree sequence.
-            This is the number of edges per vertex irrespective
-            of the direction, weight, or any edge label, such that having
-            a reciprocated edge counts two instead of one.
-        """
-        return mt._compute_num_edges_per_vertex(self.e, self.num_vertices)
+    pass
 
 
 class DirectedGraph(sGraph):
@@ -86,10 +98,14 @@ class DirectedGraph(sGraph):
         list containing the original identifiers in order
     id_type: numpy.dtype
         type of the id (e.g. np.uint16)
+
+    Methods
+    -------
+
     """
 
-    def __init__(self, v, e, v_id='id', src='src', dst='dst'):
-        """Return a Graph object given vertices and edges.
+    def __init__(self, v, e, v_id, src, dst):
+        """Return a sGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -140,7 +156,7 @@ class DirectedGraph(sGraph):
         self.num_edges = len(self.e)
 
         # Compute degree (undirected)
-        d = self.degree()
+        d = mt._compute_degree(self.e, self.num_vertices)
         dtype = 'u' + str(hp._get_num_bytes(np.max(d)))
         self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
 
@@ -157,10 +173,120 @@ class DirectedGraph(sGraph):
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
 
-    def degree(self):
+    def degree(self, get=True):
         """ Compute the undirected degree sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
         """
-        return mt._compute_degree(self.e, self.num_vertices)
+        if 'degree' in self.v.dtype.names:
+            degree = self.v.degree
+        else:
+            degree = mt._compute_degree(self.e, self.num_vertices)
+            dtype = 'u' + str(hp._get_num_bytes(np.max(degree)))
+            self.v = np.lib.recfunctions.append_fields(
+                self.v, 'degree', degree.astype(dtype),
+                dtypes=dtype, asrecarray=True)
+
+        if get:
+            return degree
+
+
+class WeightedGraph(DirectedGraph):
+    """ General class for directed graphs with weighted edges.
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+    """
+    def __init__(self, v, e, v_id, src, dst, weight):
+        """Return a sGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        id_col: str or list of str
+            specifies which column uniquely identifies a vertex
+        src_col: str (list of str not yet supported)
+            identifier column for the source vertex
+        dst_col: str (list of str not yet supported)
+            identifier column for the destination vertex
+
+        Returns
+        -------
+        Graph
+            the graph object
+        """
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+
+
+class EdgelabelGraph(DirectedGraph):
+    """ General class for directed graphs with labelled edges.
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+    """
+    def __init__(self, v, e, v_id, src, dst, edge_label):
+        """Return a sGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        id_col: str or list of str
+            specifies which column uniquely identifies a vertex
+        src_col: str (list of str not yet supported)
+            identifier column for the source vertex
+        dst_col: str (list of str not yet supported)
+            identifier column for the destination vertex
+
+        Returns
+        -------
+        Graph
+            the graph object
+        """
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+
+
+class WeightedEdgelabelGraph(EdgelabelGraph, WeightedGraph):
+    """ General class for directed graphs with labelled and weighted edges.
+
+    Attributes
+    ----------
+
+    Methods
+    -------
+    """
+    def __init__(self, v, e, v_id, src, dst, weight, edge_label):
+        """Return a sGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        id_col: str or list of str
+            specifies which column uniquely identifies a vertex
+        src_col: str (list of str not yet supported)
+            identifier column for the source vertex
+        dst_col: str (list of str not yet supported)
+            identifier column for the destination vertex
+
+        Returns
+        -------
+        Graph
+            the graph object
+        """
 
 
 class GraphModel():
