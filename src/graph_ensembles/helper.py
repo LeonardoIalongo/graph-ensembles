@@ -6,6 +6,11 @@ import random as rd
 from numba import jit
 
 
+def _get_num_bytes(num_items):
+    """ Determine the number of bytes needed for storing ids for num_items."""
+    return max(2**np.ceil(np.log2(np.log2(num_items + 1)/8)), 1)
+
+
 @jit(nopython=True)
 def _check_unique_edges(e):
     """ Check that the edges are not repeated in the sorted edge list."""
@@ -17,7 +22,7 @@ def _check_unique_edges(e):
 def _generate_id_dict(v, id_col):
     """ Return id dictionary. """
     id_dict = {}
-    rep_msg = 'There is at least one repeated id in the vertices dataframe.'
+    rep_msg = 'There is at least one repeated id in the vertex dataframe.'
 
     if isinstance(id_col, list):
         if len(id_col) > 1:

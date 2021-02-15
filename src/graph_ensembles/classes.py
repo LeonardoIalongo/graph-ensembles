@@ -34,8 +34,7 @@ class Graph():
 
         # Determine size of indices
         self.num_vertices = len(v.index)
-        num_bytes = max(2**np.ceil(np.log2(np.log2(self.num_vertices + 1)/8)),
-                        1)
+        num_bytes = hp._get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
 
         # Get dictionary of id to internal id (_id)
@@ -49,17 +48,18 @@ class Graph():
                                                      ' are not in v.')
 
         # Generate optimized edge list and sort it
-        self._e = np.sort(np.rec.array(
+        self.e = np.sort(np.rec.array(
             (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
              e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
             dtype=[('src', self.id_dtype), ('dst', self.id_dtype)]
             ))
 
         # Check that there are no repeated pair in the edge list
-        hp._check_unique_edges(self._e)
+        hp._check_unique_edges(self.e)
+        self.num_edges = len(self.e)
 
         # Compute degree (undirected) to ensure all nodes have one link
-        #
+        # self.v = np.rec.array([0], dtype=[('src', self.id_dtype)])
 
 
 class GraphModel():
