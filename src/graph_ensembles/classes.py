@@ -3,6 +3,7 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
+from numpy.lib.recfunctions import append_fields
 import pandas as pd
 from scipy.optimize import least_squares
 from . import helper as hp
@@ -173,7 +174,7 @@ class DirectedGraph(sGraph):
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
 
-    def degree(self, get=True):
+    def degree(self, get=False):
         """ Compute the undirected degree sequence.
 
         If get is true it returns the array otherwise it adds the result to v.
@@ -183,12 +184,53 @@ class DirectedGraph(sGraph):
         else:
             degree = mt._compute_degree(self.e, self.num_vertices)
             dtype = 'u' + str(hp._get_num_bytes(np.max(degree)))
-            self.v = np.lib.recfunctions.append_fields(
-                self.v, 'degree', degree.astype(dtype),
-                dtypes=dtype, asrecarray=True)
+            self.v = append_fields(self.v, 'degree', degree.astype(dtype),
+                                   dtypes=dtype, asrecarray=True)
 
         if get:
             return degree
+
+    def out_degree(self, get=False):
+        """ Compute the out degree sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'out_degree' in self.v.dtype.names:
+            d_out = self.v.out_degree
+        else:
+            d_out, d_in = mt._compute_in_out_degrees(self.e,
+                                                     self.num_vertices)
+            dtype = 'u' + str(hp._get_num_bytes(max(np.max(d_out),
+                                                    np.max(d_in))))
+            self.v = append_fields(self.v,
+                                   ['out_degree', 'in_degree'],
+                                   (d_out.astype(dtype), d_in.astype(dtype)),
+                                   dtypes=[dtype, dtype],
+                                   asrecarray=True)
+
+        if get:
+            return d_out
+
+    def in_degree(self, get=False):
+        """ Compute the out degree sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'in_degree' in self.v.dtype.names:
+            d_in = self.v.in_degree
+        else:
+            d_out, d_in = mt._compute_in_out_degrees(self.e,
+                                                     self.num_vertices)
+            dtype = 'u' + str(hp._get_num_bytes(max(np.max(d_out),
+                                                    np.max(d_in))))
+            self.v = append_fields(self.v,
+                                   ['out_degree', 'in_degree'],
+                                   (d_out.astype(dtype), d_in.astype(dtype)),
+                                   dtypes=[dtype, dtype],
+                                   asrecarray=True)
+
+        if get:
+            return d_in
 
 
 class WeightedGraph(DirectedGraph):

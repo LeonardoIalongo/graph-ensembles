@@ -103,8 +103,19 @@ class TestDirectedGraph():
         g = ge.Graph(self.v, self.e, v_id='name',
                      src='creditor', dst='debtor')
         d_out = np.array([1, 1, 2])
+        d_test = g.out_degree(get=True)
 
-        assert np.all(g.out_degree() == d_out), g.out_degree()
+        assert np.all(d_test == d_out), d_test
+        assert np.all(g.v.out_degree == d_out), g.v.out_degree
+
+    def test_in_degree(self):
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
+        d_in = np.array([1, 2, 1])
+        d_test = g.in_degree(get=True)
+
+        assert np.all(d_test == d_in), d_test
+        assert np.all(g.v.in_degree == d_in), g.v.in_degree
 
 
 # class TestSimpleGraph():

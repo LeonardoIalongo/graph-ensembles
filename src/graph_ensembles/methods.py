@@ -23,6 +23,17 @@ def _compute_degree(e, num_v):
     return d
 
 
+@jit(nopython=True)
+def _compute_in_out_degrees(e, num_v):
+    d_out = np.zeros(num_v, dtype=np.int64)
+    d_in = np.zeros(num_v, dtype=np.int64)
+    for n in range(len(e)):
+        d_out[e[n].src] += 1
+        d_in[e[n].dst] += 1
+
+    return d_out, d_in
+
+
 # @jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the
