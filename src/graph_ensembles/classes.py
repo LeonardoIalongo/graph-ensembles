@@ -12,6 +12,54 @@ import warnings
 
 
 class Graph():
+    """ Generator class for graphs. Returns correct object depending on inputs
+    passed.
+    """
+    def __new__(cls, v, e, **kwargs):
+        # Ensure passed arguments are accepted
+        allowed_arguments = ['v_id', 'src', 'dst', 'weight', 'edge_label']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+
+        if 'v_id' not in kwargs:
+            id_col = 'id'
+        else:
+            id_col = kwargs['v_id']
+
+        if 'src' not in kwargs:
+            src_col = 'src'
+        else:
+            src_col = kwargs['src']
+
+        if 'dst' not in kwargs:
+            dst_col = 'dst'
+        else:
+            dst_col = kwargs['dst']
+
+        if 'weight' in kwargs:
+            if 'edge_label' in kwargs:
+                pass
+            else:
+                pass
+        else:
+            if 'edge_label' in kwargs:
+                pass
+            else:
+                return DirectedGraph(v,
+                                     e,
+                                     v_id=id_col,
+                                     src=src_col,
+                                     dst=dst_col)
+
+
+class sGraph():
+    """ General class for graphs.
+    """
+    pass
+
+
+class DirectedGraph(sGraph):
     """ General class for directed graphs.
 
     Attributes
@@ -32,7 +80,7 @@ class Graph():
         type of the id (e.g. np.uint16)
     """
 
-    def __init__(self, v, e, id_col='id', src_col='src', dst_col='dst'):
+    def __init__(self, v, e, v_id='id', src='src', dst='dst'):
         """Return a Graph object given vertices and edges.
 
         Parameters
@@ -64,18 +112,18 @@ class Graph():
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict, self.id_list = hp._generate_id_dict(v, id_col)
+        self.id_dict, self.id_list = hp._generate_id_dict(v, v_id)
 
         # Check that no node id in e is not present in v
-        assert e[src_col].isin(self.id_dict).all(), ('Some source nodes are'
-                                                     ' not in v.')
-        assert e[dst_col].isin(self.id_dict).all(), ('Some destination nodes'
-                                                     ' are not in v.')
+        assert e[src].isin(self.id_dict).all(), ('Some source nodes are'
+                                                 ' not in v.')
+        assert e[dst].isin(self.id_dict).all(), ('Some destination nodes'
+                                                 ' are not in v.')
 
         # Generate optimized edge list and sort it
         self.e = np.sort(np.rec.array(
-            (e[src_col].replace(self.id_dict, inplace=False).to_numpy(),
-             e[dst_col].replace(self.id_dict, inplace=False).to_numpy()),
+            (e[src].replace(self.id_dict, inplace=False).to_numpy(),
+             e[dst].replace(self.id_dict, inplace=False).to_numpy()),
             dtype=[('src', self.id_dtype), ('dst', self.id_dtype)]
             ))
 
@@ -119,9 +167,7 @@ class Graph():
 
 class GraphModel():
     """ General class for graph models. """
-
-    def __init__(self, *args):
-        pass
+    pass
 
 
 class FitnessModel(GraphModel):

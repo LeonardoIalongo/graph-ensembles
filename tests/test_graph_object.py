@@ -19,10 +19,10 @@ class TestMinimalGraph():
                               dtype=[('src', np.uint8), ('dst', np.uint8)]))
 
     def test_instanciation_names(self):
-        g = ge.Graph(self.v, self.e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
 
-        assert isinstance(g, ge.Graph)
+        assert isinstance(g, ge.sGraph)
         assert (g.e == self._e).all(), g.e == self._e
 
     def test_duplicated_nodes(self):
@@ -30,8 +30,7 @@ class TestMinimalGraph():
                          columns=['name'])
 
         with pytest.raises(Exception) as e_info:
-            ge.Graph(v, self.e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+            ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
             msg = 'There is at least one repeated id in the vertex dataframe.'
             assert e_info.value.args[0] == msg
@@ -45,8 +44,7 @@ class TestMinimalGraph():
                          columns=['creditor', 'debtor'])
 
         with pytest.raises(Exception) as e_info:
-            ge.Graph(self.v, e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+            ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
             msg = 'There are repeated edges'
             assert e_info.value.args[0] == msg
@@ -60,8 +58,7 @@ class TestMinimalGraph():
                          columns=['creditor', 'debtor'])
 
         with pytest.raises(Exception) as e_info:
-            ge.Graph(self.v, e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+            ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
             msg = 'Some source nodes are not in v.'
             assert e_info.value.args[0] == msg
@@ -74,8 +71,7 @@ class TestMinimalGraph():
                          columns=['creditor', 'debtor'])
 
         with pytest.raises(Exception) as e_info:
-            ge.Graph(self.v, e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+            ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
             msg = 'Some destination nodes are not in v.'
             assert e_info.value.args[0] == msg
@@ -86,8 +82,7 @@ class TestMinimalGraph():
         d = np.array([2, 2, 2, 0, 0])
 
         with pytest.warns(UserWarning):
-            g = ge.Graph(v, self.e, id_col='name', src_col='creditor',
-                         dst_col='debtor')
+            g = ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
             assert np.all(g.v.degree == d), g.v.degree
 
@@ -96,15 +91,13 @@ class TestMinimalGraph():
                          columns=['name'])
 
         with pytest.warns(UserWarning, match='RAB vertex has no edges.'):
-            ge.Graph(v, self.e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+            ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
                          columns=['name'])
 
         with pytest.warns(UserWarning, match=r' vertices have no edges.'):
-            ge.Graph(v, self.e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+            ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
 
 # class TestSimpleGraph():
