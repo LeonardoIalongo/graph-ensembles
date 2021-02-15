@@ -248,6 +248,12 @@ class WeightedGraph(DirectedGraph):
 
     Methods
     -------
+    strength:
+        compute the undirected strength sequence
+    out_strength:
+        compute the out strength sequence
+    in_strength:
+        compute the in strength sequence
     """
     def __init__(self, v, e, v_id, src, dst, weight):
         """Return a sGraph object given vertices and edges.
@@ -284,6 +290,58 @@ class WeightedGraph(DirectedGraph):
         # Ensure all weights are positive
         msg = 'Zero or negative edge weights are not supported.'
         assert np.all(self.e.weight > 0), msg
+
+    def strength(self, get=False):
+        """ Compute the undirected strength sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'strength' in self.v.dtype.names:
+            strength = self.v.strength
+        else:
+            strength = mt._compute_strength(self.e, self.num_vertices)
+            self.v = append_fields(self.v, 'strength', strength,
+                                   dtypes=np.float64)
+
+        if get:
+            return strength
+
+    def out_strength(self, get=False):
+        """ Compute the out strength sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'out_strength' in self.v.dtype.names:
+            s_out = self.v.out_strength
+        else:
+            s_out, s_in = mt._compute_in_out_strengths(self.e,
+                                                       self.num_vertices)
+            self.v = append_fields(self.v,
+                                   ['out_strength', 'in_strength'],
+                                   (s_out, s_in),
+                                   dtypes=[np.float64, np.float64])
+
+        if get:
+            return s_out
+
+    def in_strength(self, get=False):
+        """ Compute the out strength sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'in_strength' in self.v.dtype.names:
+            s_in = self.v.in_strength
+        else:
+            s_out, s_in = mt._compute_in_out_strengths(self.e,
+                                                       self.num_vertices)
+
+            self.v = append_fields(self.v,
+                                   ['out_strength', 'in_strength'],
+                                   (s_out, s_in),
+                                   dtypes=[np.float64, np.float64])
+
+        if get:
+            return s_in
 
 
 class EdgelabelGraph(DirectedGraph):

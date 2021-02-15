@@ -143,6 +143,34 @@ class TestWeightedGraph():
         assert isinstance(g, ge.WeightedGraph)
         assert np.all(g.e == self._e), g.e
 
+    def test_strength(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+        s = np.array([1e6, 1e6 + 1.7e5 + 1e4, 1.7e5 + 1e4])
+        s_test = g.strength(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.v.strength == s), g.v.strength
+
+    def test_out_strength(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+        s_out = np.array([1e6, 1e4, 1.7e5])
+        s_test = g.out_strength(get=True)
+
+        assert np.all(s_test == s_out), s_test
+        assert np.all(g.v.out_strength == s_out), g.v.out_strength
+
+    def test_in_strength(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+        s_in = np.array([0, 1e6 + 1.7e5, 1e4])
+        s_test = g.in_strength(get=True)
+
+        assert np.all(s_test == s_in), s_test
+        assert np.all(g.v.in_strength == s_in), g.v.in_strength
+
+
 # class TestSimpleGraph():
 #     v = pd.DataFrame([['ING', 'NL', 1e12],
 #                      ['ABN', 'NL', 5e11],

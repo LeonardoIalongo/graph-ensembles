@@ -34,6 +34,28 @@ def _compute_in_out_degrees(e, num_v):
     return d_out, d_in
 
 
+@jit(nopython=True)
+def _compute_strength(e, num_v):
+    s = np.zeros(num_v, dtype=np.float64)
+
+    for n in range(len(e)):
+        s[e[n].src] += e[n].weight
+        s[e[n].dst] += e[n].weight
+
+    return s
+
+
+@jit(nopython=True)
+def _compute_in_out_strengths(e, num_v):
+    s_out = np.zeros(num_v, dtype=np.float64)
+    s_in = np.zeros(num_v, dtype=np.float64)
+    for n in range(len(e)):
+        s_out[e[n].src] += e[n].weight
+        s_in[e[n].dst] += e[n].weight
+
+    return s_out, s_in
+
+
 # @jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the
