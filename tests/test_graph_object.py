@@ -15,7 +15,7 @@ class TestDirectedGraph():
                      ['BNP', 'ING']],
                      columns=['creditor', 'debtor'])
 
-    def test_instanciation_names(self):
+    def test_init(self):
         g = ge.Graph(self.v, self.e, v_id='name',
                      src='creditor', dst='debtor')
         test_e = np.sort(np.rec.array([(0, 1), (2, 1), (1, 2), (2, 0)],
@@ -29,9 +29,7 @@ class TestDirectedGraph():
         g = ge.Graph(self.v, self.e, v_id='name',
                      src='creditor', dst='debtor')
         test_dict = {'ING': 0, 'ABN': 1, 'BNP': 2}
-        test_list = ['ING', 'ABN', 'BNP']
         assert test_dict == g.id_dict
-        assert test_list == g.id_list
 
     def test_duplicated_vertices(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['ABN']],
@@ -125,6 +123,32 @@ class TestDirectedGraph():
         assert np.all(d_test == d_in), d_test
         assert np.all(g.v.in_degree == d_in), g.v.in_degree
 
+    def test_multi_id_init(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['BNP', 'IT']],
+                         columns=['name', 'country'])
+
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL'],
+                         ['BNP', 'FR', 'ABN', 'NL'],
+                         ['ABN', 'NL', 'BNP', 'IT'],
+                         ['BNP', 'IT', 'ING', 'NL']],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country'])
+
+        g = ge.Graph(v, e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'])
+
+        test_e = np.sort(np.rec.array([(0, 1), (2, 1), (1, 3), (3, 0)],
+                         dtype=[('src', np.uint8), ('dst', np.uint8)]))
+        test_dict = {('ING', 'NL'): 0, ('ABN', 'NL'): 1,
+                     ('BNP', 'FR'): 2, ('BNP', 'IT'): 3}
+
+        assert np.all(g.e == test_e), g.e
+        assert test_dict == g.id_dict
+
 
 class TestWeightedGraph():
     v = pd.DataFrame([['ING', 'NL', 1e12],
@@ -204,32 +228,28 @@ class TestEdgelabelGraph():
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.EdgelabelGraph)
 
-    def test_init_edges(self):
-        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
-                     dst='debtor', edge_label='type')
-        test_e = np.sort(np.rec.array([(0, 0, 1),
-                                       (1, 2, 1),
-                                       (0, 2, 1),
-                                       (0, 1, 2),
-                                       (1, 1, 0)],
-                         dtype=[('label', np.uint8),
-                                ('src', np.uint8),
-                                ('dst', np.uint8)]))
+    # def test_init_edges(self):
+    #     g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+    #                  dst='debtor', edge_label='type')
+    #     test_e = np.sort(np.rec.array([(0, 0, 1),
+    #                                    (1, 2, 1),
+    #                                    (0, 2, 1),
+    #                                    (0, 1, 2),
+    #                                    (1, 1, 0)],
+    #                      dtype=[('label', np.uint8),
+    #                             ('src', np.uint8),
+    #                             ('dst', np.uint8)]))
 
-        assert np.all(g.e == test_e), g.e
+    #     assert np.all(g.e == test_e), g.e
 
     def test_init_id(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
                      dst='debtor', edge_label='type')
         test_dict = {'ING': 0, 'ABN': 1, 'BNP': 2}
-        test_list = ['ING', 'ABN', 'BNP']
         assert test_dict == g.id_dict
-        assert test_list == g.id_list
 
     def test_init_label(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
                      dst='debtor', edge_label='type')
         test_dict = {'interbank': 0, 'external': 1}
-        test_list = ['interbank', 'external']
         assert test_dict == g.label_dict
-        assert test_list == g.label_list

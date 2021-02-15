@@ -19,7 +19,6 @@ def _check_unique_edges(e):
 def _generate_id_dict(v, id_col):
     """ Return id dictionary. """
     id_dict = {}
-    id_list = []
     rep_msg = 'There is at least one repeated id in the vertex dataframe.'
 
     if isinstance(id_col, list):
@@ -31,7 +30,6 @@ def _generate_id_dict(v, id_col):
                     raise Exception(rep_msg)
                 else:
                     id_dict[x] = i
-                    id_list.append(x)
                     i += 1
 
         elif len(id_col) == 1:
@@ -42,7 +40,6 @@ def _generate_id_dict(v, id_col):
                     raise Exception(rep_msg)
                 else:
                     id_dict[x] = i
-                    id_list.append(x)
                     i += 1
 
         else:
@@ -57,19 +54,17 @@ def _generate_id_dict(v, id_col):
                 raise Exception(rep_msg)
             else:
                 id_dict[x] = i
-                id_list.append(x)
                 i += 1
 
     else:
         raise ValueError('id_col must be string or list of strings.')
 
-    return id_dict, id_list
+    return id_dict
 
 
 def _generate_label_dict(e, label):
     """ Return id dictionary. """
     label_dict = {}
-    label_list = []
 
     if isinstance(label, list):
         if len(label) > 1:
@@ -80,7 +75,6 @@ def _generate_label_dict(e, label):
                     pass
                 else:
                     label_dict[x] = i
-                    label_list.append(x)
                     i += 1
 
         elif len(label) == 1:
@@ -91,7 +85,6 @@ def _generate_label_dict(e, label):
                     pass
                 else:
                     label_dict[x] = i
-                    label_list.append(x)
                     i += 1
 
         else:
@@ -106,13 +99,12 @@ def _generate_label_dict(e, label):
                 pass
             else:
                 label_dict[x] = i
-                label_list.append(x)
                 i += 1
 
     else:
         raise ValueError('edge_label must be string or list of strings.')
 
-    return label_dict, label_list
+    return label_dict
 
 
 @jit(nopython=True)

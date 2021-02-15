@@ -94,8 +94,6 @@ class DirectedGraph(sGraph):
         array containing the edge list in a condensed format
     id_dict: dict
         dictionary to convert original identifiers to positions in v
-    id_list: list
-        list containing the original identifiers in order
     id_type: numpy.dtype
         type of the id (e.g. np.uint16)
     sort_ind: numpy.array
@@ -122,9 +120,9 @@ class DirectedGraph(sGraph):
             list of edges and their properties
         v_id: str or list of str
             specifies which column uniquely identifies a vertex
-        src: str (list of str not yet supported)
+        src: str or list of str
             identifier column for the source vertex
-        dst: str (list of str not yet supported)
+        dst: str or list of str
             identifier column for the destination vertex
 
         Returns
@@ -138,31 +136,57 @@ class DirectedGraph(sGraph):
 
         # Determine size of indices
         self.num_vertices = len(v.index)
+        self.num_edges = len(e.index)
         num_bytes = mt._get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict, self.id_list = mt._generate_id_dict(v, v_id)
+        self.id_dict = mt._generate_id_dict(v, v_id)
 
         # Check that no vertex id in e is not present in v
-        assert e[src].isin(self.id_dict).all(), ('Some source vertices are'
-                                                 ' not in v.')
-        assert e[dst].isin(self.id_dict).all(), ('Some destination vertices'
-                                                 ' are not in v.')
+        # and generate optimized edge list
+        smsg = 'Some source vertices are not in v.'
+        dmsg = 'Some destination vertices are not in v.'
+        if isinstance(src, list) and isinstance(dst, list):
+            n = len(src)
+            m = len(dst)
+            src_array = np.empty(self.num_edges, dtype=self.id_dtype)
+            dst_array = np.empty(self.num_edges, dtype=self.id_dtype)
+            i = 0
+            for row in e[src + dst].itertuples(index=False):
+                row_src = row[0:n]
+                row_dst = row[n:n+m]
+                if row_src not in self.id_dict:
+                    assert False, smsg
+                if row_dst not in self.id_dict:
+                    assert False, dmsg
+                src_array[i] = self.id_dict[row_src]
+                dst_array[i] = self.id_dict[row_dst]
+                i += 1
 
-        # Generate optimized edge list and sort it
-        self.e = np.rec.array(
-            (e[src].replace(self.id_dict, inplace=False).to_numpy(),
-             e[dst].replace(self.id_dict, inplace=False).to_numpy()),
-            dtype=[('src', self.id_dtype), ('dst', self.id_dtype)]
-            )
+            self.e = np.rec.array(
+                (src_array, dst_array),
+                dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
+
+        elif isinstance(src, str) and isinstance(dst, str):
+            assert e[src].isin(self.id_dict).all(), smsg
+            assert e[dst].isin(self.id_dict).all(), dmsg
+
+            self.e = np.rec.array(
+                (e[src].replace(self.id_dict, inplace=False).to_numpy(),
+                 e[dst].replace(self.id_dict, inplace=False).to_numpy()),
+                dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
+
+        else:
+            raise ValueError('src and dst can be either both lists or str.')
+
+        # Sort e
         self.sort_ind = np.argsort(self.e)
         self.e = self.e[self.sort_ind]
 
         # Check that there are no repeated pair in the edge list
         mt._check_unique_edges(self.e)
-        self.num_edges = len(self.e)
 
         # Compute degree (undirected)
         d = mt._compute_degree(self.e, self.num_vertices)
@@ -172,13 +196,13 @@ class DirectedGraph(sGraph):
         # Warn if vertices have no edges
         zero_idx = np.nonzero(d == 0)[0]
         if len(zero_idx) == 1:
-            warnings.warn(str(self.id_list[zero_idx[0]]) +
+            warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
                           " vertex has no edges.", UserWarning)
 
         if len(zero_idx) > 1:
             names = []
             for idx in zero_idx:
-                names.append(self.id_list[idx])
+                names.append(list(self.id_dict.keys())[idx])
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
 
@@ -363,8 +387,6 @@ class EdgelabelGraph(sGraph):
         array containing the edge list in a condensed format
     id_dict: dict
         dictionary to convert original identifiers to positions in v
-    id_list: list
-        list containing the original identifiers in order
     id_type: numpy.dtype
         type of the id (e.g. np.uint16)
     sort_ind: numpy.array
@@ -412,7 +434,7 @@ class EdgelabelGraph(sGraph):
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict, self.id_list = mt._generate_id_dict(v, v_id)
+        self.id_dict = mt._generate_id_dict(v, v_id)
 
         # Check that no vertex id in e is not present in v
         assert e[src].isin(self.id_dict).all(), ('Some source vertices are'
@@ -421,8 +443,7 @@ class EdgelabelGraph(sGraph):
                                                  ' are not in v.')
 
         # Get dictionary of label to numeric internal label
-        self.label_dict, self.label_list = mt._generate_label_dict(e,
-                                                                   edge_label)
+        self.label_dict = mt._generate_label_dict(e, edge_label)
 
         # # Generate optimized edge list and sort it
         # self.e = np.rec.array(
