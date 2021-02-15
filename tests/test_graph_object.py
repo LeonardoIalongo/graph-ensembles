@@ -23,7 +23,8 @@ class TestDirectedGraph():
                      src='creditor', dst='debtor')
 
         assert isinstance(g, ge.sGraph)
-        assert (g.e == self._e).all(), g.e == self._e
+        assert isinstance(g, ge.DirectedGraph)
+        assert np.all(g.e == self._e), g.e
 
     def test_duplicated_vertices(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['ABN']],
@@ -117,6 +118,30 @@ class TestDirectedGraph():
         assert np.all(d_test == d_in), d_test
         assert np.all(g.v.in_degree == d_in), g.v.in_degree
 
+
+class TestWeightedGraph():
+    v = pd.DataFrame([['ING', 'NL', 1e12],
+                     ['ABN', 'NL', 5e11],
+                     ['BNP', 'FR', 13e12]],
+                     columns=['name', 'country', 'assets'])
+
+    e = pd.DataFrame([['ING', 'ABN', 1e6],
+                     ['BNP', 'ABN', 1.7e5],
+                     ['ABN', 'BNP', 1e4]],
+                     columns=['creditor', 'debtor', 'value'])
+
+    _e = np.sort(np.rec.array([(0, 1, 1e6), (2, 1, 1.7e5), (1, 2, 1e4)],
+                              dtype=[('src', np.uint8),
+                                     ('dst', np.uint8),
+                                     ('weight', np.float64)]))
+
+    def test_init(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.WeightedGraph)
+        assert np.all(g.e == self._e), g.e
 
 # class TestSimpleGraph():
 #     v = pd.DataFrame([['ING', 'NL', 1e12],

@@ -3,7 +3,7 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
-from numpy.lib.recfunctions import append_fields
+from numpy.lib.recfunctions import rec_append_fields as append_fields
 import pandas as pd
 from scipy.optimize import least_squares
 from . import helper as hp
@@ -99,10 +99,17 @@ class DirectedGraph(sGraph):
         list containing the original identifiers in order
     id_type: numpy.dtype
         type of the id (e.g. np.uint16)
+    sort_ind: numpy.array
+        the index used for sorting e
 
     Methods
     -------
-
+    degree:
+        compute the undirected degree sequence
+    out_degree:
+        compute the out degree sequence
+    in_degree:
+        compute the in degree sequence
     """
 
     def __init__(self, v, e, v_id, src, dst):
@@ -114,16 +121,16 @@ class DirectedGraph(sGraph):
             list of vertices and their properties
         e: pandas.dataframe
             list of edges and their properties
-        id_col: str or list of str
+        v_id: str or list of str
             specifies which column uniquely identifies a vertex
-        src_col: str (list of str not yet supported)
+        src: str (list of str not yet supported)
             identifier column for the source vertex
-        dst_col: str (list of str not yet supported)
+        dst: str (list of str not yet supported)
             identifier column for the destination vertex
 
         Returns
         -------
-        Graph
+        sGraph
             the graph object
         """
 
@@ -146,11 +153,13 @@ class DirectedGraph(sGraph):
                                                  ' are not in v.')
 
         # Generate optimized edge list and sort it
-        self.e = np.sort(np.rec.array(
+        self.e = np.rec.array(
             (e[src].replace(self.id_dict, inplace=False).to_numpy(),
              e[dst].replace(self.id_dict, inplace=False).to_numpy()),
             dtype=[('src', self.id_dtype), ('dst', self.id_dtype)]
-            ))
+            )
+        self.sort_ind = np.argsort(self.e)
+        self.e = self.e[self.sort_ind]
 
         # Check that there are no repeated pair in the edge list
         hp._check_unique_edges(self.e)
@@ -185,7 +194,7 @@ class DirectedGraph(sGraph):
             degree = mt._compute_degree(self.e, self.num_vertices)
             dtype = 'u' + str(hp._get_num_bytes(np.max(degree)))
             self.v = append_fields(self.v, 'degree', degree.astype(dtype),
-                                   dtypes=dtype, asrecarray=True)
+                                   dtypes=dtype)
 
         if get:
             return degree
@@ -205,8 +214,7 @@ class DirectedGraph(sGraph):
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
                                    (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype],
-                                   asrecarray=True)
+                                   dtypes=[dtype, dtype])
 
         if get:
             return d_out
@@ -226,8 +234,7 @@ class DirectedGraph(sGraph):
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
                                    (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype],
-                                   asrecarray=True)
+                                   dtypes=[dtype, dtype])
 
         if get:
             return d_in
@@ -251,19 +258,32 @@ class WeightedGraph(DirectedGraph):
             list of vertices and their properties
         e: pandas.dataframe
             list of edges and their properties
-        id_col: str or list of str
+        v_id: str or list of str
             specifies which column uniquely identifies a vertex
-        src_col: str (list of str not yet supported)
+        src: str (list of str not yet supported)
             identifier column for the source vertex
-        dst_col: str (list of str not yet supported)
+        dst: str (list of str not yet supported)
             identifier column for the destination vertex
+        weight:
+            identifier column for the weight of the edges
 
         Returns
         -------
-        Graph
+        sGraph
             the graph object
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+
+        # Convert weights to float64 for computations
+        self.e = append_fields(
+            self.e,
+            'weight',
+            e[weight].to_numpy().astype(np.float64)[self.sort_ind],
+            dtypes=np.float64)
+
+        # Ensure all weights are positive
+        msg = 'Zero or negative edge weights are not supported.'
+        assert np.all(self.e.weight > 0), msg
 
 
 class EdgelabelGraph(DirectedGraph):
