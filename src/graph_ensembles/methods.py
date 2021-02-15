@@ -24,7 +24,7 @@ def _compute_degree(e, num_v):
 
 
 @jit(nopython=True)
-def _compute_num_edges(e, num_v):
+def _compute_num_edges_per_vertex(e, num_v):
     d = np.zeros(num_v, dtype=np.int64)
     for i in range(len(e)):
         d[e[i].src] += 1

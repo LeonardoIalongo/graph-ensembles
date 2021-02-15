@@ -56,7 +56,7 @@ class Graph():
 class sGraph():
     """ General class for graphs.
     """
-    def num_(self):
+    def num_edges_per_vertex(self):
         """ Compute the number of edges per vertex.
 
             Warning: this is not the degree sequence.
@@ -64,7 +64,7 @@ class sGraph():
             of the direction, weight, or any edge label, such that having
             a reciprocated edge counts two instead of one.
         """
-        return mt._compute_num_edges(self.e, self.num_vertices)
+        return mt._compute_num_edges_per_vertex(self.e, self.num_vertices)
 
 
 class DirectedGraph(sGraph):
