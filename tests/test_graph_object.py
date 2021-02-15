@@ -3,7 +3,6 @@ import graph_ensembles as ge
 import pandas as pd
 import numpy as np
 import pytest
-import warnings
 
 
 class TestMinimalGraph():

@@ -11,7 +11,23 @@ from . import iterative_models as im
 
 
 class Graph():
-    """ General class for directed graphs. """
+    """ General class for directed graphs.
+
+    Attributes
+    ----------
+    num_vertices: int
+        number of nodes in the graph
+    num_edges: int
+        number of edges in the graph
+    v: numpy.rec.array
+        array containing the computed properties of the vertices
+    e: numpy.rec.array
+        array containing the edge list in a condensed format
+    id_dict: dict
+        dictionary to convert original identifiers to positions in v
+    id_type: numpy.dtype
+        type of the id (e.g. np.uint16)
+    """
 
     def __init__(self, v, e, id_col='id', src_col='src', dst_col='dst'):
         """Return a Graph object given vertices and edges.
@@ -22,6 +38,12 @@ class Graph():
             list of vertices and their properties
         e: pandas.dataframe
             list of edges and their properties
+        id_col: str or list of str
+            specifies which column uniquely identifies a node
+        src_col: str (list of str not yet supported)
+            identifier column for the source node
+        dst_col: str (list of str not yet supported)
+            identifier column for the destination node
 
         Returns
         -------
