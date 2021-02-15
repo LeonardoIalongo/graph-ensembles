@@ -15,16 +15,23 @@ class TestDirectedGraph():
                      ['BNP', 'ING']],
                      columns=['creditor', 'debtor'])
 
-    _e = np.sort(np.rec.array([(0, 1), (2, 1), (1, 2), (2, 0)],
-                              dtype=[('src', np.uint8), ('dst', np.uint8)]))
-
     def test_instanciation_names(self):
         g = ge.Graph(self.v, self.e, v_id='name',
                      src='creditor', dst='debtor')
+        test_e = np.sort(np.rec.array([(0, 1), (2, 1), (1, 2), (2, 0)],
+                         dtype=[('src', np.uint8), ('dst', np.uint8)]))
 
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.DirectedGraph)
-        assert np.all(g.e == self._e), g.e
+        assert np.all(g.e == test_e), g.e
+
+    def test_init_id(self):
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
+        test_dict = {'ING': 0, 'ABN': 1, 'BNP': 2}
+        test_list = ['ING', 'ABN', 'BNP']
+        assert test_dict == g.id_dict
+        assert test_list == g.id_list
 
     def test_duplicated_vertices(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['ABN']],
@@ -143,6 +150,12 @@ class TestWeightedGraph():
         assert isinstance(g, ge.WeightedGraph)
         assert np.all(g.e == self._e), g.e
 
+    def test_total_weight(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+
+        assert g.total_weight == 1e6 + 1.7e5 + 1e4
+
     def test_strength(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
                      dst='debtor', weight='value')
@@ -171,28 +184,52 @@ class TestWeightedGraph():
         assert np.all(g.v.in_strength == s_in), g.v.in_strength
 
 
-# class TestSimpleGraph():
-#     v = pd.DataFrame([['ING', 'NL', 1e12],
-#                      ['ABN', 'NL', 5e11],
-#                      ['BNP', 'FR', 13e12]],
-#                      columns=['name', 'country', 'assets'])
+class TestEdgelabelGraph():
+    v = pd.DataFrame([['ING', 'NL', 1e12],
+                     ['ABN', 'NL', 5e11],
+                     ['BNP', 'FR', 13e12]],
+                     columns=['name', 'country', 'assets'])
 
-#     e = pd.DataFrame([['ING', 'ABN', 1e6, 'interbank'],
-#                      ['BNP', 'ABN', 2.3e7, 'external'],
-#                      ['BNP', 'ABN', 1.7e5, 'interbank'],
-#                      ['ABN', 'BNP', 1e4, 'interbank'],
-#                      ['ABN', 'ING', 4e5, 'external']],
-#                      columns=['creditor', 'debtor', 'value', 'type'])
+    e = pd.DataFrame([['ING', 'ABN', 1e6, 'interbank'],
+                     ['BNP', 'ABN', 2.3e7, 'external'],
+                     ['BNP', 'ABN', 1.7e5, 'interbank'],
+                     ['ABN', 'BNP', 1e4, 'interbank'],
+                     ['ABN', 'ING', 4e5, 'external']],
+                     columns=['creditor', 'debtor', 'value', 'type'])
 
-#     def test_wrong_input(self):
-#         with pytest.raises(Exception) as e_info:
-#             ge.Graph([[1], [2], [3]], [[1, 2], [3, 1]])
+    def test_init_class(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', edge_label='type')
 
-#         msg = 'Only dataframe input supported.'
-#         assert e_info.value.args[0] == msg
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.EdgelabelGraph)
 
-#     def test_instanciation_names(self):
-#         g = ge.Graph(self.v, self.e, id_col='name', src_col='creditor',
-#                      dst_col='debtor')
+    def test_init_edges(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', edge_label='type')
+        test_e = np.sort(np.rec.array([(0, 0, 1),
+                                       (1, 2, 1),
+                                       (0, 2, 1),
+                                       (0, 1, 2),
+                                       (1, 1, 0)],
+                         dtype=[('label', np.uint8),
+                                ('src', np.uint8),
+                                ('dst', np.uint8)]))
 
-#         assert isinstance(g, ge.Graph)
+        assert np.all(g.e == test_e), g.e
+
+    def test_init_id(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', edge_label='type')
+        test_dict = {'ING': 0, 'ABN': 1, 'BNP': 2}
+        test_list = ['ING', 'ABN', 'BNP']
+        assert test_dict == g.id_dict
+        assert test_list == g.id_list
+
+    def test_init_label(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', edge_label='type')
+        test_dict = {'interbank': 0, 'external': 1}
+        test_list = ['interbank', 'external']
+        assert test_dict == g.label_dict
+        assert test_list == g.label_list

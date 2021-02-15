@@ -3,6 +3,118 @@ from numba import jit
 from numba import prange
 
 
+def _get_num_bytes(num_items):
+    """ Determine the number of bytes needed for storing ids for num_items."""
+    return max(2**np.ceil(np.log2(np.log2(num_items + 1)/8)), 1)
+
+
+@jit(nopython=True)
+def _check_unique_edges(e):
+    """ Check that the edges are not repeated in the sorted edge list."""
+    for i in np.arange(len(e)-1):
+        if (e[i].src == e[i+1].src) and (e[i].dst == e[i+1].dst):
+            assert False, 'There are repeated edges'
+
+
+def _generate_id_dict(v, id_col):
+    """ Return id dictionary. """
+    id_dict = {}
+    id_list = []
+    rep_msg = 'There is at least one repeated id in the vertex dataframe.'
+
+    if isinstance(id_col, list):
+        if len(id_col) > 1:
+            # Id is a tuple
+            i = 0
+            for x in v[id_col].itertuples(index=False):
+                if x in id_dict:
+                    raise Exception(rep_msg)
+                else:
+                    id_dict[x] = i
+                    id_list.append(x)
+                    i += 1
+
+        elif len(id_col) == 1:
+            # Extract series
+            i = 0
+            for x in v[id_col[0]]:
+                if x in id_dict:
+                    raise Exception(rep_msg)
+                else:
+                    id_dict[x] = i
+                    id_list.append(x)
+                    i += 1
+
+        else:
+            # No column passed
+            raise ValueError('At least one id column must be given.')
+
+    elif isinstance(id_col, str):
+        # Extract series
+        i = 0
+        for x in v[id_col]:
+            if x in id_dict:
+                raise Exception(rep_msg)
+            else:
+                id_dict[x] = i
+                id_list.append(x)
+                i += 1
+
+    else:
+        raise ValueError('id_col must be string or list of strings.')
+
+    return id_dict, id_list
+
+
+def _generate_label_dict(e, label):
+    """ Return id dictionary. """
+    label_dict = {}
+    label_list = []
+
+    if isinstance(label, list):
+        if len(label) > 1:
+            # Id is a tuple
+            i = 0
+            for x in e[label].itertuples(index=False):
+                if x in label_dict:
+                    pass
+                else:
+                    label_dict[x] = i
+                    label_list.append(x)
+                    i += 1
+
+        elif len(label) == 1:
+            # Extract series
+            i = 0
+            for x in e[label[0]]:
+                if x in label_dict:
+                    pass
+                else:
+                    label_dict[x] = i
+                    label_list.append(x)
+                    i += 1
+
+        else:
+            # No column passed
+            raise ValueError('At least one label column must be given.')
+
+    elif isinstance(label, str):
+        # Extract series
+        i = 0
+        for x in e[label]:
+            if x in label_dict:
+                pass
+            else:
+                label_dict[x] = i
+                label_list.append(x)
+                i += 1
+
+    else:
+        raise ValueError('edge_label must be string or list of strings.')
+
+    return label_dict, label_list
+
+
 @jit(nopython=True)
 def _compute_degree(e, num_v):
     d = np.zeros(num_v, dtype=np.int64)
