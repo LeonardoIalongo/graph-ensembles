@@ -85,33 +85,26 @@ class TestMinimalGraph():
                          columns=['name'])
         d = np.array([2, 3, 3, 0, 0])
 
-        g = ge.Graph(v, self.e, id_col='name', src_col='creditor',
-                     dst_col='debtor')
+        with pytest.warns(UserWarning):
+            g = ge.Graph(v, self.e, id_col='name', src_col='creditor',
+                         dst_col='debtor')
 
-        assert np.all(g.v.degree == d), g.v.degree
+            assert np.all(g.v.degree == d), g.v.degree
 
     def test_nodes_with_no_edge(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
                          columns=['name'])
 
-        with pytest.warns(UserWarning)as w_info:
+        with pytest.warns(UserWarning, match='RAB vertex has no edges.'):
             ge.Graph(v, self.e, id_col='name', src_col='creditor',
                      dst_col='debtor')
-
-            msg = 'RAB vertex has no edges.'
-            assert len(w_info) == 1
-            assert w_info.message.args[0] == msg
 
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
                          columns=['name'])
 
-        with pytest.warns(UserWarning)as w_info:
+        with pytest.warns(UserWarning, match=r' vertices have no edges.'):
             ge.Graph(v, self.e, id_col='name', src_col='creditor',
                      dst_col='debtor')
-
-            msg = '[RAB, UBS] vertices have no edges.'
-            assert len(w_info) == 1
-            assert w_info.message.args[0] == msg
 
 
 # class TestSimpleGraph():

@@ -8,6 +8,7 @@ from scipy.optimize import least_squares
 from . import helper as hp
 from . import methods as mt
 from . import iterative_models as im
+import warnings
 
 
 class Graph():
@@ -82,10 +83,23 @@ class Graph():
         hp._check_unique_edges(self.e)
         self.num_edges = len(self.e)
 
-        # Compute degree (undirected) to ensure all nodes have one link
+        # Compute degree (undirected)
         d = self.degree()
         dtype = 'u' + str(hp._get_num_bytes(np.max(d)))
         self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
+
+        # Warn if nodes have no links
+        zero_idx = np.nonzero(d == 0)[0]
+        if len(zero_idx) == 1:
+            warnings.warn(str(self.id_list[zero_idx[0]]) +
+                          " vertex has no edges.", UserWarning)
+
+        if len(zero_idx) > 1:
+            names = []
+            for idx in zero_idx:
+                names.append(self.id_list[idx])
+            warnings.warn(str(names) + " vertices have no edges.",
+                          UserWarning)
 
     def degree(self):
         """ Compute the undirected degree sequence.
