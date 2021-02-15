@@ -3,6 +3,16 @@ from numba import jit
 from numba import prange
 
 
+@jit(nopython=True)
+def _compute_degree(e, num_v):
+    d = np.zeros(num_v, dtype=np.int64)
+    for i in range(len(e)):
+        d[e[i].src] += 1
+        d[e[i].dst] += 1
+
+    return d
+
+
 # @jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the

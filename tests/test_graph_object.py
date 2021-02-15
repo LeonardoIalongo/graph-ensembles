@@ -81,17 +81,17 @@ class TestMinimalGraph():
             assert e_info.value.args[0] == msg
 
     def test_degree_init(self):
-        v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
+        v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
                          columns=['name'])
         d = np.array([2, 3, 3, 0, 0])
 
         g = ge.Graph(v, self.e, id_col='name', src_col='creditor',
                      dst_col='debtor')
 
-        assert (g.v.degree == d).all()
+        assert np.all(g.v.degree == d), g.v.degree
 
     def test_nodes_with_no_edge(self):
-        v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
+        v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
                          columns=['name'])
 
         with pytest.warns(UserWarning)as w_info:

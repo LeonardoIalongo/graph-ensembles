@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import least_squares
 from . import helper as hp
-from . import methods
+from . import methods as mt
 from . import iterative_models as im
 
 
@@ -81,7 +81,17 @@ class Graph():
         self.num_edges = len(self.e)
 
         # Compute degree (undirected) to ensure all nodes have one link
-        # self.v = np.rec.array([0], dtype=[('src', self.id_dtype)])
+        d = self.degree()
+        dtype = 'u' + str(hp._get_num_bytes(np.max(d)))
+        self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
+
+    def degree(self):
+        """ Compute the undirected degree sequence.
+
+            Note that this is the number of links per node irrespective
+            of the direction, weight, or any link label.
+        """
+        return mt._compute_degree(self.e, self.num_vertices)
 
 
 class GraphModel():
@@ -216,7 +226,7 @@ class StripeFitnessModel(GraphModel):
         if isinstance(self.num_links, np.ndarray):
             if method == "least-squares":
                 self.z = least_squares(
-                    lambda x: methods.expected_links_stripe_mult_z(
+                    lambda x: mt.expected_links_stripe_mult_z(
                         self.out_strength,
                         self.in_strength,
                         x) - self.num_links,
@@ -258,7 +268,7 @@ class StripeFitnessModel(GraphModel):
         else:
             if method == "least-squares":
                 self.z = least_squares(
-                    lambda x: methods.expected_links_stripe_one_z(
+                    lambda x: mt.expected_links_stripe_one_z(
                         self.out_strength,
                         self.in_strength,
                         x) - self.num_links,
@@ -308,13 +318,13 @@ class StripeFitnessModel(GraphModel):
             self.fit()
 
         if isinstance(self.num_links, np.ndarray):
-            return methods.prob_array_stripe_mult_z(self.out_strength,
+            return mt.prob_array_stripe_mult_z(self.out_strength,
                                                     self.in_strength,
                                                     self.z,
                                                     self.num_nodes,
                                                     self.num_labels)
         else:
-            return methods.prob_array_stripe_one_z(self.out_strength,
+            return mt.prob_array_stripe_one_z(self.out_strength,
                                                    self.in_strength,
                                                    self.z,
                                                    self.num_nodes,
@@ -331,12 +341,12 @@ class StripeFitnessModel(GraphModel):
             self.fit()
 
         if isinstance(self.num_links, np.ndarray):
-            return methods.prob_matrix_stripe_mult_z(self.out_strength,
+            return mt.prob_matrix_stripe_mult_z(self.out_strength,
                                                      self.in_strength,
                                                      self.z,
                                                      self.num_nodes)
         else:
-            return methods.prob_matrix_stripe_one_z(self.out_strength,
+            return mt.prob_matrix_stripe_one_z(self.out_strength,
                                                     self.in_strength,
                                                     self.z,
                                                     self.num_nodes)
