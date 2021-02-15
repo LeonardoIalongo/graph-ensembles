@@ -103,11 +103,18 @@ class Graph():
 
     def degree(self):
         """ Compute the undirected degree sequence.
-
-            Note that this is the number of links per node irrespective
-            of the direction, weight, or any link label.
         """
         return mt._compute_degree(self.e, self.num_vertices)
+
+    def num_links(self):
+        """ Compute the number of links per node.
+
+            Warning: this is not the degree sequence.
+            This is the number of links per node irrespective
+            of the direction, weight, or any link label, such that having
+            a reciprocated link counts two instead of one.
+        """
+        return mt._compute_num_links(self.e, self.num_vertices)
 
 
 class GraphModel():

@@ -83,7 +83,7 @@ class TestMinimalGraph():
     def test_degree_init(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
                          columns=['name'])
-        d = np.array([2, 3, 3, 0, 0])
+        d = np.array([2, 2, 2, 0, 0])
 
         with pytest.warns(UserWarning):
             g = ge.Graph(v, self.e, id_col='name', src_col='creditor',

@@ -6,6 +6,26 @@ from numba import prange
 @jit(nopython=True)
 def _compute_degree(e, num_v):
     d = np.zeros(num_v, dtype=np.int64)
+    s = set()
+    for n in range(len(e)):
+        i = e[n].src
+        j = e[n].dst
+        if i <= j:
+            pair = (i, j)
+        else:
+            pair = (j, i)
+
+        if pair not in s:
+            s.add(pair)
+            d[i] += 1
+            d[j] += 1
+
+    return d
+
+
+@jit(nopython=True)
+def _compute_num_links(e, num_v):
+    d = np.zeros(num_v, dtype=np.int64)
     for i in range(len(e)):
         d[e[i].src] += 1
         d[e[i].dst] += 1
