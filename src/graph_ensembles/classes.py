@@ -161,8 +161,10 @@ class sGraph():
             assert e[dst].isin(self.id_dict).all(), dmsg
 
             self.e = np.rec.array(
-                (e[src].replace(self.id_dict, inplace=False).to_numpy(),
-                 e[dst].replace(self.id_dict, inplace=False).to_numpy()),
+                (e[src].replace(self.id_dict,
+                                inplace=False).to_numpy(dtype=self.id_dtype),
+                 e[dst].replace(self.id_dict,
+                                inplace=False).to_numpy(dtype=self.id_dtype)),
                 dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
 
         else:
@@ -202,7 +204,7 @@ class DirectedGraph(sGraph):
     """
 
     def __init__(self, v, e, v_id, src, dst):
-        """Return a sGraph object given vertices and edges.
+        """Return a DirectedGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -308,7 +310,7 @@ class WeightedGraph(DirectedGraph):
         compute the in strength sequence
     """
     def __init__(self, v, e, v_id, src, dst, weight):
-        """Return a sGraph object given vertices and edges.
+        """Return a WeightedGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -404,32 +406,18 @@ class EdgelabelGraph(sGraph):
 
     Attributes
     ----------
-    num_vertices: int
-        number of vertices in the graph
-    num_edges: int
-        number of edges in the graph
-    v: numpy.rec.array
-        array containing the computed properties of the vertices
-    e: numpy.rec.array
-        array containing the edge list in a condensed format
-    id_dict: dict
-        dictionary to convert original identifiers to positions in v
-    id_type: numpy.dtype
-        type of the id (e.g. np.uint16)
+    num_labels: int
+        number of distinct edge labels
+    label_dtype: numpy.dtype
+        the data type of the label internal id
     sort_ind: numpy.array
         the index used for sorting e
 
     Methods
     -------
-    degree:
-        compute the undirected degree sequence
-    out_degree:
-        compute the out degree sequence
-    in_degree:
-        compute the in degree sequence
     """
     def __init__(self, v, e, v_id, src, dst, edge_label):
-        """Return a sGraph object given vertices and edges.
+        """Return a EdgelabelGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -451,39 +439,41 @@ class EdgelabelGraph(sGraph):
         sGraph
             the graph object
         """
-        assert isinstance(v, pd.DataFrame), 'Only dataframe input supported.'
-        assert isinstance(e, pd.DataFrame), 'Only dataframe input supported.'
-
-        # Determine size of indices
-        self.num_vertices = len(v.index)
-        num_bytes = mt._get_num_bytes(self.num_vertices)
-        self.id_dtype = np.dtype('u' + str(num_bytes))
-
-        # Get dictionary of id to internal id (_id)
-        # also checks that no id in v is repeated
-        self.id_dict = mt._generate_id_dict(v, v_id)
-
-        # Check that no vertex id in e is not present in v
-        assert e[src].isin(self.id_dict).all(), ('Some source vertices are'
-                                                 ' not in v.')
-        assert e[dst].isin(self.id_dict).all(), ('Some destination vertices'
-                                                 ' are not in v.')
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
 
         # Get dictionary of label to numeric internal label
         self.label_dict = mt._generate_label_dict(e, edge_label)
+        self.num_labels = len(self.label_dict)
+        num_bytes = mt._get_num_bytes(self.num_labels)
+        self.label_dtype = np.dtype('u' + str(num_bytes))
 
-        # # Generate optimized edge list and sort it
-        # self.e = np.rec.array(
-        #     (e[src].replace(self.id_dict, inplace=False).to_numpy(),
-        #      e[dst].replace(self.id_dict, inplace=False).to_numpy()),
-        #     dtype=[('src', self.id_dtype), ('dst', self.id_dtype)]
-        #     )
-        # self.sort_ind = np.argsort(self.e)
-        # self.e = self.e[self.sort_ind]
+        # Convert labels
+        if isinstance(edge_label, list):
+            n = len(edge_label)
+            lbl_array = np.empty(self.num_edges, dtype=self.label_dtype)
+            i = 0
+            for row in e[edge_label].itertuples(index=False):
+                lbl_array[i] = self.label_dict[row[0:n]]
+                i += 1
+
+        elif isinstance(edge_label, str):
+            lbl_array = e[edge_label].replace(
+                self.label_dict, inplace=False).to_numpy()
+
+        else:
+            raise ValueError('edge_label can be either a list or a str.')
+
+        # Add labels to e
+        self.e = append_fields(self.e, 'label', lbl_array,
+                               dtypes=self.label_dtype)
+
+        # Put label at the beginning and sort
+        self.e = self.e[['label', 'src', 'dst']]
+        self.sort_ind = np.argsort(self.e)
+        self.e = self.e[self.sort_ind]
 
         # # Check that there are no repeated pair in the edge list
         # mt._check_unique_edges(self.e)
-        # self.num_edges = len(self.e)
 
         # # Compute degree (undirected)
         # d = mt._compute_degree(self.e, self.num_vertices)
@@ -493,13 +483,13 @@ class EdgelabelGraph(sGraph):
         # # Warn if vertices have no edges
         # zero_idx = np.nonzero(d == 0)[0]
         # if len(zero_idx) == 1:
-        #     warnings.warn(str(self.id_list[zero_idx[0]]) +
+        #     warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
         #                   " vertex has no edges.", UserWarning)
 
         # if len(zero_idx) > 1:
         #     names = []
         #     for idx in zero_idx:
-        #         names.append(self.id_list[idx])
+        #         names.append(list(self.id_dict.keys())[idx])
         #     warnings.warn(str(names) + " vertices have no edges.",
         #                   UserWarning)
 

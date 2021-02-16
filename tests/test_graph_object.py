@@ -228,19 +228,19 @@ class TestEdgelabelGraph():
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.EdgelabelGraph)
 
-    # def test_init_edges(self):
-    #     g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
-    #                  dst='debtor', edge_label='type')
-    #     test_e = np.sort(np.rec.array([(0, 0, 1),
-    #                                    (1, 2, 1),
-    #                                    (0, 2, 1),
-    #                                    (0, 1, 2),
-    #                                    (1, 1, 0)],
-    #                      dtype=[('label', np.uint8),
-    #                             ('src', np.uint8),
-    #                             ('dst', np.uint8)]))
+    def test_init_edges(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', edge_label='type')
+        test_e = np.sort(np.rec.array([(0, 0, 1),
+                                       (1, 2, 1),
+                                       (0, 2, 1),
+                                       (0, 1, 2),
+                                       (1, 1, 0)],
+                         dtype=[('label', np.uint8),
+                                ('src', np.uint8),
+                                ('dst', np.uint8)]))
 
-    #     assert np.all(g.e == test_e), g.e
+        assert np.all(g.e == test_e), g.e
 
     def test_init_id(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
@@ -253,3 +253,42 @@ class TestEdgelabelGraph():
                      dst='debtor', edge_label='type')
         test_dict = {'interbank': 0, 'external': 1}
         assert test_dict == g.label_dict
+
+    def test_multi_id_init(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['BNP', 'IT']],
+                         columns=['name', 'country'])
+
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['ABN', 'NL', 'BNP', 'FR', 1e4, 'interbank', False],
+                         ['ABN', 'NL', 'ING', 'NL', 4e5, 'external', True]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
+
+        g = ge.Graph(v, e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        test_e = np.rec.array([(0, 0, 1),
+                               (1, 2, 1),
+                               (2, 3, 1),
+                               (0, 1, 2),
+                               (3, 1, 0)],
+                              dtype=[('label', np.uint8),
+                                     ('src', np.uint8),
+                                     ('dst', np.uint8)])
+        test_e.sort()
+        test_dict = {('ING', 'NL'): 0, ('ABN', 'NL'): 1,
+                     ('BNP', 'FR'): 2, ('BNP', 'IT'): 3}
+        test_label = {('interbank', False): 0, ('external', False): 1,
+                      ('interbank', True): 2, ('external', True): 3}
+
+        assert np.all(g.e == test_e), g.e
+        assert test_dict == g.id_dict, g.id_dict
+        assert test_label == g.label_dict, g.label_dict
