@@ -75,12 +75,6 @@ class Graph():
 
 class sGraph():
     """ General class for graphs.
-    """
-    pass
-
-
-class DirectedGraph(sGraph):
-    """ General class for directed graphs.
 
     Attributes
     ----------
@@ -96,19 +90,13 @@ class DirectedGraph(sGraph):
         dictionary to convert original identifiers to positions in v
     id_type: numpy.dtype
         type of the id (e.g. np.uint16)
-    sort_ind: numpy.array
-        the index used for sorting e
 
     Methods
     -------
+
     degree:
         compute the undirected degree sequence
-    out_degree:
-        compute the out degree sequence
-    in_degree:
-        compute the in degree sequence
     """
-
     def __init__(self, v, e, v_id, src, dst):
         """Return a sGraph object given vertices and edges.
 
@@ -130,7 +118,6 @@ class DirectedGraph(sGraph):
         sGraph
             the graph object
         """
-
         assert isinstance(v, pd.DataFrame), 'Only dataframe input supported.'
         assert isinstance(e, pd.DataFrame), 'Only dataframe input supported.'
 
@@ -181,6 +168,62 @@ class DirectedGraph(sGraph):
         else:
             raise ValueError('src and dst can be either both lists or str.')
 
+    def degree(self, get=False):
+        """ Compute the undirected degree sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'degree' in self.v.dtype.names:
+            degree = self.v.degree
+        else:
+            degree = mt._compute_degree(self.e, self.num_vertices)
+            dtype = 'u' + str(mt._get_num_bytes(np.max(degree)))
+            self.v = append_fields(self.v, 'degree', degree.astype(dtype),
+                                   dtypes=dtype)
+
+        if get:
+            return degree
+
+
+class DirectedGraph(sGraph):
+    """ General class for directed graphs.
+
+    Attributes
+    ----------
+    sort_ind: numpy.array
+        the index used for sorting e
+
+    Methods
+    -------
+    out_degree:
+        compute the out degree sequence
+    in_degree:
+        compute the in degree sequence
+    """
+
+    def __init__(self, v, e, v_id, src, dst):
+        """Return a sGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        v_id: str or list of str
+            specifies which column uniquely identifies a vertex
+        src: str or list of str
+            identifier column for the source vertex
+        dst: str or list of str
+            identifier column for the destination vertex
+
+        Returns
+        -------
+        sGraph
+            the graph object
+        """
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+
         # Sort e
         self.sort_ind = np.argsort(self.e)
         self.e = self.e[self.sort_ind]
@@ -205,22 +248,6 @@ class DirectedGraph(sGraph):
                 names.append(list(self.id_dict.keys())[idx])
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
-
-    def degree(self, get=False):
-        """ Compute the undirected degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
-        """
-        if 'degree' in self.v.dtype.names:
-            degree = self.v.degree
-        else:
-            degree = mt._compute_degree(self.e, self.num_vertices)
-            dtype = 'u' + str(mt._get_num_bytes(np.max(degree)))
-            self.v = append_fields(self.v, 'degree', degree.astype(dtype),
-                                   dtypes=dtype)
-
-        if get:
-            return degree
 
     def out_degree(self, get=False):
         """ Compute the out degree sequence.
