@@ -421,7 +421,7 @@ class LabelGraph(sGraph):
         compute the in degree sequence
     """
     def __init__(self, v, e, v_id, src, dst, edge_label):
-        """Return a EdgelabelGraph object given vertices and edges.
+        """Return a LabelGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -538,7 +538,7 @@ class LabelGraph(sGraph):
             return d_in
 
 
-class WeightedLabelGraph(LabelGraph):
+class WeightedLabelGraph(WeightedGraph, LabelGraph):
     """ General class for directed graphs with labelled and weighted edges.
 
     Attributes
@@ -548,7 +548,7 @@ class WeightedLabelGraph(LabelGraph):
     -------
     """
     def __init__(self, v, e, v_id, src, dst, weight, edge_label):
-        """Return a sGraph object given vertices and edges.
+        """Return a WeightedLabelGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -556,18 +556,38 @@ class WeightedLabelGraph(LabelGraph):
             list of vertices and their properties
         e: pandas.dataframe
             list of edges and their properties
-        id_col: str or list of str
+        v_id: str or list of str
             specifies which column uniquely identifies a vertex
-        src_col: str (list of str not yet supported)
+        src: str (list of str not yet supported)
             identifier column for the source vertex
-        dst_col: str (list of str not yet supported)
+        dst: str (list of str not yet supported)
             identifier column for the destination vertex
+        weight:
+            identifier column for the weight of the edges
+        edge_label:
+            identifier column for label of the edges
 
         Returns
         -------
-        Graph
+        sGraph
             the graph object
         """
+        LabelGraph.__init__(self, v, e, v_id=v_id, src=src, dst=dst,
+                            edge_label=edge_label)
+
+        # Convert weights to float64 for computations
+        self.e = append_fields(
+            self.e,
+            'weight',
+            e[weight].to_numpy().astype(np.float64)[self.sort_ind],
+            dtypes=np.float64)
+
+        # Ensure all weights are positive
+        msg = 'Zero or negative edge weights are not supported.'
+        assert np.all(self.e.weight > 0), msg
+
+        # Compute total weight
+        self.total_weight = np.sum(self.e.weight)
 
 
 class GraphModel():

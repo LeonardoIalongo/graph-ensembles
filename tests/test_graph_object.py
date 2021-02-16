@@ -447,10 +447,21 @@ class TestWeightedLabelGraph():
                      dst=['debtor', 'd_country'],
                      edge_label=['type', 'EUR'],
                      weight='value')
+        test_e = np.rec.array([(0, 0, 1, 1e6),
+                               (1, 2, 1, 2.3e7),
+                               (2, 3, 1, 7e5),
+                               (0, 3, 1, 3e3),
+                               (0, 1, 2, 1e4),
+                               (3, 1, 0, 4e5)],
+                              dtype=[('label', np.uint8),
+                                     ('src', np.uint8),
+                                     ('dst', np.uint8),
+                                     ('weight', np.float64)])
+        test_e.sort()
 
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.WeightedLabelGraph)
-        assert np.all(g.e == self._e), g.e
+        assert np.all(g.e == test_e), g.e
 
     def test_total_weight(self):
         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
