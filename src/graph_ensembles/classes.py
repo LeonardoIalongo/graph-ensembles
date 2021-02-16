@@ -41,13 +41,13 @@ class Graph():
             weight_col = kwargs['weight']
             if 'edge_label' in kwargs:
                 label_col = kwargs['edge_label']
-                return WeightedEdgelabelGraph(v,
-                                              e,
-                                              v_id=id_col,
-                                              src=src_col,
-                                              dst=dst_col,
-                                              weight=weight_col,
-                                              edge_label=label_col)
+                return WeightedLabelGraph(v,
+                                          e,
+                                          v_id=id_col,
+                                          src=src_col,
+                                          dst=dst_col,
+                                          weight=weight_col,
+                                          edge_label=label_col)
             else:
                 return WeightedGraph(v,
                                      e,
@@ -59,12 +59,12 @@ class Graph():
         else:
             if 'edge_label' in kwargs:
                 label_col = kwargs['edge_label']
-                return EdgelabelGraph(v,
-                                      e,
-                                      v_id=id_col,
-                                      src=src_col,
-                                      dst=dst_col,
-                                      edge_label=label_col)
+                return LabelGraph(v,
+                                  e,
+                                  v_id=id_col,
+                                  src=src_col,
+                                  dst=dst_col,
+                                  edge_label=label_col)
             else:
                 return DirectedGraph(v,
                                      e,
@@ -401,7 +401,7 @@ class WeightedGraph(DirectedGraph):
             return s_in
 
 
-class EdgelabelGraph(sGraph):
+class LabelGraph(sGraph):
     """ General class for directed graphs with labelled edges.
 
     Attributes
@@ -538,7 +538,7 @@ class EdgelabelGraph(sGraph):
             return d_in
 
 
-class WeightedEdgelabelGraph(EdgelabelGraph, WeightedGraph):
+class WeightedLabelGraph(LabelGraph):
     """ General class for directed graphs with labelled and weighted edges.
 
     Attributes

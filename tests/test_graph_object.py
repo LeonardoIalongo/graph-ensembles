@@ -241,7 +241,7 @@ class TestEdgelabelGraph():
                      dst='debtor', edge_label='type')
 
         assert isinstance(g, ge.sGraph)
-        assert isinstance(g, ge.EdgelabelGraph)
+        assert isinstance(g, ge.LabelGraph)
 
     def test_init_edges(self):
         g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',
@@ -422,3 +422,61 @@ class TestEdgelabelGraph():
 
         assert np.all(d_test == d_in), d_test
         assert np.all(g.v.in_degree == d_in), g.v.in_degree
+
+
+class TestWeightedLabelGraph():
+    v = pd.DataFrame([['ING', 'NL', 1e12],
+                     ['ABN', 'NL', 5e11],
+                     ['BNP', 'FR', 13e12]],
+                     columns=['name', 'country', 'assets'])
+
+    e = pd.DataFrame([['ING', 'ABN', 1e6],
+                     ['BNP', 'ABN', 1.7e5],
+                     ['ABN', 'BNP', 1e4]],
+                     columns=['creditor', 'debtor', 'value'])
+
+    _e = np.sort(np.rec.array([(0, 1, 1e6), (2, 1, 1.7e5), (1, 2, 1e4)],
+                              dtype=[('src', np.uint8),
+                                     ('dst', np.uint8),
+                                     ('weight', np.float64)]))
+
+    def test_init(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.WeightedGraph)
+        assert np.all(g.e == self._e), g.e
+
+    def test_total_weight(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+
+        assert g.total_weight == 1e6 + 1.7e5 + 1e4
+
+    def test_strength(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+        s = np.array([1e6, 1e6 + 1.7e5 + 1e4, 1.7e5 + 1e4])
+        s_test = g.strength(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.v.strength == s), g.v.strength
+
+    def test_out_strength(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+        s_out = np.array([1e6, 1e4, 1.7e5])
+        s_test = g.out_strength(get=True)
+
+        assert np.all(s_test == s_out), s_test
+        assert np.all(g.v.out_strength == s_out), g.v.out_strength
+
+    def test_in_strength(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+        s_in = np.array([0, 1e6 + 1.7e5, 1e4])
+        s_test = g.in_strength(get=True)
+
+        assert np.all(s_test == s_in), s_test
+        assert np.all(g.v.in_strength == s_in), g.v.in_strength
