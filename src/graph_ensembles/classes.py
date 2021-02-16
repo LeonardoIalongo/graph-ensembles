@@ -259,8 +259,8 @@ class DirectedGraph(sGraph):
         if 'out_degree' in self.v.dtype.names:
             d_out = self.v.out_degree
         else:
-            d_out, d_in = mt._compute_in_out_degrees(self.e,
-                                                     self.num_vertices)
+            d_out, d_in = mt._compute_in_out_degree(self.e,
+                                                    self.num_vertices)
             dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
                                                     np.max(d_in))))
             self.v = append_fields(self.v,
@@ -279,8 +279,8 @@ class DirectedGraph(sGraph):
         if 'in_degree' in self.v.dtype.names:
             d_in = self.v.in_degree
         else:
-            d_out, d_in = mt._compute_in_out_degrees(self.e,
-                                                     self.num_vertices)
+            d_out, d_in = mt._compute_in_out_degree(self.e,
+                                                    self.num_vertices)
             dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
                                                     np.max(d_in))))
             self.v = append_fields(self.v,
@@ -371,8 +371,8 @@ class WeightedGraph(DirectedGraph):
         if 'out_strength' in self.v.dtype.names:
             s_out = self.v.out_strength
         else:
-            s_out, s_in = mt._compute_in_out_strengths(self.e,
-                                                       self.num_vertices)
+            s_out, s_in = mt._compute_in_out_strength(self.e,
+                                                      self.num_vertices)
             self.v = append_fields(self.v,
                                    ['out_strength', 'in_strength'],
                                    (s_out, s_in),
@@ -389,8 +389,8 @@ class WeightedGraph(DirectedGraph):
         if 'in_strength' in self.v.dtype.names:
             s_in = self.v.in_strength
         else:
-            s_out, s_in = mt._compute_in_out_strengths(self.e,
-                                                       self.num_vertices)
+            s_out, s_in = mt._compute_in_out_strength(self.e,
+                                                      self.num_vertices)
 
             self.v = append_fields(self.v,
                                    ['out_strength', 'in_strength'],
@@ -529,7 +529,7 @@ class LabelGraph(sGraph):
         if 'out_degree' in self.v.dtype.names:
             d_out = self.v.out_degree
         else:
-            d_out, d_in = mt._compute_in_out_degrees_labelled(
+            d_out, d_in = mt._compute_in_out_degree_labelled(
                 self.e, self.num_vertices)
             dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
                                                     np.max(d_in))))
@@ -549,7 +549,7 @@ class LabelGraph(sGraph):
         if 'in_degree' in self.v.dtype.names:
             d_in = self.v.in_degree
         else:
-            d_out, d_in = mt._compute_in_out_degrees_labelled(
+            d_out, d_in = mt._compute_in_out_degree_labelled(
                 self.e, self.num_vertices)
             dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
                                                     np.max(d_in))))
@@ -567,7 +567,7 @@ class LabelGraph(sGraph):
         If get is true it returns the array. Result is added to lv.
         """
         if not hasattr(self.lv, 'degree'):
-            d, d_dict = mt._compute_degrees_by_label(self.e)
+            d, d_dict = mt._compute_degree_by_label(self.e)
             dtype = 'u' + str(mt._get_num_bytes(np.max(d[:, 2])))
             self.lv.degree = d.view(
                 type=np.recarray,
@@ -591,7 +591,7 @@ class LabelGraph(sGraph):
         """
         if not hasattr(self.lv, 'out_degree'):
             d_out, d_in, dout_dict, din_dict = \
-                mt._compute_in_out_degrees_by_label(self.e)
+                mt._compute_in_out_degree_by_label(self.e)
 
             dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out[:, 2]),
                                                     np.max(d_in[:, 2]))))
@@ -637,9 +637,17 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
 
     Attributes
     ----------
+    total_weight_by_label: numpy.array
+        sum of all the weights of the edges by label
 
     Methods
     -------
+    strength_by_label:
+        compute the strength of each vertex by label
+    out_strength_by_label:
+        compute the out strength of each vertex by label
+    in_strength_by_label:
+        compute the in strength of each vertex by label
     """
     def __init__(self, v, e, v_id, src, dst, weight, edge_label):
         """Return a WeightedLabelGraph object given vertices and edges.
@@ -682,6 +690,78 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
 
         # Compute total weight
         self.total_weight = np.sum(self.e.weight)
+
+        # Compute total weight by label
+        self.total_weight_by_label = mt._compute_tot_weight_by_label(
+            self.e, self.num_labels)
+
+    def strength_by_label(self, get=False):
+        """ Compute the out strength sequence by label.
+
+        If get is true it returns the array. Result is added to lv.
+        """
+        if not hasattr(self.lv, 'strength'):
+            s, s_dict = mt._compute_strength_by_label(self.e)
+
+            self.lv.strength = s.view(
+                type=np.recarray,
+                dtype=[('label', 'f8'), ('id', 'f8'), ('value', 'f8')]
+                ).reshape((s.shape[0],)).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', 'f8')]
+                )
+
+            self.lv.strength.sort()
+            self.lv.strength_dict = s_dict
+
+        if get:
+            return self.lv.strength
+
+    def out_strength_by_label(self, get=False):
+        """ Compute the out strength sequence by label.
+
+        If get is true it returns the array. Result is added to lv.
+        """
+        if not hasattr(self.lv, 'out_degree'):
+            s_out, s_in, sout_dict, sin_dict = \
+                mt._compute_in_out_strength_by_label(self.e)
+
+            self.lv.out_strength = s_out.view(
+                type=np.recarray,
+                dtype=[('label', 'f8'), ('id', 'f8'), ('value', 'f8')]
+                ).reshape((s_out.shape[0],)).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', 'f8')]
+                )
+            self.lv.in_strength = s_in.view(
+                type=np.recarray,
+                dtype=[('label', 'f8'), ('id', 'f8'), ('value', 'f8')]
+                ).reshape((s_in.shape[0],)).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', 'f8')]
+                )
+
+            self.lv.out_strength.sort()
+            self.lv.in_strength.sort()
+            self.lv.out_strength_dict = sout_dict
+            self.lv.in_strength_dict = sin_dict
+
+        if get:
+            return self.lv.out_strength
+
+    def in_strength_by_label(self, get=False):
+        """ Compute the in strength sequence by label.
+
+        If get is true it returns the array. Result is added to lv.
+        """
+        if not hasattr(self.lv, 'in_strength'):
+            self.out_strength_by_label()
+
+        if get:
+            return self.lv.in_strength
 
 
 class GraphModel():

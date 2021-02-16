@@ -584,3 +584,83 @@ class TestWeightedLabelGraph():
 
         assert np.all(s_test == s_in), s_test
         assert np.all(g.v.in_strength == s_in), g.v.in_strength
+
+    def test_total_weight_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
+        w_by_l = np.array([1e6 + 3e3 + 1e4, 2.3e7, 7e5, 4e5], dtype='f8')
+        test = g.total_weight_by_label
+        assert np.all(test == w_by_l), test
+
+    def test_strength_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
+        s = np.rec.array([(0, 0, 1e6),
+                         (0, 1, 1e4 + 1e6 + 3e3),
+                         (0, 2, 1e4),
+                         (0, 3, 3e3),
+                         (1, 1, 2.3e7),
+                         (1, 2, 2.3e7),
+                         (2, 1, 7e5),
+                         (2, 3, 7e5),
+                         (3, 0, 4e5),
+                         (3, 1, 4e5)],
+                         dtype=[('label', np.uint8),
+                                ('id', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.strength_by_label(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.lv.strength == s), g.v.strength
+
+    def test_out_strength_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
+        s_out = np.rec.array([(0, 0, 1e6),
+                             (0, 1, 1e4),
+                             (0, 3, 3e3),
+                             (1, 2, 2.3e7),
+                             (2, 3, 7e5),
+                             (3, 1, 4e5)],
+                             dtype=[('label', np.uint8),
+                                    ('id', np.uint8),
+                                    ('value', np.float64)])
+
+        s_test = g.out_strength_by_label(get=True)
+
+        assert np.all(s_test == s_out), s_test
+        assert np.all(g.lv.out_strength == s_out), g.v.out_strength
+
+    def test_in_strength_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
+        s_in = np.rec.array([(0, 1, 1e6 + 3e3),
+                             (0, 2, 1e4),
+                             (1, 1, 2.3e7),
+                             (2, 1, 7e5),
+                             (3, 0, 4e5)],
+                            dtype=[('label', np.uint8),
+                                   ('id', np.uint8),
+                                   ('value', np.float64)])
+
+        s_test = g.in_strength_by_label(get=True)
+
+        assert np.all(s_test == s_in), s_test
+        assert np.all(g.lv.in_strength == s_in), g.v.in_strength

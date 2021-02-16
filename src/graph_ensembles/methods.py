@@ -127,6 +127,15 @@ def _compute_num_edges_by_label(e, num_lbl):
 
 
 @jit(nopython=True)
+def _compute_tot_weight_by_label(e, num_lbl):
+    weight = np.zeros(num_lbl, dtype=np.float64)
+    for n in range(len(e)):
+        weight[e[n].label] += e[n].weight
+
+    return weight
+
+
+@jit(nopython=True)
 def _compute_degree(e, num_v):
     d = np.zeros(num_v, dtype=np.int64)
     s = set()
@@ -147,7 +156,7 @@ def _compute_degree(e, num_v):
 
 
 @jit(nopython=True)
-def _compute_degrees_by_label(e):
+def _compute_degree_by_label(e):
     lv_dict = {}
     i = 0
     for n in range(len(e)):
@@ -177,7 +186,7 @@ def _compute_degrees_by_label(e):
 
 
 @jit(nopython=True)
-def _compute_in_out_degrees(e, num_v):
+def _compute_in_out_degree(e, num_v):
     d_out = np.zeros(num_v, dtype=np.int64)
     d_in = np.zeros(num_v, dtype=np.int64)
     for n in range(len(e)):
@@ -188,7 +197,7 @@ def _compute_in_out_degrees(e, num_v):
 
 
 @jit(nopython=True)
-def _compute_in_out_degrees_labelled(e, num_v):
+def _compute_in_out_degree_labelled(e, num_v):
     d_out = np.zeros(num_v, dtype=np.int64)
     d_in = np.zeros(num_v, dtype=np.int64)
     s = set()
@@ -205,7 +214,7 @@ def _compute_in_out_degrees_labelled(e, num_v):
 
 
 @jit(nopython=True)
-def _compute_in_out_degrees_by_label(e):
+def _compute_in_out_degree_by_label(e):
     out_dict = {}
     in_dict = {}
     i = 0
@@ -249,7 +258,37 @@ def _compute_strength(e, num_v):
 
 
 @jit(nopython=True)
-def _compute_in_out_strengths(e, num_v):
+def _compute_strength_by_label(e):
+    lv_dict = {}
+    i = 0
+    for n in range(len(e)):
+        pair_s = (e[n].label, e[n].src)
+        if pair_s not in lv_dict:
+            lv_dict[pair_s] = i
+            i += 1
+
+        pair_d = (e[n].label, e[n].dst)
+        if pair_d not in lv_dict:
+            lv_dict[pair_d] = i
+            i += 1
+
+    s = np.zeros((len(lv_dict), 3), dtype=np.float64)
+    for n in range(len(e)):
+        tmp = (e[n].label, e[n].src)
+        ind = lv_dict[tmp]
+        s[ind, 0:2] = tmp
+        s[ind, 2] += e[n].weight
+
+        tmp = (e[n].label, e[n].dst)
+        ind = lv_dict[tmp]
+        s[ind, 0:2] = tmp
+        s[ind, 2] += e[n].weight
+
+    return s, lv_dict
+
+
+@jit(nopython=True)
+def _compute_in_out_strength(e, num_v):
     s_out = np.zeros(num_v, dtype=np.float64)
     s_in = np.zeros(num_v, dtype=np.float64)
     for n in range(len(e)):
@@ -257,6 +296,39 @@ def _compute_in_out_strengths(e, num_v):
         s_in[e[n].dst] += e[n].weight
 
     return s_out, s_in
+
+
+@jit(nopython=True)
+def _compute_in_out_strength_by_label(e):
+    out_dict = {}
+    in_dict = {}
+    i = 0
+    j = 0
+    for n in range(len(e)):
+        pair_s = (e[n].label, e[n].src)
+        if pair_s not in out_dict:
+            out_dict[pair_s] = i
+            i += 1
+
+        pair_d = (e[n].label, e[n].dst)
+        if pair_d not in in_dict:
+            in_dict[pair_d] = j
+            j += 1
+
+    s_out = np.zeros((len(out_dict), 3), dtype=np.float64)
+    s_in = np.zeros((len(in_dict), 3), dtype=np.float64)
+    for n in range(len(e)):
+        tmp = (e[n].label, e[n].src)
+        ind = out_dict[tmp]
+        s_out[ind, 0:2] = tmp
+        s_out[ind, 2] += e[n].weight
+
+        tmp = (e[n].label, e[n].dst)
+        ind = in_dict[tmp]
+        s_in[ind, 0:2] = tmp
+        s_in[ind, 2] += e[n].weight
+
+    return s_out, s_in, out_dict, in_dict
 
 
 # @jit(nopython=True, parallel=True)
