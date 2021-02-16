@@ -118,6 +118,15 @@ def _generate_label_dict(e, label):
 
 
 @jit(nopython=True)
+def _compute_num_edges_by_label(e, num_lbl):
+    edges = np.zeros(num_lbl, dtype=np.int64)
+    for n in range(len(e)):
+        edges[e[n].label] += 1
+
+    return edges
+
+
+@jit(nopython=True)
 def _compute_degree(e, num_v):
     d = np.zeros(num_v, dtype=np.int64)
     s = set()

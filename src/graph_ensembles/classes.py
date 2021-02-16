@@ -406,8 +406,12 @@ class LabelGraph(sGraph):
 
     Attributes
     ----------
+    lv: numpy.rec.array
+        contains all properties of the label-vertex pair
     num_labels: int
         number of distinct edge labels
+    num_edges_label: numpy.array
+        number of edges by label (in order)
     label_dtype: numpy.dtype
         the data type of the label internal id
     sort_ind: numpy.array
@@ -478,6 +482,11 @@ class LabelGraph(sGraph):
 
         # Check that there are no repeated pair in the edge list
         mt._check_unique_labelled_edges(self.e)
+
+        # Compute number of edges by label
+        ne_label = mt._compute_num_edges_by_label(self.e, self.num_labels)
+        dtype = 'u' + str(mt._get_num_bytes(np.max(ne_label)))
+        self.num_edges_label = ne_label.astype(dtype)
 
         # Compute degree (undirected)
         d = mt._compute_degree(self.e, self.num_vertices)

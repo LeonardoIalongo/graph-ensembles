@@ -423,6 +423,104 @@ class TestLabelGraph():
         assert np.all(d_test == d_in), d_test
         assert np.all(g.v.in_degree == d_in), g.v.in_degree
 
+    def test_num_edges_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+        test_num = np.array([3, 1, 1, 1], dtype='u1')
+        assert np.all(g.num_edges_label == test_num)
+
+    def test_degree_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        d = np.rec.array([(0, 0, 1),
+                         (0, 1, 3),
+                         (0, 2, 1),
+                         (0, 3, 1),
+                         (1, 0, 0),
+                         (1, 1, 1),
+                         (1, 2, 1),
+                         (1, 3, 0),
+                         (2, 0, 0),
+                         (2, 1, 1),
+                         (2, 2, 0),
+                         (2, 3, 1),
+                         (3, 0, 1),
+                         (3, 1, 1),
+                         (3, 2, 0),
+                         (3, 3, 0)],
+                         dtype=[('label', np.uint8),
+                                ('id', np.uint8),
+                                ('degree', np.uint8)])
+
+        assert np.all(g.lv.degree == d), g.lv.degree
+
+    def test_out_degree_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        d_out = np.rec.array([(0, 0, 1),
+                             (0, 1, 1),
+                             (0, 2, 0),
+                             (0, 3, 1),
+                             (1, 0, 0),
+                             (1, 1, 0),
+                             (1, 2, 1),
+                             (1, 3, 0),
+                             (2, 0, 0),
+                             (2, 1, 0),
+                             (2, 2, 0),
+                             (2, 3, 1),
+                             (3, 0, 0),
+                             (3, 1, 0),
+                             (3, 2, 0),
+                             (3, 3, 0)],
+                             dtype=[('label', np.uint8),
+                                    ('id', np.uint8),
+                                    ('degree', np.uint8)])
+
+        d_test = g.out_degree_by_label(get=True)
+
+        assert np.all(d_test == d_out), d_test
+        assert np.all(g.lv.out_degree == d_out), g.lv.out_degree
+
+    def test_in_degree_by_label(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        d_in = np.rec.array([(0, 0, 0),
+                             (0, 1, 2),
+                             (0, 2, 1),
+                             (0, 3, 0),
+                             (1, 0, 0),
+                             (1, 1, 1),
+                             (1, 2, 0),
+                             (1, 3, 0),
+                             (2, 0, 0),
+                             (2, 1, 1),
+                             (2, 2, 0),
+                             (2, 3, 0),
+                             (3, 0, 1),
+                             (3, 1, 0),
+                             (3, 2, 0),
+                             (3, 3, 0)],
+                            dtype=[('label', np.uint8),
+                                   ('id', np.uint8),
+                                   ('degree', np.uint8)])
+
+        d_test = g.in_degree_by_label(get=True)
+
+        assert np.all(d_test == d_in), d_test
+        assert np.all(g.lv.in_degree == d_in), g.lv.in_degree
+
 
 class TestWeightedLabelGraph():
     v = pd.DataFrame([['ING', 'NL'],
