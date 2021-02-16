@@ -401,6 +401,12 @@ class WeightedGraph(DirectedGraph):
             return s_in
 
 
+class LabelVertexList():
+    """ Class to store results of label-vertex properties from LabelGraph.
+    """
+    pass
+
+
 class LabelGraph(sGraph):
     """ General class for directed graphs with labelled edges.
 
@@ -423,6 +429,12 @@ class LabelGraph(sGraph):
         compute the out degree sequence
     in_degree:
         compute the in degree sequence
+    degree_by_label:
+        compute the degree of each vertex by label
+    out_degree_by_label:
+        compute the out degree of each vertex by label
+    in_degree_by_label:
+        compute the in degree of each vertex by label
     """
     def __init__(self, v, e, v_id, src, dst, edge_label):
         """Return a LabelGraph object given vertices and edges.
@@ -506,6 +518,9 @@ class LabelGraph(sGraph):
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
 
+        # Create lv property
+        self.lv = LabelVertexList()
+
     def out_degree(self, get=False):
         """ Compute the out degree sequence.
 
@@ -545,6 +560,76 @@ class LabelGraph(sGraph):
 
         if get:
             return d_in
+
+    def degree_by_label(self, get=False):
+        """ Compute the degree sequence by label.
+
+        If get is true it returns the array. Result is added to lv.
+        """
+        if not hasattr(self.lv, 'degree'):
+            d, d_dict = mt._compute_degrees_by_label(self.e)
+            dtype = 'u' + str(mt._get_num_bytes(np.max(d[:, 2])))
+            self.lv.degree = d.view(
+                type=np.recarray,
+                dtype=[('label', 'u8'), ('id', 'u8'), ('value', 'u8')]
+                ).reshape((d.shape[0],)).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', dtype)]
+                )
+
+            self.lv.degree.sort()
+            self.lv.degree_dict = d_dict
+
+        if get:
+            return self.lv.degree
+
+    def out_degree_by_label(self, get=False):
+        """ Compute the out degree sequence by label.
+
+        If get is true it returns the array. Result is added to lv.
+        """
+        if not hasattr(self.lv, 'out_degree'):
+            d_out, d_in, dout_dict, din_dict = \
+                mt._compute_in_out_degrees_by_label(self.e)
+
+            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out[:, 2]),
+                                                    np.max(d_in[:, 2]))))
+            self.lv.out_degree = d_out.view(
+                type=np.recarray,
+                dtype=[('label', 'u8'), ('id', 'u8'), ('value', 'u8')]
+                ).reshape((d_out.shape[0],)).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', dtype)]
+                )
+            self.lv.in_degree = d_in.view(
+                type=np.recarray,
+                dtype=[('label', 'u8'), ('id', 'u8'), ('value', 'u8')]
+                ).reshape((d_in.shape[0],)).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', dtype)]
+                )
+
+            self.lv.out_degree.sort()
+            self.lv.in_degree.sort()
+            self.lv.out_degree_dict = dout_dict
+            self.lv.in_degree_dict = din_dict
+
+        if get:
+            return self.lv.out_degree
+
+    def in_degree_by_label(self, get=False):
+        """ Compute the in degree sequence by label.
+
+        If get is true it returns the array. Result is added to lv.
+        """
+        if not hasattr(self.lv, 'in_degree'):
+            self.out_degree_by_label()
+
+        if get:
+            return self.lv.in_degree
 
 
 class WeightedLabelGraph(WeightedGraph, LabelGraph):

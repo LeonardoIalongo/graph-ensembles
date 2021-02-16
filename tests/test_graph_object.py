@@ -441,22 +441,19 @@ class TestLabelGraph():
                          (0, 1, 3),
                          (0, 2, 1),
                          (0, 3, 1),
-                         (1, 0, 0),
                          (1, 1, 1),
                          (1, 2, 1),
-                         (1, 3, 0),
-                         (2, 0, 0),
                          (2, 1, 1),
-                         (2, 2, 0),
                          (2, 3, 1),
                          (3, 0, 1),
-                         (3, 1, 1),
-                         (3, 2, 0),
-                         (3, 3, 0)],
+                         (3, 1, 1)],
                          dtype=[('label', np.uint8),
                                 ('id', np.uint8),
-                                ('degree', np.uint8)])
+                                ('value', np.uint8)])
 
+        d_test = g.degree_by_label(get=True)
+
+        assert np.all(d_test == d), d_test
         assert np.all(g.lv.degree == d), g.lv.degree
 
     def test_out_degree_by_label(self):
@@ -467,23 +464,13 @@ class TestLabelGraph():
 
         d_out = np.rec.array([(0, 0, 1),
                              (0, 1, 1),
-                             (0, 2, 0),
                              (0, 3, 1),
-                             (1, 0, 0),
-                             (1, 1, 0),
                              (1, 2, 1),
-                             (1, 3, 0),
-                             (2, 0, 0),
-                             (2, 1, 0),
-                             (2, 2, 0),
                              (2, 3, 1),
-                             (3, 0, 0),
-                             (3, 1, 0),
-                             (3, 2, 0),
-                             (3, 3, 0)],
+                             (3, 1, 1)],
                              dtype=[('label', np.uint8),
                                     ('id', np.uint8),
-                                    ('degree', np.uint8)])
+                                    ('value', np.uint8)])
 
         d_test = g.out_degree_by_label(get=True)
 
@@ -496,25 +483,14 @@ class TestLabelGraph():
                      dst=['debtor', 'd_country'],
                      edge_label=['type', 'EUR'])
 
-        d_in = np.rec.array([(0, 0, 0),
-                             (0, 1, 2),
+        d_in = np.rec.array([(0, 1, 2),
                              (0, 2, 1),
-                             (0, 3, 0),
-                             (1, 0, 0),
                              (1, 1, 1),
-                             (1, 2, 0),
-                             (1, 3, 0),
-                             (2, 0, 0),
                              (2, 1, 1),
-                             (2, 2, 0),
-                             (2, 3, 0),
-                             (3, 0, 1),
-                             (3, 1, 0),
-                             (3, 2, 0),
-                             (3, 3, 0)],
+                             (3, 0, 1)],
                             dtype=[('label', np.uint8),
                                    ('id', np.uint8),
-                                   ('degree', np.uint8)])
+                                   ('value', np.uint8)])
 
         d_test = g.in_degree_by_label(get=True)
 

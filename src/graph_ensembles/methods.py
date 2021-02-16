@@ -147,6 +147,36 @@ def _compute_degree(e, num_v):
 
 
 @jit(nopython=True)
+def _compute_degrees_by_label(e):
+    lv_dict = {}
+    i = 0
+    for n in range(len(e)):
+        pair_s = (e[n].label, e[n].src)
+        if pair_s not in lv_dict:
+            lv_dict[pair_s] = i
+            i += 1
+
+        pair_d = (e[n].label, e[n].dst)
+        if pair_d not in lv_dict:
+            lv_dict[pair_d] = i
+            i += 1
+
+    d = np.zeros((len(lv_dict), 3), dtype=np.uint64)
+    for n in range(len(e)):
+        tmp = (e[n].label, e[n].src)
+        ind = lv_dict[tmp]
+        d[ind, 0:2] = tmp
+        d[ind, 2] += 1
+
+        tmp = (e[n].label, e[n].dst)
+        ind = lv_dict[tmp]
+        d[ind, 0:2] = tmp
+        d[ind, 2] += 1
+
+    return d, lv_dict
+
+
+@jit(nopython=True)
 def _compute_in_out_degrees(e, num_v):
     d_out = np.zeros(num_v, dtype=np.int64)
     d_in = np.zeros(num_v, dtype=np.int64)
@@ -172,6 +202,39 @@ def _compute_in_out_degrees_labelled(e, num_v):
             d_in[j] += 1
 
     return d_out, d_in
+
+
+@jit(nopython=True)
+def _compute_in_out_degrees_by_label(e):
+    out_dict = {}
+    in_dict = {}
+    i = 0
+    j = 0
+    for n in range(len(e)):
+        pair_s = (e[n].label, e[n].src)
+        if pair_s not in out_dict:
+            out_dict[pair_s] = i
+            i += 1
+
+        pair_d = (e[n].label, e[n].dst)
+        if pair_d not in in_dict:
+            in_dict[pair_d] = j
+            j += 1
+
+    d_out = np.zeros((len(out_dict), 3), dtype=np.uint64)
+    d_in = np.zeros((len(in_dict), 3), dtype=np.uint64)
+    for n in range(len(e)):
+        tmp = (e[n].label, e[n].src)
+        ind = out_dict[tmp]
+        d_out[ind, 0:2] = tmp
+        d_out[ind, 2] += 1
+
+        tmp = (e[n].label, e[n].dst)
+        ind = in_dict[tmp]
+        d_in[ind, 0:2] = tmp
+        d_in[ind, 2] += 1
+
+    return d_out, d_in, out_dict, in_dict
 
 
 @jit(nopython=True)
