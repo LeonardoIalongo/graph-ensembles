@@ -218,6 +218,7 @@ class TestEdgelabelGraph():
     e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
                      ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
                      ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                     ['BNP', 'IT', 'ABN', 'NL', 3e3, 'interbank', False],
                      ['ABN', 'NL', 'BNP', 'FR', 1e4, 'interbank', False],
                      ['ABN', 'NL', 'ING', 'NL', 4e5, 'external', True]],
                      columns=['creditor', 'c_country',
@@ -277,6 +278,7 @@ class TestEdgelabelGraph():
         test_e = np.rec.array([(0, 0, 1),
                                (1, 2, 1),
                                (2, 3, 1),
+                               (0, 3, 1),
                                (0, 1, 2),
                                (3, 1, 0)],
                               dtype=[('label', np.uint8),
@@ -398,3 +400,25 @@ class TestEdgelabelGraph():
                      src=['creditor', 'c_country'],
                      dst=['debtor', 'd_country'],
                      edge_label=['type', 'EUR'])
+
+    def test_out_degree(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+        d_out = np.array([1, 2, 1, 1])
+        d_test = g.out_degree(get=True)
+
+        assert np.all(d_test == d_out), d_test
+        assert np.all(g.v.out_degree == d_out), g.v.out_degree
+
+    def test_in_degree(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+        d_in = np.array([1, 3, 1, 0])
+        d_test = g.in_degree(get=True)
+
+        assert np.all(d_test == d_in), d_test
+        assert np.all(g.v.in_degree == d_in), g.v.in_degree

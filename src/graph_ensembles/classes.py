@@ -415,6 +415,10 @@ class EdgelabelGraph(sGraph):
 
     Methods
     -------
+    out_degree:
+        compute the out degree sequence
+    in_degree:
+        compute the in degree sequence
     """
     def __init__(self, v, e, v_id, src, dst, edge_label):
         """Return a EdgelabelGraph object given vertices and edges.
@@ -492,6 +496,46 @@ class EdgelabelGraph(sGraph):
                 names.append(list(self.id_dict.keys())[idx])
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
+
+    def out_degree(self, get=False):
+        """ Compute the out degree sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'out_degree' in self.v.dtype.names:
+            d_out = self.v.out_degree
+        else:
+            d_out, d_in = mt._compute_in_out_degrees_labelled(
+                self.e, self.num_vertices)
+            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
+                                                    np.max(d_in))))
+            self.v = append_fields(self.v,
+                                   ['out_degree', 'in_degree'],
+                                   (d_out.astype(dtype), d_in.astype(dtype)),
+                                   dtypes=[dtype, dtype])
+
+        if get:
+            return d_out
+
+    def in_degree(self, get=False):
+        """ Compute the out degree sequence.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if 'in_degree' in self.v.dtype.names:
+            d_in = self.v.in_degree
+        else:
+            d_out, d_in = mt._compute_in_out_degrees_labelled(
+                self.e, self.num_vertices)
+            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
+                                                    np.max(d_in))))
+            self.v = append_fields(self.v,
+                                   ['out_degree', 'in_degree'],
+                                   (d_out.astype(dtype), d_in.astype(dtype)),
+                                   dtypes=[dtype, dtype])
+
+        if get:
+            return d_in
 
 
 class WeightedEdgelabelGraph(EdgelabelGraph, WeightedGraph):

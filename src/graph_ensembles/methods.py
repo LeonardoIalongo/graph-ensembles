@@ -149,6 +149,23 @@ def _compute_in_out_degrees(e, num_v):
 
 
 @jit(nopython=True)
+def _compute_in_out_degrees_labelled(e, num_v):
+    d_out = np.zeros(num_v, dtype=np.int64)
+    d_in = np.zeros(num_v, dtype=np.int64)
+    s = set()
+    for n in range(len(e)):
+        i = e[n].src
+        j = e[n].dst
+        pair = (i, j)
+        if pair not in s:
+            s.add(pair)
+            d_out[i] += 1
+            d_in[j] += 1
+
+    return d_out, d_in
+
+
+@jit(nopython=True)
 def _compute_strength(e, num_v):
     s = np.zeros(num_v, dtype=np.float64)
 
