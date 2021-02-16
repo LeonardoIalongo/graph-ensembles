@@ -38,8 +38,8 @@ class TestDirectedGraph():
         with pytest.raises(Exception) as e_info:
             ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
-            msg = 'There is at least one repeated id in the vertex dataframe.'
-            assert e_info.value.args[0] == msg
+        msg = 'There is at least one repeated id in the vertex dataframe.'
+        assert e_info.value.args[0] == msg
 
     def test_duplicated_edges(self):
         e = pd.DataFrame([['ING', 'ABN'],
@@ -52,8 +52,8 @@ class TestDirectedGraph():
         with pytest.raises(Exception) as e_info:
             ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
-            msg = 'There are repeated edges'
-            assert e_info.value.args[0] == msg
+        msg = 'There are repeated edges.'
+        assert e_info.value.args[0] == msg
 
     def test_vertices_in_e_not_v(self):
         e = pd.DataFrame([['ING', 'ABN'],
@@ -66,8 +66,8 @@ class TestDirectedGraph():
         with pytest.raises(Exception) as e_info:
             ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
-            msg = 'Some source vertices are not in v.'
-            assert e_info.value.args[0] == msg
+        msg = 'Some source vertices are not in v.'
+        assert e_info.value.args[0] == msg
 
         e = pd.DataFrame([['ING', 'ABN'],
                          ['BNP', 'ABN'],
@@ -79,8 +79,8 @@ class TestDirectedGraph():
         with pytest.raises(Exception) as e_info:
             ge.Graph(self.v, e, v_id='name', src='creditor', dst='debtor')
 
-            msg = 'Some destination vertices are not in v.'
-            assert e_info.value.args[0] == msg
+        msg = 'Some destination vertices are not in v.'
+        assert e_info.value.args[0] == msg
 
     def test_degree_init(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
@@ -90,7 +90,7 @@ class TestDirectedGraph():
         with pytest.warns(UserWarning):
             g = ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
-            assert np.all(g.v.degree == d), g.v.degree
+        assert np.all(g.v.degree == d), g.v.degree
 
     def test_vertices_with_no_edge(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
@@ -209,27 +209,41 @@ class TestWeightedGraph():
 
 
 class TestEdgelabelGraph():
-    v = pd.DataFrame([['ING', 'NL', 1e12],
-                     ['ABN', 'NL', 5e11],
-                     ['BNP', 'FR', 13e12]],
-                     columns=['name', 'country', 'assets'])
+    v = pd.DataFrame([['ING', 'NL'],
+                     ['ABN', 'NL'],
+                     ['BNP', 'FR'],
+                     ['BNP', 'IT']],
+                     columns=['name', 'country'])
 
-    e = pd.DataFrame([['ING', 'ABN', 1e6, 'interbank'],
-                     ['BNP', 'ABN', 2.3e7, 'external'],
-                     ['BNP', 'ABN', 1.7e5, 'interbank'],
-                     ['ABN', 'BNP', 1e4, 'interbank'],
-                     ['ABN', 'ING', 4e5, 'external']],
-                     columns=['creditor', 'debtor', 'value', 'type'])
+    e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                     ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                     ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                     ['ABN', 'NL', 'BNP', 'FR', 1e4, 'interbank', False],
+                     ['ABN', 'NL', 'ING', 'NL', 4e5, 'external', True]],
+                     columns=['creditor', 'c_country',
+                              'debtor', 'd_country',
+                              'value', 'type', 'EUR'])
+    v_s = pd.DataFrame([['ING', 'NL', 1e12],
+                       ['ABN', 'NL', 5e11],
+                       ['BNP', 'FR', 13e12]],
+                       columns=['name', 'country', 'assets'])
+
+    e_s = pd.DataFrame([['ING', 'ABN', 1e6, 'interbank'],
+                       ['BNP', 'ABN', 2.3e7, 'external'],
+                       ['BNP', 'ABN', 1.7e5, 'interbank'],
+                       ['ABN', 'BNP', 1e4, 'interbank'],
+                       ['ABN', 'ING', 4e5, 'external']],
+                       columns=['creditor', 'debtor', 'value', 'type'])
 
     def test_init_class(self):
-        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+        g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',
                      dst='debtor', edge_label='type')
 
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.EdgelabelGraph)
 
     def test_init_edges(self):
-        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+        g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',
                      dst='debtor', edge_label='type')
         test_e = np.sort(np.rec.array([(0, 0, 1),
                                        (1, 2, 1),
@@ -243,34 +257,19 @@ class TestEdgelabelGraph():
         assert np.all(g.e == test_e), g.e
 
     def test_init_id(self):
-        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+        g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',
                      dst='debtor', edge_label='type')
         test_dict = {'ING': 0, 'ABN': 1, 'BNP': 2}
         assert test_dict == g.id_dict
 
     def test_init_label(self):
-        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+        g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',
                      dst='debtor', edge_label='type')
         test_dict = {'interbank': 0, 'external': 1}
         assert test_dict == g.label_dict
 
     def test_multi_id_init(self):
-        v = pd.DataFrame([['ING', 'NL'],
-                         ['ABN', 'NL'],
-                         ['BNP', 'FR'],
-                         ['BNP', 'IT']],
-                         columns=['name', 'country'])
-
-        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
-                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
-                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
-                         ['ABN', 'NL', 'BNP', 'FR', 1e4, 'interbank', False],
-                         ['ABN', 'NL', 'ING', 'NL', 4e5, 'external', True]],
-                         columns=['creditor', 'c_country',
-                                  'debtor', 'd_country',
-                                  'value', 'type', 'EUR'])
-
-        g = ge.Graph(v, e, v_id=['name', 'country'],
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
                      src=['creditor', 'c_country'],
                      dst=['debtor', 'd_country'],
                      edge_label=['type', 'EUR'])
@@ -292,3 +291,110 @@ class TestEdgelabelGraph():
         assert np.all(g.e == test_e), g.e
         assert test_dict == g.id_dict, g.id_dict
         assert test_label == g.label_dict, g.label_dict
+
+    def test_duplicated_vertices(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'IT']],
+                         columns=['name', 'country'])
+
+        with pytest.raises(Exception) as e_info:
+            ge.Graph(v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        msg = 'There is at least one repeated id in the vertex dataframe.'
+        assert e_info.value.args[0] == msg
+
+    def test_duplicated_edges(self):
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['ABN', 'NL', 'BNP', 'FR', 1e4, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 4e5, 'external', False]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
+
+        with pytest.raises(Exception) as e_info:
+            ge.Graph(self.v, e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        msg = 'There are repeated edges.'
+        assert e_info.value.args[0] == msg
+
+    def test_vertices_in_e_not_v(self):
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['ABN', 'UK', 'BNP', 'FR', 1e4, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 4e5, 'external', False]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
+
+        with pytest.raises(Exception) as e_info:
+            ge.Graph(self.v, e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        msg = 'Some source vertices are not in v.'
+        assert e_info.value.args[0] == msg
+
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['ABN', 'NL', 'UBS', 'FR', 1e4, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 4e5, 'external', False]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
+
+        with pytest.raises(Exception) as e_info:
+            ge.Graph(self.v, e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        msg = 'Some destination vertices are not in v.'
+        assert e_info.value.args[0] == msg
+
+    def test_degree_init(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['BNP', 'IT'],
+                         ['ABN', 'UK'],
+                         ['UBS', 'FR']],
+                         columns=['name', 'country'])
+
+        d = np.array([1, 3, 1, 1, 0, 0])
+
+        with pytest.warns(UserWarning):
+            g = ge.Graph(v, self.e, v_id=['name', 'country'],
+                         src=['creditor', 'c_country'],
+                         dst=['debtor', 'd_country'],
+                         edge_label=['type', 'EUR'])
+
+        assert np.all(g.v.degree == d), g.v.degree
+
+    def test_vertices_with_no_edge(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['BNP', 'IT'],
+                         ['ABN', 'UK'],
+                         ['UBS', 'FR']],
+                         columns=['name', 'country'])
+
+        with pytest.warns(UserWarning, match=r' vertices have no edges.'):
+            ge.Graph(v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])

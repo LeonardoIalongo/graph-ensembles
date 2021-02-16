@@ -472,26 +472,26 @@ class EdgelabelGraph(sGraph):
         self.sort_ind = np.argsort(self.e)
         self.e = self.e[self.sort_ind]
 
-        # # Check that there are no repeated pair in the edge list
-        # mt._check_unique_edges(self.e)
+        # Check that there are no repeated pair in the edge list
+        mt._check_unique_labelled_edges(self.e)
 
-        # # Compute degree (undirected)
-        # d = mt._compute_degree(self.e, self.num_vertices)
-        # dtype = 'u' + str(mt._get_num_bytes(np.max(d)))
-        # self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
+        # Compute degree (undirected)
+        d = mt._compute_degree(self.e, self.num_vertices)
+        dtype = 'u' + str(mt._get_num_bytes(np.max(d)))
+        self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
 
-        # # Warn if vertices have no edges
-        # zero_idx = np.nonzero(d == 0)[0]
-        # if len(zero_idx) == 1:
-        #     warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
-        #                   " vertex has no edges.", UserWarning)
+        # Warn if vertices have no edges
+        zero_idx = np.nonzero(d == 0)[0]
+        if len(zero_idx) == 1:
+            warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
+                          " vertex has no edges.", UserWarning)
 
-        # if len(zero_idx) > 1:
-        #     names = []
-        #     for idx in zero_idx:
-        #         names.append(list(self.id_dict.keys())[idx])
-        #     warnings.warn(str(names) + " vertices have no edges.",
-        #                   UserWarning)
+        if len(zero_idx) > 1:
+            names = []
+            for idx in zero_idx:
+                names.append(list(self.id_dict.keys())[idx])
+            warnings.warn(str(names) + " vertices have no edges.",
+                          UserWarning)
 
 
 class WeightedEdgelabelGraph(EdgelabelGraph, WeightedGraph):
