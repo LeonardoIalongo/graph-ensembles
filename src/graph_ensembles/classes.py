@@ -88,7 +88,7 @@ class sGraph():
         array containing the edge list in a condensed format
     id_dict: dict
         dictionary to convert original identifiers to positions in v
-    id_type: numpy.dtype
+    id_dtype: numpy.dtype
         type of the id (e.g. np.uint16)
 
     Methods
@@ -126,6 +126,8 @@ class sGraph():
         self.num_edges = len(e.index)
         num_bytes = mt._get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
+        self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
+            type=np.recarray, dtype=[('id', self.id_dtype)])
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
@@ -234,12 +236,10 @@ class DirectedGraph(sGraph):
         mt._check_unique_edges(self.e)
 
         # Compute degree (undirected)
-        d = mt._compute_degree(self.e, self.num_vertices)
-        dtype = 'u' + str(mt._get_num_bytes(np.max(d)))
-        self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
+        self.degree()
 
         # Warn if vertices have no edges
-        zero_idx = np.nonzero(d == 0)[0]
+        zero_idx = np.nonzero(self.v.degree == 0)[0]
         if len(zero_idx) == 1:
             warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
                           " vertex has no edges.", UserWarning)
@@ -501,12 +501,10 @@ class LabelGraph(sGraph):
         self.num_edges_label = ne_label.astype(dtype)
 
         # Compute degree (undirected)
-        d = mt._compute_degree(self.e, self.num_vertices)
-        dtype = 'u' + str(mt._get_num_bytes(np.max(d)))
-        self.v = np.rec.array(d.astype(dtype), dtype=[('degree', dtype)])
+        self.degree()
 
         # Warn if vertices have no edges
-        zero_idx = np.nonzero(d == 0)[0]
+        zero_idx = np.nonzero(self.v.degree == 0)[0]
         if len(zero_idx) == 1:
             warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
                           " vertex has no edges.", UserWarning)
@@ -764,16 +762,211 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
             return self.lv.in_strength
 
 
-class GraphModel():
-    """ General class for graph models. """
+class GraphEnsemble():
+    """ General class for graph ensembles.
+
+    All ensembles can be defined in three ways:
+
+    1) From a suitable Graph object: we can think this as a randomization of
+    the observed graph. The conserved quantities and relevant vertex
+    attributes are computed on the original graph to initialise the ensemble.
+    It is then possible to fit the model parameters in order to get a
+    probability distribution over all graphs from which to sample.
+
+    2) From conserved quantities and relevant vertex attributes directly: in
+    the case we do not have a reference graph but we do know what properties
+    we want the ensemble to hold, we can directly use those properties to
+    initialise the model. Once this step is completed we can similarly fit the
+    parameters and sample from the ensemble.
+
+    3) Fully specifying all model parameters: a final possibility is to
+    initialise the model by giving it the list of parameters it needs in order
+    to define the probability distribution over graphs. In this case we do not
+    need to fit the model and the value of the conserved quantities over the
+    ensemble will depend on the parameters passed to the model rather than
+    vice versa.
+
+    What these three possibilities entail will depend on the specifics of the
+    model.
+
+    Note that if keyword arguments are passed together with a Graph, then the
+    arguments overwrite the graph property. This allows for easier definition
+    of the ensemble for example when we want to modify one aspect of the
+    reference graph but not all (e.g. only the density, but keeping strengths
+    the same).
+
+    """
     pass
 
 
-class FitnessModel(GraphModel):
+class RandomGraph(GraphEnsemble):
+    """ The simplest graph ensemble defined by conserving the total number of
+    links (per label) only. We assume the graph is directed.
+
+    If it is initialized with a LabelGraph or with a number of labels, then
+    the edges will be labelled.
+
+    Attributes
+    ----------
+    num_edges: float (or np.ndarray)
+        the total number of edges (per label)
+    num_vertices: int
+        the total number of vertices
+    num_labels: int
+        the total number of labels by which the vector strengths are computed
+    p: float or np.ndarray
+        the probability of each link (by label)
+    """
+
+    def __init__(self, *args, **kwargs):
+        """ Initialize a RandomGraph ensemble.
+        """
+
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], Graph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                if isinstance(g, LabelGraph):
+                    self.num_edges = g.num_edges_label
+                    self.num_labels = g.num_labels
+                else:
+                    self.num_edges = g.num_edges
+                    self.num_labels = None
+            else:
+                ValueError('First argument passed must be a Graph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'num_labels', 'p']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Check that all necessary attributes have been passed
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+
+        if hasattr(self, 'p'):
+            if hasattr(self, 'num_edges'):
+                raise ValueError('Either p or num_edges can be set not both.')
+            else:
+                if not hasattr(self, 'num_labels'):
+                    if isinstance(self.p, np.ndarray):
+                        if len(self.p) > 1:
+                            self.num_labels = len(self.p)
+                        else:
+                            self.num_labels = None
+                    else:
+                        self.num_labels = None
+
+            msg = ('Number of p parameters must be the same as number'
+                   ' of labels.')
+            if self.num_labels is not None:
+                assert self.num_labels == len(self.p), msg
+            else:
+                assert isinstance(self.p, (int, float)), msg
+            self.num_edges = self.get_num_edges()
+
+        else:
+            if not hasattr(self, 'num_edges'):
+                raise ValueError('Neither p nor num_edges have been set.')
+
+            if not hasattr(self, 'num_labels'):
+                if isinstance(self.num_edges, np.ndarray):
+                    if len(self.num_edges) > 1:
+                        self.num_labels = len(self.num_edges)
+                    else:
+                        self.num_labels = None
+                else:
+                    self.num_labels = None
+
+            msg = ('Number of edges must be a vector with length equal to '
+                   'the number of labels.')
+            if self.num_labels is not None:
+                assert self.num_labels == len(self.num_edges), msg
+            else:
+                assert isinstance(self.num_edges, (int, float)), msg
+
+    def fit(self):
+        """ Fit the parameter p to the number of edges.
+        """
+        self.p = self.num_edges/(self.num_vertices*(self.num_vertices - 1))
+
+    def get_num_edges(self):
+        """ Compute the expected number of edges (per label) given p.
+        """
+        return self.p*self.num_vertices*(self.num_vertices - 1)
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'p'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        if self.num_labels is None:
+            g = DirectedGraph.__new__(DirectedGraph)
+        else:
+            g = LabelGraph.__new__(LabelGraph)
+            g.lv = LabelVertexList()
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        num_bytes = mt._get_num_bytes(self.num_vertices)
+        g.id_dtype = np.dtype('u' + str(num_bytes))
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges
+        if self.num_labels is None:
+            e = mt._random_graph(self.num_vertices, self.p)
+            e = e.view(type=np.recarray,
+                       dtype=[('src', 'u8'),
+                              ('dst', 'u8')]).reshape((e.shape[0],))
+            e = e.astype([('src', g.id_dtype), ('dst', g.id_dtype)])
+            g.sort_ind = np.argsort(e)
+            g.e = e[g.sort_ind]
+            g.num_edges = len(g.e)
+        else:
+            e = mt._random_labelgraph(self.num_vertices,
+                                      self.num_labels,
+                                      self.p)
+            e = e.view(type=np.recarray,
+                       dtype=[('label', 'u8'),
+                              ('src', 'u8'),
+                              ('dst', 'u8')]).reshape((e.shape[0],))
+            g.num_labels = self.num_labels
+            num_bytes = mt._get_num_bytes(g.num_labels)
+            g.label_dtype = np.dtype('u' + str(num_bytes))
+
+            e = e.astype([('label', g.label_dtype),
+                          ('src', g.id_dtype),
+                          ('dst', g.id_dtype)])
+            g.sort_ind = np.argsort(e)
+            g.e = e[g.sort_ind]
+            g.num_edges = len(g.e)
+            ne_label = mt._compute_num_edges_by_label(g.e, g.num_labels)
+            dtype = 'u' + str(mt._get_num_bytes(np.max(ne_label)))
+            g.num_edges_label = ne_label.astype(dtype)
+
+        return g
+
+
+class FitnessModel(GraphEnsemble):
     pass
 
 
-class StripeFitnessModel(GraphModel):
+class StripeFitnessModel(GraphEnsemble):
     """ A generalized fitness model that allows for vector strength sequences.
 
     This model allows to take into account labels of the edges and include
@@ -1020,5 +1213,5 @@ class StripeFitnessModel(GraphModel):
                                                     self.num_nodes)
 
 
-class BlockFitnessModel(GraphModel):
+class BlockFitnessModel(GraphEnsemble):
     pass

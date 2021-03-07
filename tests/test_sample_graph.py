@@ -210,14 +210,3 @@ class TestStripeFitnessModel():
         np.testing.assert_allclose(num_links,
                                    exp_num_links,
                                    rtol=1e-6)
-
-
-class TestHelper():
-    def test_random_edge_list_noself(self):
-        """ Check that the randomly generated edge list is consistent."""
-        N = 10
-        L = 50
-        W = 30
-        G = 5
-        edges = ge.helper.random_edge_list(N, L, W, G=G, self_loops=False)
-        assert np.all([i != j for (i, j) in edges[['src', 'dst']]])

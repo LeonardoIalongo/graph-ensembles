@@ -1,11 +1,15 @@
 import numpy as np
+from random import random
 from numba import jit
 from numba import prange
+from math import ceil
+from math import sqrt
 
 
+# --------------- GRAPH METHODS ---------------
 def _get_num_bytes(num_items):
     """ Determine the number of bytes needed for storing ids for num_items."""
-    return max(2**np.ceil(np.log2(np.log2(num_items + 1)/8)), 1)
+    return int(max(2**np.ceil(np.log2(np.log2(num_items + 1)/8)), 1))
 
 
 @jit(nopython=True)
@@ -331,6 +335,54 @@ def _compute_in_out_strength_by_label(e):
     return s_out, s_in, out_dict, in_dict
 
 
+# --------------- RANDOM GRAPH METHODS ---------------
+@jit(nopython=True)
+def _random_graph(n, p):
+    """ Generates a edge list given the number of vertices and the probability
+    p of observing a link.
+    """
+
+    if n > 10:
+        max_len = int(ceil(n*(n-1)*p + 3*sqrt(n*(n-1)*p*(1-p))))
+        a = np.empty((max_len, 2), dtype=np.uint64)
+    else:
+        a = np.empty((n*(n-1), 2), dtype=np.uint64)
+    count = 0
+    for i in range(n):
+        for j in range(n):
+            if random() < p:
+                a[count, 0] = i
+                a[count, 1] = j
+                count += 1
+    assert a.shape[0] > count, 'Miscalculated bounds of max successful draws.'
+    return a[0:count, :].copy()
+
+
+@jit(nopython=True)
+def _random_labelgraph(n, l, p):  # noqa: E741
+    """ Generates a edge list given the number of vertices and the probability
+    p of observing a link.
+    """
+
+    if n > 10:
+        max_len = int(np.ceil(np.sum(n*(n-1)*p + 3*np.sqrt(n*(n-1)*p*(1-p)))))
+        a = np.empty((max_len, 3), dtype=np.uint64)
+    else:
+        a = np.empty((n*(n-1)*l, 3), dtype=np.uint64)
+    count = 0
+    for i in range(l):
+        for j in range(n):
+            for k in range(n):
+                if random() < p[i]:
+                    a[count, 0] = i
+                    a[count, 1] = j
+                    a[count, 2] = k
+                    count += 1
+    assert a.shape[0] > count, 'Miscalculated bounds of max successful draws.'
+    return a[0:count, :].copy()
+
+
+# --------------- STRIPE METHODS ---------------
 # @jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the

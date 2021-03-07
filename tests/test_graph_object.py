@@ -642,7 +642,7 @@ class TestWeightedLabelGraph():
         s_test = g.out_strength_by_label(get=True)
 
         assert np.all(s_test == s_out), s_test
-        assert np.all(g.lv.out_strength == s_out), g.v.out_strength
+        assert np.all(g.lv.out_strength == s_out), g.lv.out_strength
 
     def test_in_strength_by_label(self):
         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
