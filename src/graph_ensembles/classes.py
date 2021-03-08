@@ -722,7 +722,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
 
         If get is true it returns the array. Result is added to lv.
         """
-        if not hasattr(self.lv, 'out_degree'):
+        if not hasattr(self.lv, 'out_strength'):
             s_out, s_in, sout_dict, sin_dict = \
                 mt._compute_in_out_strength_by_label(self.e)
 
@@ -802,7 +802,7 @@ class GraphEnsemble():
 
 class RandomGraph(GraphEnsemble):
     """ The simplest graph ensemble defined by conserving the total number of
-    links (per label) only. We assume the graph is directed.
+    edges (per label) only. We assume the graph is directed.
 
     If it is initialized with a LabelGraph or with a number of labels, then
     the edges will be labelled.
@@ -827,7 +827,7 @@ class RandomGraph(GraphEnsemble):
     """
 
     def __init__(self, *args, **kwargs):
-        """ Initialize a RandomGraph ensemble.
+        """ Return a RandomGraph ensemble.
         """
 
         # If an argument is passed then it must be a graph
@@ -1070,87 +1070,130 @@ class StripeFitnessModel(GraphEnsemble):
         the in strength sequence
     num_edges: int (or np.ndarray)
         the total number of edges (per label)
-    num_nodes: int
+    num_vertices: int
         the total number of nodes
     num_labels: int
         the total number of labels by which the vector strengths are computed
     z: float or np.ndarray
-        the vector of density parameters
+        the density parameter (or vector of)
     """
 
-    def __init__(self, out_strength, in_strength, num_links):
-        """ Return a VectorFitnessModel for the given marginal graph data.
+    def __init__(self, *args, **kwargs):
+        """ Return a VectorFitnessModel for the given graph data.
 
-        The model accepts the strength sequence as numpy arrays. The first
+        The model accepts as arguments either: a WeightedLabelGraph, the
+        strength sequences (in and out) and the number of edges (per label),
+        or the strength sequences and the z parameter (per label).
+
+        The model accepts the strength sequences as numpy arrays. The first
         column must contain the node index, the second column the label index
         to which the strength refers, and in the third column must have the
         value of the strength for the node label pair. All node label pairs
         not included are assumed zero.
 
-        Note that the number of links given implicitly determines if the
-        quantity preserved is the total number of links or the number of links
+        TO DO: add functionality for single z
+        (Note that the number of edges given implicitly determines if the
+        quantity preserved is the total number of edges or the number of edges
         per label. Pass only one integer for the first and a numpy array for
         the second. Note that if an array is passed then the index must be the
-        same as the one in the strength sequence.
+        same as the one in the strength sequence.)
 
-        Parameters
-        ----------
-        out_strength: np.ndarray
-            the out strength matrix of a graph
-        in_strength: np.ndarray
-            the in strength matrix of a graph
-        num_links: int (or np.ndarray)
-            the number of links in the graph (per label)
-
-        Returns
-        -------
-        StripeFitnessModel
-            the model for the given input data
         """
 
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], WeightedLabelGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges_label
+                self.num_labels = g.num_labels
+                self.out_strength = g.out_strength_by_label(get=True)
+                self.in_strength = g.in_strength_by_label(get=True)
+            else:
+                ValueError('First argument passed must be a '
+                           'WeightedLabelGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'num_labels',
+                             'out_strength', 'in_strength', 'z',
+                             'discrete_weights']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+
+        if not hasattr(self, 'num_labels'):
+            raise ValueError('Number of labels not set.')
+
+        if not hasattr(self, 'out_strength'):
+            raise ValueError('out_strength not set.')
+
+        if not hasattr(self, 'in_strength'):
+            raise ValueError('in_strength not set.')
+
+        if not (hasattr(self, 'num_edges') or
+                hasattr(self, 'z')):
+            raise ValueError('Either num_edges or z must be set.')
+
         # Ensure that strengths passed adhere to format
-        msg = 'Out strength does not have three columns.'
-        assert out_strength.shape[1] == 3, msg
-        msg = 'In strength does not have three columns.'
-        assert in_strength.shape[1] == 3, msg
+        msg = ("Out strength must be a rec array with columns: "
+               "('label', 'id', 'value')")
+        assert isinstance(self.out_strength, np.recarray), msg
+        for clm in self.out_strength.dtype.names:
+            assert clm in ('label', 'id', 'value'), msg
 
-        # Get number of nodes and labels implied by the strengths
-        num_nodes_out = np.max(out_strength[:, 0])
-        num_nodes_in = np.max(in_strength[:, 0])
-        num_nodes = int(max(num_nodes_out, num_nodes_in) + 1)
+        msg = ("In strength must be a rec array with columns: "
+               "('label', 'id', 'value')")
+        assert isinstance(self.in_strength, np.recarray), msg
+        for clm in self.in_strength.dtype.names:
+            assert clm in ('label', 'id', 'value'), msg
 
-        num_labels_out = np.max(out_strength[:, 1])
-        num_labels_in = np.max(in_strength[:, 1])
-        num_labels = int(max(num_labels_out, num_labels_in) + 1)
+        # Ensure that strengths are sorted
+        self.out_strength.sort()
+        self.in_strength.sort()
 
         # Ensure that number of constraint matches number of labels
-        if isinstance(num_links, np.ndarray):
-            msg = ('Number of links array does not have the number of'
-                   ' elements equal to the number of labels.')
-            assert len(num_links) == num_labels, msg
+        if hasattr(self, 'num_edges'):
+            if isinstance(self.num_edges, np.ndarray):
+                msg = ('Number of edges array does not have the number of'
+                       ' elements equal to the number of labels.')
+                assert len(self.num_edges) == self.num_labels, msg
+            else:
+                raise ValueError('Single number of edges not yet supported.')
         else:
-            try:
-                int(num_links)
-            except TypeError:
-                assert False, 'Number of links is not a number.'
+            if isinstance(self.z, np.ndarray):
+                msg = ('The z array does not have the number of'
+                       ' elements equal to the number of labels.')
+                assert len(self.z) == self.num_labels, msg
+            else:
+                raise ValueError('Single z not yet supported.')
 
         # Check that sum of in and out strengths are equal per label
-        tot_out = np.zeros((num_labels))
-        for row in out_strength:
-            tot_out[row[1]] += row[2]
-        tot_in = np.zeros((num_labels))
-        for row in in_strength:
-            tot_in[row[1]] += row[2]
+        tot_out = np.zeros((self.num_labels))
+        for row in self.out_strength:
+            tot_out[row[0]] += row[2]
+        tot_in = np.zeros((self.num_labels))
+        for row in self.in_strength:
+            tot_in[row[0]] += row[2]
 
         msg = 'Sum of strengths per label do not match.'
         assert np.all(tot_out == tot_in), msg
 
-        # Initialize attributes
-        self.out_strength = out_strength
-        self.in_strength = in_strength
-        self.num_links = num_links
-        self.num_nodes = num_nodes
-        self.num_labels = num_labels
+        # If z is set computed expected number of edges per label
+        if hasattr(self, 'z'):
+            self.num_edges = mt.exp_edges_stripe(self.z,
+                                                 self.out_strength,
+                                                 self.in_strength)
 
     def fit(self, method="least-squares", z0=None, tol=1e-8,
             eps=1e-14, max_steps=100, verbose=False):

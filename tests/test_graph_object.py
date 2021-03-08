@@ -593,7 +593,7 @@ class TestWeightedLabelGraph():
                      weight='value')
 
         w_by_l = np.array([1e6 + 3e3 + 1e4, 2.3e7, 7e5, 4e5], dtype='f8')
-        test = g.total_weight_by_label
+        test = g.total_weight_label
         assert np.all(test == w_by_l), test
 
     def test_strength_by_label(self):

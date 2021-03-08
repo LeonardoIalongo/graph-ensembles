@@ -1,9 +1,7 @@
 import numpy as np
 from random import random
-from numba import jit
-from numba import prange
-from math import ceil
-from math import sqrt
+from numba import jit, prange
+from math import ceil, exp, isinf, sqrt
 
 
 # --------------- GRAPH METHODS ---------------
@@ -383,6 +381,60 @@ def _random_labelgraph(n, l, p):  # noqa: E741
 
 
 # --------------- STRIPE METHODS ---------------
+@jit(nopython=True)
+def exp_edges_stripe_single_layer(z, out_strength, in_strength):
+    exp_edges = 0
+    for i in np.arange(len(out_strength)):
+        ind_out = out_strength[i].id
+        s_out = out_strength[i].value
+        for j in np.arange(len(in_strength)):
+            ind_in = in_strength[j].id
+            s_in = in_strength[j].value
+            if ind_out != ind_in:
+                tmp = exp(z)*s_out*s_in
+                if isinf(tmp):
+                    exp_edges += 1
+                else:
+                    exp_edges += tmp / (1 + tmp)
+
+    return exp_edges
+
+
+# @jit(nopython=True, parallel=True)
+def exp_edges_stripe(z, out_strength, in_strength):
+    """ Compute the expected number of edges for the stripe fitness model
+    with one parameter controlling for the density for each label.
+    """
+    exp_edges = np.zeros(len(z), dtype=np.float64)
+    num_it = max(out_strength.label.max(), in_strength.label.max()) + 1
+    for i in prange(num_it):
+        exp_edges[i] = exp_edges_stripe_single_layer(
+            z[i],
+            out_strength[out_strength.label == i][['id', 'value']],
+            in_strength[in_strength.label == i][['id', 'value']])
+    return exp_edges
+
+
+@jit(nopython=True)
+def jac_stripe_single_layer(z, out_strength, in_strength):
+    jac = 0
+    for i in np.arange(len(out_strength)):
+        ind_out = out_strength[i].id
+        s_out = out_strength[i].value
+        for j in np.arange(len(in_strength)):
+            ind_in = in_strength[j].id
+            s_in = in_strength[j].value
+            if ind_out != ind_in:
+                tmp = exp(z)*s_out*s_in
+                if isinf(tmp):
+                    jac += 0
+                else:
+                    jac += tmp / (1 + tmp)**2
+
+    return jac
+
+
+# --------------- OLD METHODS ---------------
 # @jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the
