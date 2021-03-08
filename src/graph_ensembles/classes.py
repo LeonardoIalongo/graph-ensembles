@@ -4,6 +4,7 @@ reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
 from numpy.lib.recfunctions import rec_append_fields as append_fields
+from numpy.random import default_rng
 import pandas as pd
 from scipy.optimize import least_squares
 from . import methods as mt
@@ -635,7 +636,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
 
     Attributes
     ----------
-    total_weight_by_label: numpy.array
+    total_weight_label: numpy.array
         sum of all the weights of the edges by label
 
     Methods
@@ -690,7 +691,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
         self.total_weight = np.sum(self.e.weight)
 
         # Compute total weight by label
-        self.total_weight_by_label = mt._compute_tot_weight_by_label(
+        self.total_weight_label = mt._compute_tot_weight_by_label(
             self.e, self.num_labels)
 
     def strength_by_label(self, get=False):
@@ -808,14 +809,21 @@ class RandomGraph(GraphEnsemble):
 
     Attributes
     ----------
-    num_edges: float (or np.ndarray)
-        the total number of edges (per label)
     num_vertices: int
         the total number of vertices
-    num_labels: int
+    num_labels: int or None
         the total number of labels by which the vector strengths are computed
+    num_edges: float (or np.ndarray)
+        the total number of edges (per label)
+    total_weight: float (or np.ndarray)
+        the sum of all edges weights (per label)
     p: float or np.ndarray
         the probability of each link (by label)
+    q: float or np.ndarray
+        the parameter defining the probability distribution of weights
+    discrete_weights: boolean
+        the flag determining if the distribution of weights is discrete or
+        continuous
     """
 
     def __init__(self, *args, **kwargs):
@@ -842,7 +850,8 @@ class RandomGraph(GraphEnsemble):
                 warnings.warn(msg, UserWarning)
 
         # Get options from keyword arguments
-        allowed_arguments = ['num_vertices', 'num_edges', 'num_labels', 'p']
+        allowed_arguments = ['num_vertices', 'num_edges', 'num_labels',
+                             'total_weight', 'p', 'q', 'discrete_weights']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -894,15 +903,56 @@ class RandomGraph(GraphEnsemble):
             else:
                 assert isinstance(self.num_edges, (int, float)), msg
 
+        # Check if weight information is present
+        if not hasattr(self, 'discrete_weights') and (
+         hasattr(self, 'q') or hasattr(self, 'total_weight')):
+            self.discrete_weights = False
+
+        if hasattr(self, 'total_weight'):
+            if hasattr(self, 'q'):
+                msg = 'Either total_weight or q can be set not both.'
+                raise Exception(msg)
+            else:
+                msg = ('total_weight must be a vector with length equal to '
+                       'the number of labels.')
+                if self.num_labels is not None:
+                    assert self.num_labels == len(self.total_weight), msg
+                else:
+                    assert isinstance(self.total_weight, (int, float)), msg
+
+        elif hasattr(self, 'q'):
+            msg = ('q must be a vector with length equal to '
+                   'the number of labels.')
+            if self.num_labels is not None:
+                assert self.num_labels == len(self.q), msg
+            else:
+                assert isinstance(self.q, (int, float)), msg
+
+            self.total_weight = self.get_total_weight()
+
     def fit(self):
-        """ Fit the parameter p to the number of edges.
+        """ Fit the parameter p and q to the number of edges and total weight.
         """
         self.p = self.num_edges/(self.num_vertices*(self.num_vertices - 1))
+
+        if hasattr(self, 'total_weight'):
+            if self.discrete_weights:
+                self.q = 1 - self.num_edges/self.total_weight
+            else:
+                self.q = self.num_edges/self.total_weight
 
     def get_num_edges(self):
         """ Compute the expected number of edges (per label) given p.
         """
         return self.p*self.num_vertices*(self.num_vertices - 1)
+
+    def get_total_weight(self):
+        """ Compute the expected total weight (per label) given q.
+        """
+        if self.discrete_weights:
+            return self.num_edges/(1 - self.q)
+        else:
+            return self.num_edges/self.q
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -912,9 +962,15 @@ class RandomGraph(GraphEnsemble):
 
         # Generate uninitialised graph object
         if self.num_labels is None:
-            g = DirectedGraph.__new__(DirectedGraph)
+            if hasattr(self, 'q'):
+                g = WeightedGraph.__new__(WeightedGraph)
+            else:
+                g = DirectedGraph.__new__(DirectedGraph)
         else:
-            g = LabelGraph.__new__(LabelGraph)
+            if hasattr(self, 'q'):
+                g = WeightedLabelGraph.__new__(WeightedLabelGraph)
+            else:
+                g = LabelGraph.__new__(LabelGraph)
             g.lv = LabelVertexList()
 
         # Initialise common object attributes
@@ -958,6 +1014,37 @@ class RandomGraph(GraphEnsemble):
             ne_label = mt._compute_num_edges_by_label(g.e, g.num_labels)
             dtype = 'u' + str(mt._get_num_bytes(np.max(ne_label)))
             g.num_edges_label = ne_label.astype(dtype)
+
+        # Add weights if available
+        if hasattr(self, 'q'):
+            rnd = default_rng()
+            if self.num_labels is None:
+                if self.discrete_weights:
+                    weights = rnd.geometric(1 - self.q, g.num_edges)
+                else:
+                    weights = rnd.exponential(1/self.q, g.num_edges)
+            else:
+                weights = np.empty(g.num_edges, dtype=np.float64)
+                start = 0
+                for i in range(self.num_labels):
+                    end = start + g.num_edges_label[i]
+                    if self.discrete_weights:
+                        w = rnd.geometric(1-self.q[i], g.num_edges_label[i])
+                    else:
+                        w = rnd.exponential(1/self.q[i], g.num_edges_label[i])
+
+                    weights[start:end] = w
+                    start = end
+
+            g.e = append_fields(g.e,
+                                'weight',
+                                weights)
+
+            g.total_weight = np.sum(weights)
+
+            if self.num_labels is not None:
+                g.total_weight_label = mt._compute_tot_weight_by_label(
+                    g.e, g.num_labels)
 
         return g
 
