@@ -400,7 +400,7 @@ def exp_edges_stripe_single_layer(z, out_strength, in_strength):
     return exp_edges
 
 
-# @jit(nopython=True, parallel=True)
+@jit(nopython=True, parallel=True)
 def exp_edges_stripe(z, out_strength, in_strength):
     """ Compute the expected number of edges for the stripe fitness model
     with one parameter controlling for the density for each label.
@@ -410,8 +410,8 @@ def exp_edges_stripe(z, out_strength, in_strength):
     for i in prange(num_it):
         exp_edges[i] = exp_edges_stripe_single_layer(
             z[i],
-            out_strength[out_strength.label == i][['id', 'value']],
-            in_strength[in_strength.label == i][['id', 'value']])
+            out_strength[out_strength.label == i],
+            in_strength[in_strength.label == i])
     return exp_edges
 
 
