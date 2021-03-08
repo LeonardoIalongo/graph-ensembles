@@ -322,12 +322,14 @@ def _compute_in_out_strength_by_label(e):
     for n in range(len(e)):
         tmp = (e[n].label, e[n].src)
         ind = out_dict[tmp]
-        s_out[ind, 0:2] = tmp
+        s_out[ind, 0] = e[n].label
+        s_out[ind, 1] = e[n].src
         s_out[ind, 2] += e[n].weight
 
         tmp = (e[n].label, e[n].dst)
         ind = in_dict[tmp]
-        s_in[ind, 0:2] = tmp
+        s_in[ind, 0] = e[n].label
+        s_in[ind, 1] = e[n].dst
         s_in[ind, 2] += e[n].weight
 
     return s_out, s_in, out_dict, in_dict

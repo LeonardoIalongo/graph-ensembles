@@ -32,7 +32,7 @@ setup(
     package_dir={'': 'src'},
     install_requires=["numpy>=1.20",
                       "scipy>=1.0",
-                      "numba>=0.52",
+                      "numba==0.53.rc3",
                       "pandas>=1.1"
                       ],
     extras_require={
