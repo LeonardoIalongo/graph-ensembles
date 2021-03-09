@@ -1197,150 +1197,70 @@ class StripeFitnessModel(GraphEnsemble):
 
     def fit(self, method="least-squares", z0=None, tol=1e-8,
             eps=1e-14, max_steps=100, verbose=False):
-        """ Compute the optimal z to match the given number of links.
+        """ Compute the optimal z to match the given number of edges.
 
         Parameters
         ----------
         z0: np.ndarray
             optional initial conditions for z vector
 
-        TODO: Currently implemented with general solver, consider iterative
-        approach.
         TODO: No checks on solver solution and convergence
         """
         if z0 is None:
-            if isinstance(self.num_links, np.ndarray):
+            if isinstance(self.num_edges, np.ndarray):
                 z0 = np.ones(self.num_labels)
             else:
-                z0 = 1.0
+                raise ValueError('Single z not yet supported.')
 
-        if isinstance(self.num_links, np.ndarray):
+        if isinstance(self.num_edges, np.ndarray):
             if method == "least-squares":
                 self.z = least_squares(
                     lambda x: mt.expected_links_stripe_mult_z(
                         self.out_strength,
                         self.in_strength,
-                        x) - self.num_links,
+                        x) - self.num_edges,
                     z0,
                     method='lm').x
-            
+
             elif method == "newton":
-                self.z = im.solver(z0,
-                                fun = lambda x: im.loglikelihood_prime_stripe_mult_z(x,
-                                                                    self.out_strength.astype(float),
-                                                                    self.in_strength.astype(float),
-                                                                    self.num_links),
-                                fun_jac = lambda x: im.loglikelihood_hessian_stripe_mult_z(x,
-                                                                    self.out_strength.astype(float),
-                                                                    self.in_strength.astype(float)),
-                                tol = tol,
-                                eps = eps,
-                                max_steps = max_steps,
-                                method = "newton",
-                                verbose = verbose
-                )
-            
-            elif method == "fixed-point":
-                self.z = im.solver(z0,
-                                fun = lambda x: im.iterative_stripe_mult_z(x,
-                                                            self.out_strength.astype(float),
-                                                            self.in_strength.astype(float),
-                                                            self.num_links),
-                                fun_jac = None,
-                                tol = tol,
-                                eps = eps,
-                                max_steps = max_steps,
-                                method = "fixed-point",
-                                verbose = verbose
-                )
-            
-            else:
-                raise ValueError("The selected method is not valid.")
-        else:
-            if method == "least-squares":
-                self.z = least_squares(
-                    lambda x: mt.expected_links_stripe_one_z(
-                        self.out_strength,
-                        self.in_strength,
-                        x) - self.num_links,
+                self.z = im.solver(
                     z0,
-                    method='lm').x
-            elif method == "newton":
-                self.z = im.solver(z0,
-                                fun = lambda x: im.loglikelihood_prime_stripe_one_z(x,
-                                                                    self.out_strength.astype(float),
-                                                                    self.in_strength.astype(float),
-                                                                    self.num_links),
-                                fun_jac = lambda x: im.loglikelihood_hessian_stripe_one_z(x,
-                                                                    self.out_strength.astype(float),
-                                                                    self.in_strength.astype(float)),
-                                tol = tol,
-                                eps = eps,
-                                max_steps = max_steps,
-                                method = "newton",
-                                verbose = verbose
+                    fun=lambda x: im.loglikelihood_prime_stripe_mult_z(
+                        x,
+                        self.out_strength.astype(float),
+                        self.in_strength.astype(float),
+                        self.num_edges),
+                    fun_jac=lambda x: im.loglikelihood_hessian_stripe_mult_z(
+                        x,
+                        self.out_strength.astype(float),
+                        self.in_strength.astype(float)),
+                    tol=tol,
+                    eps=eps,
+                    max_steps=max_steps,
+                    method="newton",
+                    verbose=verbose
                 )
-            
+
             elif method == "fixed-point":
-                self.z = im.solver(z0,
-                                fun = lambda x: im.iterative_stripe_one_z(x,
-                                                            self.out_strength.astype(float),
-                                                            self.in_strength.astype(float),
-                                                            self.num_links),
-                                fun_jac = None,
-                                tol = tol,
-                                eps = eps,
-                                max_steps = max_steps,
-                                method = "fixed-point",
-                                verbose = verbose
+                self.z = im.solver(
+                    z0,
+                    fun=lambda x: im.iterative_stripe_mult_z(
+                        x,
+                        self.out_strength.astype(float),
+                        self.in_strength.astype(float),
+                        self.num_edges),
+                    fun_jac=None,
+                    tol=tol,
+                    eps=eps,
+                    max_steps=max_steps,
+                    method="fixed-point",
+                    verbose=verbose
                 )
 
             else:
                 raise ValueError("The selected method is not valid.")
-
-    @property
-    def probability_array(self):
-        """ Return the probability array of the model.
-
-        The (i,j,k) element of this array is the probability of observing a
-        link of type k from node i to j.
-        """
-        if not hasattr(self, 'z'):
-            self.fit()
-
-        if isinstance(self.num_links, np.ndarray):
-            return mt.prob_array_stripe_mult_z(self.out_strength,
-                                                    self.in_strength,
-                                                    self.z,
-                                                    self.num_nodes,
-                                                    self.num_labels)
         else:
-            return mt.prob_array_stripe_one_z(self.out_strength,
-                                                   self.in_strength,
-                                                   self.z,
-                                                   self.num_nodes,
-                                                   self.num_labels)
-
-    @property
-    def probability_matrix(self):
-        """ Return the probability matrix of the model.
-
-        The (i,j) element of this matrix is the probability of observing a
-        link from node i to j of any kind.
-        """
-        if not hasattr(self, 'z'):
-            self.fit()
-
-        if isinstance(self.num_links, np.ndarray):
-            return mt.prob_matrix_stripe_mult_z(self.out_strength,
-                                                     self.in_strength,
-                                                     self.z,
-                                                     self.num_nodes)
-        else:
-            return mt.prob_matrix_stripe_one_z(self.out_strength,
-                                                    self.in_strength,
-                                                    self.z,
-                                                    self.num_nodes)
+            raise ValueError('Single z not yet supported.')
 
 
 class BlockFitnessModel(GraphEnsemble):

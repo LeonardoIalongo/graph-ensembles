@@ -24,3 +24,18 @@ start = perf_counter()
 stripe = ge.StripeFitnessModel(g)
 perf = perf_counter() - start
 print('Time for stripe init: ', perf)
+
+start = perf_counter()
+stripe.fit(method='least-squares')
+perf = perf_counter() - start
+print('Time for ls fit: ', perf)
+
+start = perf_counter()
+stripe.fit(method='newton')
+perf = perf_counter() - start
+print('Time for ls fit: ', perf)
+
+start = perf_counter()
+stripe.fit(method='fixed-point')
+perf = perf_counter() - start
+print('Time for ls fit: ', perf)
