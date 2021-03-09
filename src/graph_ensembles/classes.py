@@ -6,7 +6,6 @@ import numpy as np
 from numpy.lib.recfunctions import rec_append_fields as append_fields
 from numpy.random import default_rng
 import pandas as pd
-from scipy.optimize import least_squares
 from . import methods as mt
 import warnings
 
@@ -1194,74 +1193,90 @@ class StripeFitnessModel(GraphEnsemble):
                                                  self.out_strength,
                                                  self.in_strength)
 
-    def fit(self, method="least-squares", z0=None, tol=1e-8,
-            eps=1e-14, max_steps=100, verbose=False):
+    def fit(self, z0=None, method="newton", tol=1e-8, jac_tol=1e-6,
+            eps=1e-14, max_iter=100, verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
         ----------
-        z0: np.ndarray
-            optional initial conditions for z vector
+        z0: float or np.ndarray
+            optional initial conditions for z parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol : float
+            tolerance for the exit condition on the norm
+        eps : float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
 
-        TODO: No checks on solver solution and convergence
         """
         if z0 is None:
             if isinstance(self.num_edges, np.ndarray):
-                z0 = np.ones(self.num_labels)
+                z0 = np.zeros(self.num_labels, dtype=np.float64)
             else:
                 raise ValueError('Single z not yet supported.')
 
         if isinstance(self.num_edges, np.ndarray):
-            if method == "least-squares":
-                sol = least_squares(
-                    lambda x: mt.exp_edges_stripe(
-                        x,
-                        self.out_strength,
-                        self.in_strength,
-                        ) - self.num_edges,
-                    z0,
-                    method='lm')
-                self.z = sol.x
+            z = np.empty(self.num_labels, dtype=np.float64)
+            for i in range(self.num_labels):
+                s_out = self.out_strength[self.out_strength.label == i]
+                s_in = self.in_strength[self.in_strength.label == i]
+                x0 = z0[i]
+                num_e = self.num_edges[i]
 
-            elif method == "newton":
-                self.z = mt.solver(
-                    z0,
-                    fun=lambda x: mt.loglikelihood_prime_stripe_mult_z(
-                        x,
-                        self.out_strength,
-                        self.in_strength,
-                        self.num_edges),
-                    fun_jac=lambda x: mt.loglikelihood_hessian_stripe_mult_z(
-                        x,
-                        self.out_strength,
-                        self.in_strength),
-                    tol=tol,
-                    eps=eps,
-                    max_steps=max_steps,
-                    method="newton",
-                    verbose=verbose
-                )
+                if method == "newton":
+                    z[i] = mt.solver(
+                        x0,
+                        fun=lambda x: mt.exp_edges_stripe_single_layer(
+                            x, s_out, s_in) - num_e,
+                        fun_jac=lambda x:
+                        mt.jac_stripe_single_layer(x, s_out, s_in),
+                        tol=tol,
+                        jac_tol=jac_tol,
+                        eps=eps,
+                        max_iter=max_iter,
+                        method="newton",
+                        verbose=verbose
+                    )
 
-            elif method == "fixed-point":
-                self.z = mt.solver(
-                    z0,
-                    fun=lambda x: mt.iterative_stripe_mult_z(
-                        x,
-                        self.out_strength,
-                        self.in_strength,
-                        self.num_edges),
-                    fun_jac=None,
-                    tol=tol,
-                    eps=eps,
-                    max_steps=max_steps,
-                    method="fixed-point",
-                    verbose=verbose
-                )
+                elif method == "fixed-point":
+                    z[i] = mt.solver(
+                        x0,
+                        fun=lambda x: mt.iterative_stripe_mult_z(
+                            x,
+                            s_out,
+                            s_in,
+                            num_e),
+                        fun_jac=None,
+                        tol=tol,
+                        jac_tol=jac_tol,
+                        eps=eps,
+                        max_iter=max_iter,
+                        method="fixed-point",
+                        verbose=verbose
+                    )
 
-            else:
-                raise ValueError("The selected method is not valid.")
+                else:
+                    raise ValueError("The selected method is not valid.")
+
+            # Collate results
+            self.z = z
         else:
             raise ValueError('Single z not yet supported.')
+
+    def expected_num_edges(self):
+        """ Compute the expected number of edges (per label).
+        """
+        if hasattr(self, 'z'):
+            return mt.exp_edges_stripe(self.z,
+                                       self.out_strength,
+                                       self.in_strength)
+        else:
+            raise Exception('Model must be fitted before hand.')
 
 
 class BlockFitnessModel(GraphEnsemble):

@@ -106,6 +106,238 @@ def jac_stripe_single_layer(z, out_strength, in_strength):
 
 
 # --------------- OLD METHODS ---------------
+
+@jit(nopython=True)
+def iterative_stripe_one_z(z, out_str, in_str, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CSM-I model
+    """
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        s_out = out_str[i, 2]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            s_in = in_str[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                aux2 = s_out*s_in
+                aux1 += aux2/(1+z*aux2)
+    aux_z = L/aux1
+    return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_prime_stripe_one_z(z, out_str, in_str, L):
+    """
+    first derivative of the loglikelihood function
+    of the CSM-I model
+    """
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        s_out = out_str[i, 2]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            s_in = in_str[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                aux2 = z*s_out*s_in
+                aux1 += aux2/(1+aux2)
+    aux_z = L - aux1
+    return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_hessian_stripe_one_z(z, out_str, in_str):
+    """
+    second derivative of the loglikelihood function
+    of the CSM-I model
+    """
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        s_out = out_str[i, 2]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            s_in = in_str[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                aux2 = s_out*s_in
+                aux1 -= aux2 / (1 + z*aux2)**2
+    return aux1
+
+
+@jit(nopython=True)
+def iterative_block_one_z(z, out_str, in_str, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CBM-I model
+    """
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        sect_node_i = int(out_str[i, 2])
+        s_out = out_str[i, 3]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            sect_node_j = int(in_str[j, 2])
+            s_in = in_str[j, 3]
+            if (ind_out != ind_in) & (sect_out == sect_node_j) & (
+                 sect_in == sect_node_i):
+                aux2 = s_out*s_in
+                aux1 += aux2/(1+z*aux2)
+    aux_z = L/aux1
+    return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_prime_block_one_z(z, out_str, in_str, L):
+    """
+    first derivative of the loglikelihood function
+    of the CBM-I model
+    """
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        sect_node_i = int(out_str[i, 2])
+        s_out = out_str[i, 3]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            sect_node_j = int(in_str[j, 2])
+            s_in = in_str[j, 3]
+            if (ind_out != ind_in) & (sect_out == sect_node_j) & (
+                 sect_in == sect_node_i):
+                aux2 = z*s_out*s_in
+                aux1 += aux2/(1+aux2)
+    aux_z = L - aux1
+    return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_hessian_block_one_z(z, out_str, in_str):
+    """
+    second derivative of the loglikelihood function
+    of the CBM-I model
+    """
+    aux1 = 0.0
+    for i in np.arange(out_str.shape[0]):
+        ind_out = int(out_str[i, 0])
+        sect_out = int(out_str[i, 1])
+        sect_node_i = int(out_str[i, 2])
+        s_out = out_str[i, 3]
+        for j in np.arange(in_str.shape[0]):
+            ind_in = int(in_str[j, 0])
+            sect_in = int(in_str[j, 1])
+            sect_node_j = int(in_str[j, 2])
+            s_in = in_str[j, 3]
+            if (ind_out != ind_in) & (sect_out == sect_node_j) & (
+                 sect_in == sect_node_i):
+                aux2 = s_out*s_in
+                aux1 -= aux2 / (1 + z*aux2)**2
+    return aux1
+
+
+@jit(nopython=True)
+def iterative_stripe_mult_z(z, out_strength, in_strength, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CSM-II model
+    """
+    aux1 = np.zeros(len(z))
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i, 0])
+        sect_out = int(out_strength[i, 1])
+        s_out = out_strength[i, 2]
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = int(in_strength[j, 0])
+            sect_in = int(in_strength[j, 1])
+            s_in = in_strength[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                aux2 = s_out*s_in
+                aux1[sect_out] += aux2/(1+z[sect_out]*aux2)
+    aux_z = np.zeros(len(z))
+    for i in np.arange(aux1.shape[0]):
+        if L[i]:
+            aux_z[i] = L[i]/aux1[i]
+    return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_prime_stripe_mult_z(z, out_strength, in_strength, L):
+    """
+    Function computing the first derivative of the
+    loglikelihood function for the CSM-II model
+    """
+    aux_1 = np.zeros(L.shape[0])
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i, 0])
+        sect_out = int(out_strength[i, 1])
+        s_out = out_strength[i, 2]
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = int(in_strength[j, 0])
+            sect_in = int(in_strength[j, 1])
+            s_in = in_strength[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                aux2 = z[sect_out]*s_out*s_in
+                aux_1[sect_out] += aux2/(1+aux2)
+    aux_z = L - aux_1
+    return aux_z
+
+
+@jit(nopython=True)
+def loglikelihood_hessian_stripe_mult_z(z, out_strength, in_strength):
+    """
+    Function computing the second derivative of the
+    loglikelihood function for the CSM-II model
+    """
+    aux_1 = np.zeros(len(z))
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i, 0])
+        sect_out = int(out_strength[i, 1])
+        s_out = out_strength[i, 2]
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = int(in_strength[j, 0])
+            sect_in = int(in_strength[j, 1])
+            s_in = in_strength[j, 2]
+            if (ind_out != ind_in) & (sect_out == sect_in):
+                aux2 = s_out*s_in
+                aux_1[sect_out] -= aux2/((1+z[sect_out] * aux2)**2)
+    return aux_1
+
+
+@jit(nopython=True)
+def iterative_block_mult_z(z, out_strength, in_strength, L):
+    """
+    function computing the next iteration with
+    the fixed point method for CBM-II model
+    """
+    n_sector = int(np.sqrt(max(z.shape)))
+    aux1 = np.zeros(shape=(n_sector, n_sector), dtype=np.float)
+    z = np.reshape(z, newshape=(n_sector, n_sector))
+    for i in np.arange(out_strength.shape[0]):
+        ind_out = int(out_strength[i, 0])
+        sect_out = int(out_strength[i, 1])
+        s_out = out_strength[i, 2]
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = int(in_strength[j, 0])
+            sect_in = int(in_strength[j, 1])
+            s_in = in_strength[j, 2]
+            if (ind_out != ind_in):
+                aux2 = s_out * s_in
+                aux1[sect_out, sect_in] += aux2/(1+z[sect_out, sect_in]*aux2)
+    aux_z = L/aux1
+    return aux_z
+
+
 # @jit(nopython=True, parallel=True)
 def prob_matrix_stripe_one_z(out_strength, in_strength, z, N):
     """ Compute the probability matrix of the stripe fitness model given the
@@ -367,7 +599,7 @@ def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
                 sect_in = int(in_strength[j, 2])
                 s_in = in_strength[j, 3]
                 if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-                    (sect_in == sect_node_i)):
+                   (sect_in == sect_node_i)):
                     tot_w = strengths_block[sect_node_i, sect_node_j]
                     tmp = s_out*s_in
                     W[ind_out, ind_in] = (tmp)/(tot_w)
@@ -383,7 +615,7 @@ def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
                 sect_in = int(in_strength[j, 2])
                 s_in = in_strength[j, 3]
                 if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-                    (sect_in == sect_node_i)):
+                   (sect_in == sect_node_i)):
                     if p[ind_out, ind_in] > np.random.random():
                         tot_w = strengths_block[sect_out, sect_in]
                         tmp = s_out*s_in
