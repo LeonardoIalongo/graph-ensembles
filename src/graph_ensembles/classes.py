@@ -8,7 +8,6 @@ from numpy.random import default_rng
 import pandas as pd
 from scipy.optimize import least_squares
 from . import methods as mt
-from . import iterative_models as im
 import warnings
 
 
@@ -125,14 +124,14 @@ class sGraph():
         # Determine size of indices
         self.num_vertices = len(v.index)
         self.num_edges = len(e.index)
-        num_bytes = mt._get_num_bytes(self.num_vertices)
+        num_bytes = mt.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
         self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
             type=np.recarray, dtype=[('id', self.id_dtype)])
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict = mt._generate_id_dict(v, v_id)
+        self.id_dict = mt.generate_id_dict(v, v_id)
 
         # Check that no vertex id in e is not present in v
         # and generate optimized edge list
@@ -181,8 +180,8 @@ class sGraph():
         if 'degree' in self.v.dtype.names:
             degree = self.v.degree
         else:
-            degree = mt._compute_degree(self.e, self.num_vertices)
-            dtype = 'u' + str(mt._get_num_bytes(np.max(degree)))
+            degree = mt.compute_degree(self.e, self.num_vertices)
+            dtype = 'u' + str(mt.get_num_bytes(np.max(degree)))
             self.v = append_fields(self.v, 'degree', degree.astype(dtype),
                                    dtypes=dtype)
 
@@ -234,7 +233,7 @@ class DirectedGraph(sGraph):
         self.e = self.e[self.sort_ind]
 
         # Check that there are no repeated pair in the edge list
-        mt._check_unique_edges(self.e)
+        mt.check_unique_edges(self.e)
 
         # Compute degree (undirected)
         self.degree()
@@ -260,10 +259,10 @@ class DirectedGraph(sGraph):
         if 'out_degree' in self.v.dtype.names:
             d_out = self.v.out_degree
         else:
-            d_out, d_in = mt._compute_in_out_degree(self.e,
-                                                    self.num_vertices)
-            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
-                                                    np.max(d_in))))
+            d_out, d_in = mt.compute_in_out_degree(self.e,
+                                                   self.num_vertices)
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
+                                                   np.max(d_in))))
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
                                    (d_out.astype(dtype), d_in.astype(dtype)),
@@ -280,10 +279,10 @@ class DirectedGraph(sGraph):
         if 'in_degree' in self.v.dtype.names:
             d_in = self.v.in_degree
         else:
-            d_out, d_in = mt._compute_in_out_degree(self.e,
-                                                    self.num_vertices)
-            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
-                                                    np.max(d_in))))
+            d_out, d_in = mt.compute_in_out_degree(self.e,
+                                                   self.num_vertices)
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
+                                                   np.max(d_in))))
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
                                    (d_out.astype(dtype), d_in.astype(dtype)),
@@ -357,7 +356,7 @@ class WeightedGraph(DirectedGraph):
         if 'strength' in self.v.dtype.names:
             strength = self.v.strength
         else:
-            strength = mt._compute_strength(self.e, self.num_vertices)
+            strength = mt.compute_strength(self.e, self.num_vertices)
             self.v = append_fields(self.v, 'strength', strength,
                                    dtypes=np.float64)
 
@@ -372,8 +371,8 @@ class WeightedGraph(DirectedGraph):
         if 'out_strength' in self.v.dtype.names:
             s_out = self.v.out_strength
         else:
-            s_out, s_in = mt._compute_in_out_strength(self.e,
-                                                      self.num_vertices)
+            s_out, s_in = mt.compute_in_out_strength(self.e,
+                                                     self.num_vertices)
             self.v = append_fields(self.v,
                                    ['out_strength', 'in_strength'],
                                    (s_out, s_in),
@@ -390,8 +389,8 @@ class WeightedGraph(DirectedGraph):
         if 'in_strength' in self.v.dtype.names:
             s_in = self.v.in_strength
         else:
-            s_out, s_in = mt._compute_in_out_strength(self.e,
-                                                      self.num_vertices)
+            s_out, s_in = mt.compute_in_out_strength(self.e,
+                                                     self.num_vertices)
 
             self.v = append_fields(self.v,
                                    ['out_strength', 'in_strength'],
@@ -463,9 +462,9 @@ class LabelGraph(sGraph):
         super().__init__(v, e, v_id=v_id, src=src, dst=dst)
 
         # Get dictionary of label to numeric internal label
-        self.label_dict = mt._generate_label_dict(e, edge_label)
+        self.label_dict = mt.generate_label_dict(e, edge_label)
         self.num_labels = len(self.label_dict)
-        num_bytes = mt._get_num_bytes(self.num_labels)
+        num_bytes = mt.get_num_bytes(self.num_labels)
         self.label_dtype = np.dtype('u' + str(num_bytes))
 
         # Convert labels
@@ -494,11 +493,11 @@ class LabelGraph(sGraph):
         self.e = self.e[self.sort_ind]
 
         # Check that there are no repeated pair in the edge list
-        mt._check_unique_labelled_edges(self.e)
+        mt.check_unique_labelled_edges(self.e)
 
         # Compute number of edges by label
-        ne_label = mt._compute_num_edges_by_label(self.e, self.num_labels)
-        dtype = 'u' + str(mt._get_num_bytes(np.max(ne_label)))
+        ne_label = mt.compute_num_edges_by_label(self.e, self.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
         self.num_edges_label = ne_label.astype(dtype)
 
         # Compute degree (undirected)
@@ -528,10 +527,10 @@ class LabelGraph(sGraph):
         if 'out_degree' in self.v.dtype.names:
             d_out = self.v.out_degree
         else:
-            d_out, d_in = mt._compute_in_out_degree_labelled(
+            d_out, d_in = mt.compute_in_out_degree_labelled(
                 self.e, self.num_vertices)
-            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
-                                                    np.max(d_in))))
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
+                                                   np.max(d_in))))
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
                                    (d_out.astype(dtype), d_in.astype(dtype)),
@@ -548,10 +547,10 @@ class LabelGraph(sGraph):
         if 'in_degree' in self.v.dtype.names:
             d_in = self.v.in_degree
         else:
-            d_out, d_in = mt._compute_in_out_degree_labelled(
+            d_out, d_in = mt.compute_in_out_degree_labelled(
                 self.e, self.num_vertices)
-            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out),
-                                                    np.max(d_in))))
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
+                                                   np.max(d_in))))
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
                                    (d_out.astype(dtype), d_in.astype(dtype)),
@@ -566,8 +565,8 @@ class LabelGraph(sGraph):
         If get is true it returns the array. Result is added to lv.
         """
         if not hasattr(self.lv, 'degree'):
-            d, d_dict = mt._compute_degree_by_label(self.e)
-            dtype = 'u' + str(mt._get_num_bytes(np.max(d[:, 2])))
+            d, d_dict = mt.compute_degree_by_label(self.e)
+            dtype = 'u' + str(mt.get_num_bytes(np.max(d[:, 2])))
             self.lv.degree = d.view(
                 type=np.recarray,
                 dtype=[('label', 'u8'), ('id', 'u8'), ('value', 'u8')]
@@ -590,10 +589,10 @@ class LabelGraph(sGraph):
         """
         if not hasattr(self.lv, 'out_degree'):
             d_out, d_in, dout_dict, din_dict = \
-                mt._compute_in_out_degree_by_label(self.e)
+                mt.compute_in_out_degree_by_label(self.e)
 
-            dtype = 'u' + str(mt._get_num_bytes(max(np.max(d_out[:, 2]),
-                                                    np.max(d_in[:, 2]))))
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out[:, 2]),
+                                                   np.max(d_in[:, 2]))))
             self.lv.out_degree = d_out.view(
                 type=np.recarray,
                 dtype=[('label', 'u8'), ('id', 'u8'), ('value', 'u8')]
@@ -691,7 +690,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
         self.total_weight = np.sum(self.e.weight)
 
         # Compute total weight by label
-        self.total_weight_label = mt._compute_tot_weight_by_label(
+        self.total_weight_label = mt.compute_tot_weight_by_label(
             self.e, self.num_labels)
 
     def strength_by_label(self, get=False):
@@ -700,7 +699,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
         If get is true it returns the array. Result is added to lv.
         """
         if not hasattr(self.lv, 'strength'):
-            s, s_dict = mt._compute_strength_by_label(self.e)
+            s, s_dict = mt.compute_strength_by_label(self.e)
 
             self.lv.strength = s.view(
                 type=np.recarray,
@@ -724,7 +723,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
         """
         if not hasattr(self.lv, 'out_strength'):
             s_out, s_in, sout_dict, sin_dict = \
-                mt._compute_in_out_strength_by_label(self.e)
+                mt.compute_in_out_strength_by_label(self.e)
 
             self.lv.out_strength = s_out.view(
                 type=np.recarray,
@@ -975,7 +974,7 @@ class RandomGraph(GraphEnsemble):
 
         # Initialise common object attributes
         g.num_vertices = self.num_vertices
-        num_bytes = mt._get_num_bytes(self.num_vertices)
+        num_bytes = mt.get_num_bytes(self.num_vertices)
         g.id_dtype = np.dtype('u' + str(num_bytes))
         g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
             type=np.recarray, dtype=[('id', g.id_dtype)])
@@ -985,7 +984,7 @@ class RandomGraph(GraphEnsemble):
 
         # Sample edges
         if self.num_labels is None:
-            e = mt._random_graph(self.num_vertices, self.p)
+            e = mt.random_graph(self.num_vertices, self.p)
             e = e.view(type=np.recarray,
                        dtype=[('src', 'u8'),
                               ('dst', 'u8')]).reshape((e.shape[0],))
@@ -994,15 +993,15 @@ class RandomGraph(GraphEnsemble):
             g.e = e[g.sort_ind]
             g.num_edges = len(g.e)
         else:
-            e = mt._random_labelgraph(self.num_vertices,
-                                      self.num_labels,
-                                      self.p)
+            e = mt.random_labelgraph(self.num_vertices,
+                                     self.num_labels,
+                                     self.p)
             e = e.view(type=np.recarray,
                        dtype=[('label', 'u8'),
                               ('src', 'u8'),
                               ('dst', 'u8')]).reshape((e.shape[0],))
             g.num_labels = self.num_labels
-            num_bytes = mt._get_num_bytes(g.num_labels)
+            num_bytes = mt.get_num_bytes(g.num_labels)
             g.label_dtype = np.dtype('u' + str(num_bytes))
 
             e = e.astype([('label', g.label_dtype),
@@ -1011,8 +1010,8 @@ class RandomGraph(GraphEnsemble):
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
             g.num_edges = len(g.e)
-            ne_label = mt._compute_num_edges_by_label(g.e, g.num_labels)
-            dtype = 'u' + str(mt._get_num_bytes(np.max(ne_label)))
+            ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+            dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
             g.num_edges_label = ne_label.astype(dtype)
 
         # Add weights if available
@@ -1043,7 +1042,7 @@ class RandomGraph(GraphEnsemble):
             g.total_weight = np.sum(weights)
 
             if self.num_labels is not None:
-                g.total_weight_label = mt._compute_tot_weight_by_label(
+                g.total_weight_label = mt.compute_tot_weight_by_label(
                     g.e, g.num_labels)
 
         return g
@@ -1214,26 +1213,28 @@ class StripeFitnessModel(GraphEnsemble):
 
         if isinstance(self.num_edges, np.ndarray):
             if method == "least-squares":
-                self.z = least_squares(
-                    lambda x: mt.expected_links_stripe_mult_z(
+                sol = least_squares(
+                    lambda x: mt.exp_edges_stripe(
+                        x,
                         self.out_strength,
                         self.in_strength,
-                        x) - self.num_edges,
+                        ) - self.num_edges,
                     z0,
-                    method='lm').x
+                    method='lm')
+                self.z = sol.x
 
             elif method == "newton":
-                self.z = im.solver(
+                self.z = mt.solver(
                     z0,
-                    fun=lambda x: im.loglikelihood_prime_stripe_mult_z(
+                    fun=lambda x: mt.loglikelihood_prime_stripe_mult_z(
                         x,
-                        self.out_strength.astype(float),
-                        self.in_strength.astype(float),
+                        self.out_strength,
+                        self.in_strength,
                         self.num_edges),
-                    fun_jac=lambda x: im.loglikelihood_hessian_stripe_mult_z(
+                    fun_jac=lambda x: mt.loglikelihood_hessian_stripe_mult_z(
                         x,
-                        self.out_strength.astype(float),
-                        self.in_strength.astype(float)),
+                        self.out_strength,
+                        self.in_strength),
                     tol=tol,
                     eps=eps,
                     max_steps=max_steps,
@@ -1242,12 +1243,12 @@ class StripeFitnessModel(GraphEnsemble):
                 )
 
             elif method == "fixed-point":
-                self.z = im.solver(
+                self.z = mt.solver(
                     z0,
-                    fun=lambda x: im.iterative_stripe_mult_z(
+                    fun=lambda x: mt.iterative_stripe_mult_z(
                         x,
-                        self.out_strength.astype(float),
-                        self.in_strength.astype(float),
+                        self.out_strength,
+                        self.in_strength,
                         self.num_edges),
                     fun_jac=None,
                     tol=tol,
