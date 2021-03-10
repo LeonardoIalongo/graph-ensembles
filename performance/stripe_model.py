@@ -4,6 +4,7 @@ from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
 
+
 N = int(1e3)
 L = np.array([10, 35, 89, 12], dtype=np.uint64)
 W = np.array([98, 25342, 1543, 532], dtype=np.float64)
@@ -26,11 +27,11 @@ perf = perf_counter() - start
 print('Time for stripe init: ', perf)
 
 start = perf_counter()
-stripe.fit(method='newton', verbose=True, max_iter=10)
+stripe.fit(method='newton')
 perf = perf_counter() - start
 print('Time for newton fit: ', perf)
 
-print(stripe.expected_num_edges())
+# print(stripe.expected_num_edges() - stripe.num_edges)
 
 # start = perf_counter()
 # stripe.fit(method='fixed-point')

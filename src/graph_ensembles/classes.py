@@ -1191,9 +1191,10 @@ class StripeFitnessModel(GraphEnsemble):
         if hasattr(self, 'z'):
             self.num_edges = mt.exp_edges_stripe(self.z,
                                                  self.out_strength,
-                                                 self.in_strength)
+                                                 self.in_strength,
+                                                 self.num_labels)
 
-    def fit(self, z0=None, method="newton", tol=1e-8, jac_tol=1e-6,
+    def fit(self, z0=None, method="newton", tol=1e-8,
             eps=1e-14, max_iter=100, verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
@@ -1236,7 +1237,6 @@ class StripeFitnessModel(GraphEnsemble):
                         fun_jac=lambda x:
                         mt.jac_stripe_single_layer(x, s_out, s_in),
                         tol=tol,
-                        jac_tol=jac_tol,
                         eps=eps,
                         max_iter=max_iter,
                         method="newton",
@@ -1253,7 +1253,6 @@ class StripeFitnessModel(GraphEnsemble):
                             num_e),
                         fun_jac=None,
                         tol=tol,
-                        jac_tol=jac_tol,
                         eps=eps,
                         max_iter=max_iter,
                         method="fixed-point",
@@ -1274,9 +1273,13 @@ class StripeFitnessModel(GraphEnsemble):
         if hasattr(self, 'z'):
             return mt.exp_edges_stripe(self.z,
                                        self.out_strength,
-                                       self.in_strength)
+                                       self.in_strength,
+                                       self.num_labels)
         else:
             raise Exception('Model must be fitted before hand.')
+
+    def sample(self):
+        pass
 
 
 class BlockFitnessModel(GraphEnsemble):
