@@ -6,7 +6,7 @@ import numpy as np
 
 
 N = int(1e3)
-L = np.array([9.3e5, 35, 89, 12], dtype=np.uint64)
+L = np.array([9.9e4, 35, 89, 12], dtype=np.uint64)
 W = np.array([9.3e6, 25342, 1543, 532], dtype=np.float64)
 
 start = perf_counter()

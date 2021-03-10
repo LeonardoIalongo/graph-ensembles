@@ -10,24 +10,26 @@ def random_graph(n, p):
     """ Generates a edge list given the number of vertices and the probability
     p of observing a link.
     """
-
     if n > 10:
         if p > 0.95:
             a = np.empty((n*(n-1), 2), dtype=np.uint64)
         else:
-            max_len = int(ceil(n*(n-1)*p + 3*sqrt(n*(n-1)*p*(1-p))))
+            max_len = int(ceil(n*(n-1)*p + 4*sqrt(n*(n-1)*p*(1-p))))
             a = np.empty((max_len, 2), dtype=np.uint64)
     else:
         a = np.empty((n*(n-1), 2), dtype=np.uint64)
 
     count = 0
+    msg = 'Miscalculated bounds of max successful draws.'
     for i in range(n):
         for j in range(n):
-            if random() < p:
-                a[count, 0] = i
-                a[count, 1] = j
-                count += 1
-    assert a.shape[0] > count, 'Miscalculated bounds of max successful draws.'
+            if i != j:
+                if random() < p:
+                    assert count < max_len, msg
+                    a[count, 0] = i
+                    a[count, 1] = j
+                    count += 1
+
     return a[0:count, :].copy()
 
 
@@ -37,23 +39,27 @@ def random_labelgraph(n, l, p):  # noqa: E741
     p of observing a link.
     """
     if n > 10:
-        p[p > 0.95] = 1
+        p_aux = p.copy()
+        p_aux[p_aux > 0.95] = 1
         max_len = int(np.ceil(np.sum(
-            n*(n-1)*p + 3*np.sqrt(n*(n-1)*p*(1-p)))))
+            n*(n-1)*p_aux + 4*np.sqrt(n*(n-1)*p_aux*(1-p_aux)))))
         a = np.empty((max_len, 3), dtype=np.uint64)
     else:
         a = np.empty((n*(n-1)*l, 3), dtype=np.uint64)
 
     count = 0
+    msg = 'Miscalculated bounds of max successful draws.'
     for i in range(l):
         for j in range(n):
             for k in range(n):
-                if random() < p[i]:
-                    a[count, 0] = i
-                    a[count, 1] = j
-                    a[count, 2] = k
-                    count += 1
-    assert a.shape[0] > count, 'Miscalculated bounds of max successful draws.'
+                if j != k:
+                    if random() < p[i]:
+                        assert count < max_len, msg
+                        a[count, 0] = i
+                        a[count, 1] = j
+                        a[count, 2] = k
+                        count += 1
+
     return a[0:count, :].copy()
 
 

@@ -891,6 +891,7 @@ class RandomGraph(GraphEnsemble):
                         self.num_labels = len(self.num_edges)
                     else:
                         self.num_labels = None
+                        self.num_edges = self.num_edges[0]
                 else:
                     self.num_labels = None
 
@@ -899,7 +900,10 @@ class RandomGraph(GraphEnsemble):
             if self.num_labels is not None:
                 assert self.num_labels == len(self.num_edges), msg
             else:
-                assert isinstance(self.num_edges, (int, float)), msg
+                try:
+                    int(self.num_edges)
+                except Exception:
+                    assert False, msg
 
         # Check if weight information is present
         if not hasattr(self, 'discrete_weights') and (
@@ -916,7 +920,10 @@ class RandomGraph(GraphEnsemble):
                 if self.num_labels is not None:
                     assert self.num_labels == len(self.total_weight), msg
                 else:
-                    assert isinstance(self.total_weight, (int, float)), msg
+                    try:
+                        int(self.num_edges)
+                    except Exception:
+                        assert False, msg
 
         elif hasattr(self, 'q'):
             msg = ('q must be a vector with length equal to '
@@ -924,7 +931,10 @@ class RandomGraph(GraphEnsemble):
             if self.num_labels is not None:
                 assert self.num_labels == len(self.q), msg
             else:
-                assert isinstance(self.q, (int, float)), msg
+                try:
+                    int(self.q)
+                except Exception:
+                    assert False, msg
 
             self.total_weight = self.get_total_weight()
 
@@ -1108,8 +1118,8 @@ class StripeFitnessModel(GraphEnsemble):
                 self.out_strength = g.out_strength_by_label(get=True)
                 self.in_strength = g.in_strength_by_label(get=True)
             else:
-                ValueError('First argument passed must be a '
-                           'WeightedLabelGraph.')
+                raise ValueError('First argument passed must be a '
+                                 'WeightedLabelGraph.')
 
             if len(args) > 1:
                 msg = ('Unnamed arguments other than the Graph have been '
@@ -1269,16 +1279,19 @@ class StripeFitnessModel(GraphEnsemble):
 
                 if not sol.converged:
                     self.solver_output[i] = sol
+                    mod = sol.norm_seq[-1]
                     if sol.max_iter_reached:
                         msg = ('Fit of layer {} '.format(i) + 'did not '
                                'converge: \n solver stopped because it '
-                               'reached the max number of iterations.')
+                               'reached the max number of iterations. \n'
+                               'Final distance from root = {}'.format(mod))
                         warnings.warn(msg, UserWarning)
                     elif sol.no_change_stop:
                         msg = ('Fit of layer {} '.format(i) + 'did not '
                                'converge: \n solver stopped because the '
                                'update of x was smaller than the '
-                               ' tolerance.')
+                               ' tolerance. \n Final distance from'
+                               ' root = {}'.format(mod))
                         warnings.warn(msg, UserWarning)
                     else:
                         raise Exception('Unclear stopping condition.')
