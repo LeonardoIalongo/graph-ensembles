@@ -73,7 +73,7 @@ def solver(x0,
             dx = f - x
 
         # Line search
-        alpha = linesearch(x, dx, f, f_p)
+        # alpha = linesearch(x, dx, f, f_p)
 
         # Update values
         x = x + alpha * dx
@@ -93,7 +93,8 @@ def solver(x0,
         if verbose:
             print("    Iteration {}".format(n_iter))
             print("    fun = {}".format(f))
-            print("    fun_prime = {}".format(f_p))
+            if method == 'newton':
+                print("    fun_prime = {}".format(f_p))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
             print("    alpha = {}".format(alpha))

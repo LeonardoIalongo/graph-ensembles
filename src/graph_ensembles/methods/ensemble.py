@@ -54,6 +54,9 @@ def random_labelgraph(n, l, p):  # noqa: E741
 # --------------- STRIPE METHODS ---------------
 @jit(nopython=True)
 def exp_edges_stripe_single_layer(z, out_strength, in_strength):
+    """ Compute the expected number of edges for a single label of the stripe
+    model.
+    """
     exp_edges = 0
     for i in np.arange(len(out_strength)):
         ind_out = out_strength[i].id
@@ -87,6 +90,9 @@ def exp_edges_stripe(z, out_strength, in_strength, num_labels):
 
 @jit(nopython=True)
 def jac_stripe_single_layer(z, out_strength, in_strength):
+    """ Compute the derivative of the expected number of edges for a single
+    label of the stripe model.
+    """
     jac = 0
     for i in np.arange(len(out_strength)):
         ind_out = out_strength[i].id
@@ -102,6 +108,29 @@ def jac_stripe_single_layer(z, out_strength, in_strength):
                     jac += tmp / (1 + tmp)**2
 
     return jac
+
+
+@jit(nopython=True)
+def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
+    """ Compute the next iteration of the fixed point method for a single
+    label of the stripe model.
+    """
+    aux = 0
+    for i in np.arange(len(out_strength)):
+        ind_out = out_strength[i].id
+        s_out = out_strength[i].value
+        for j in np.arange(in_strength.shape[0]):
+            ind_in = in_strength[j].id
+            s_in = in_strength[j].value
+            if ind_out != ind_in:
+                tmp1 = s_out*s_in
+                tmp = exp(z)*s_out*s_in
+                if isinf(tmp):
+                    aux += 0
+                else:
+                    aux += tmp1 / (1 + tmp)
+
+    return n_edges/aux
 
 
 # --------------- OLD METHODS ---------------
@@ -243,31 +272,6 @@ def loglikelihood_hessian_block_one_z(z, out_str, in_str):
                 aux2 = s_out*s_in
                 aux1 -= aux2 / (1 + z*aux2)**2
     return aux1
-
-
-@jit(nopython=True)
-def iterative_stripe_mult_z(z, out_strength, in_strength, L):
-    """
-    function computing the next iteration with
-    the fixed point method for CSM-II model
-    """
-    aux1 = np.zeros(len(z))
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_out = int(out_strength[i, 1])
-        s_out = out_strength[i, 2]
-        for j in np.arange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_in = int(in_strength[j, 1])
-            s_in = in_strength[j, 2]
-            if (ind_out != ind_in) & (sect_out == sect_in):
-                aux2 = s_out*s_in
-                aux1[sect_out] += aux2/(1+z[sect_out]*aux2)
-    aux_z = np.zeros(len(z))
-    for i in np.arange(aux1.shape[0]):
-        if L[i]:
-            aux_z[i] = L[i]/aux1[i]
-    return aux_z
 
 
 @jit(nopython=True)

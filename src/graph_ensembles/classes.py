@@ -1246,7 +1246,7 @@ class StripeFitnessModel(GraphEnsemble):
                 elif method == "fixed-point":
                     z[i] = mt.solver(
                         x0,
-                        fun=lambda x: mt.iterative_stripe_mult_z(
+                        fun=lambda x: mt.iterative_stripe_single_layer(
                             x,
                             s_out,
                             s_in,
