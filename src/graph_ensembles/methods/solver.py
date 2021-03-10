@@ -1,15 +1,46 @@
 import numpy as np
 
 
-def linesearch(x, dx, f, f_p):
-    return 1
+class Solution():
+    """ Solution of solver function.
+
+    It allows to more easily determine why the solver has stopped.
+    """
+    def __init__(self, x, n_iter, f_seq, x_seq, norm_seq, diff_seq, alpha_seq,
+                 max_iter, tol, xtol):
+        self.x = x
+        self.n_iter = n_iter
+        self.f_seq = f_seq
+        self.x_seq = x_seq
+        self.norm_seq = norm_seq
+        self.diff_seq = diff_seq
+        self.alpha_seq = alpha_seq
+        self.max_iter = max_iter
+        self.tol = tol
+        self.xtol = xtol
+
+        # Check stopping conditions
+        if norm_seq[-1] <= tol:
+            self.converged = True
+        else:
+            self.converged = False
+
+        if n_iter >= max_iter:
+            self.max_iter_reached = True
+        else:
+            self.max_iter_reached = False
+
+        if diff_seq[-1] <= xtol:
+            self.no_change_stop = True
+        else:
+            self.no_change_stop = False
 
 
 def solver(x0,
            fun,
            fun_jac=None,
            tol=1e-6,
-           eps=1e-12,
+           xtol=1e-12,
            max_iter=100,
            method="newton",
            full_return=False,
@@ -54,11 +85,13 @@ def solver(x0,
         print("|f(x0)| = {}".format(norm))
 
     if full_return:
+        f_seq = [f]
+        x_seq = [x]
         norm_seq = [norm]
         diff_seq = [diff]
         alpha_seq = [1]
 
-    while (norm > tol and n_iter < max_iter and diff > eps):
+    while (norm > tol and n_iter < max_iter and diff > xtol):
         # Save previous iteration
         x_old = x
 
@@ -72,18 +105,17 @@ def solver(x0,
         elif method == "fixed-point":
             dx = f - x
 
-        # Line search
-        # alpha = linesearch(x, dx, f, f_p)
-
         # Update values
         x = x + alpha * dx
         f = fun(x)
 
         # stopping condition computation
-        norm = np.linalg.norm(f)
-        diff = np.linalg.norm(x - x_old)
+        norm = np.abs(f)
+        diff = np.abs(x - x_old)
 
         if full_return:
+            f_seq.append(f)
+            x_seq.append(x)
             norm_seq.append(norm)
             diff_seq.append(diff)
             alpha_seq.append(alpha)
@@ -106,7 +138,8 @@ def solver(x0,
         print(' ')
 
     if full_return:
-        return (x, n_iter, np.array(norm_seq),
-                np.array(norm_seq), np.array(alpha_seq))
+        return Solution(x, n_iter, np.array(f_seq), np.array(x_seq),
+                        np.array(norm_seq), np.array(diff_seq),
+                        np.array(alpha_seq), max_iter, tol, xtol)
     else:
         return x

@@ -12,10 +12,14 @@ def random_graph(n, p):
     """
 
     if n > 10:
-        max_len = int(ceil(n*(n-1)*p + 3*sqrt(n*(n-1)*p*(1-p))))
-        a = np.empty((max_len, 2), dtype=np.uint64)
+        if p > 0.95:
+            a = np.empty((n*(n-1), 2), dtype=np.uint64)
+        else:
+            max_len = int(ceil(n*(n-1)*p + 3*sqrt(n*(n-1)*p*(1-p))))
+            a = np.empty((max_len, 2), dtype=np.uint64)
     else:
         a = np.empty((n*(n-1), 2), dtype=np.uint64)
+
     count = 0
     for i in range(n):
         for j in range(n):
@@ -32,12 +36,14 @@ def random_labelgraph(n, l, p):  # noqa: E741
     """ Generates a edge list given the number of vertices and the probability
     p of observing a link.
     """
-
     if n > 10:
-        max_len = int(np.ceil(np.sum(n*(n-1)*p + 3*np.sqrt(n*(n-1)*p*(1-p)))))
+        p[p > 0.95] = 1
+        max_len = int(np.ceil(np.sum(
+            n*(n-1)*p + 3*np.sqrt(n*(n-1)*p*(1-p)))))
         a = np.empty((max_len, 3), dtype=np.uint64)
     else:
         a = np.empty((n*(n-1)*l, 3), dtype=np.uint64)
+
     count = 0
     for i in range(l):
         for j in range(n):
@@ -65,11 +71,8 @@ def exp_edges_stripe_single_layer(z, out_strength, in_strength):
             ind_in = in_strength[j].id
             s_in = in_strength[j].value
             if ind_out != ind_in:
-                tmp = exp(z)*s_out*s_in
-                if isinf(tmp):
-                    exp_edges += 1
-                else:
-                    exp_edges += tmp / (1 + tmp)
+                tmp = z*s_out*s_in
+                exp_edges += tmp / (1 + tmp)
 
     return exp_edges
 
@@ -101,11 +104,8 @@ def jac_stripe_single_layer(z, out_strength, in_strength):
             ind_in = in_strength[j].id
             s_in = in_strength[j].value
             if ind_out != ind_in:
-                tmp = exp(z)*s_out*s_in
-                if isinf(tmp):
-                    jac += 0
-                else:
-                    jac += tmp / (1 + tmp)**2
+                tmp = s_out*s_in
+                jac += tmp / (1 + z*tmp)**2
 
     return jac
 

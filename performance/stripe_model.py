@@ -6,12 +6,12 @@ import numpy as np
 
 
 N = int(1e3)
-L = np.array([10, 35, 89, 12], dtype=np.uint64)
-W = np.array([98, 25342, 1543, 532], dtype=np.float64)
+L = np.array([9.3e5, 35, 89, 12], dtype=np.uint64)
+W = np.array([9.3e6, 25342, 1543, 532], dtype=np.float64)
 
 start = perf_counter()
 g_rand = ge.RandomGraph(num_vertices=N, num_edges=L, total_weight=W,
-                        discrete_weights=True)
+                        discrete_weights=False)
 g_rand.fit()
 perf = perf_counter() - start
 print('Time for random graph initialization and fit: ', perf)
@@ -31,15 +31,18 @@ stripe.fit(method='newton')
 perf = perf_counter() - start
 print('Time for newton fit: ', perf)
 
-if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
-                   rtol=1e-6, atol=1e-8):
-    print(stripe.expected_num_edges() - stripe.num_edges)
-
-start = perf_counter()
-stripe.fit(method='fixed-point')
-perf = perf_counter() - start
-print('Time for fixed-point fit: ', perf)
+print(stripe.solver_output[0].f_seq)
+print(stripe.solver_output[0].x_seq)
 
 if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
                    rtol=1e-6, atol=1e-8):
     print(stripe.expected_num_edges() - stripe.num_edges)
+
+# start = perf_counter()
+# stripe.fit(method='fixed-point')
+# perf = perf_counter() - start
+# print('Time for fixed-point fit: ', perf)
+
+# if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
+#                    rtol=1e-6, atol=1e-8):
+#     print(stripe.expected_num_edges() - stripe.num_edges)
