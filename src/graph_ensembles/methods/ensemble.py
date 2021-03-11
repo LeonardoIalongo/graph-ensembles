@@ -123,11 +123,12 @@ def exp_edges_stripe(z, out_strength, in_strength, num_labels):
 
 
 @jit(nopython=True)
-def jac_stripe_single_layer(z, out_strength, in_strength):
-    """ Compute the derivative of the expected number of edges for a single
-    label of the stripe model.
+def f_jac_stripe_single_layer(z, out_strength, in_strength, n_edges):
+    """ Compute the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
     """
     jac = 0
+    f = 0
     for i in np.arange(len(out_strength)):
         ind_out = out_strength[i].id
         s_out = out_strength[i].value
@@ -137,11 +138,13 @@ def jac_stripe_single_layer(z, out_strength, in_strength):
             if ind_out != ind_in:
                 tmp = exp(z)*s_out*s_in
                 if isinf(tmp):
+                    f += 1
                     jac += 0
                 else:
+                    f += tmp / (1 + tmp)
                     jac += tmp / (1 + tmp)**2
 
-    return jac
+    return f - n_edges, jac
 
 
 @jit(nopython=True)

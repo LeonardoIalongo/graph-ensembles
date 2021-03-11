@@ -5,7 +5,7 @@ import graph_ensembles as ge
 import numpy as np
 
 
-N = int(2e4)
+N = int(1e5)
 L = np.array([9.99e5, 3500, 890, 12], dtype=np.uint64)
 W = np.array([9.3e6, 25342, 1543, 532], dtype=np.float64)
 
@@ -31,6 +31,8 @@ stripe.fit(method='newton')
 perf = perf_counter() - start
 print('Time for newton fit: ', perf)
 
+print([x.n_iter for x in stripe.solver_output])
+
 if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
                    atol=1e-8, rtol=0):
     print(stripe.expected_num_edges() - stripe.num_edges)
@@ -39,6 +41,8 @@ start = perf_counter()
 stripe.fit(method='fixed-point')
 perf = perf_counter() - start
 print('Time for fixed-point fit: ', perf)
+
+print([x.n_iter for x in stripe.solver_output])
 
 if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
                    atol=1e-8, rtol=0):

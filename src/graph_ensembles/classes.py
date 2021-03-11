@@ -1252,16 +1252,13 @@ class StripeFitnessModel(GraphEnsemble):
                 if method == "newton":
                     sol = mt.newton_solver(
                         x0=log(x0),
-                        fun=lambda x: mt.exp_edges_stripe_single_layer(
-                            x, s_out, s_in) - num_e,
-                        fun_jac=lambda x:
-                        mt.jac_stripe_single_layer(x, s_out, s_in),
+                        fun=lambda x: mt.f_jac_stripe_single_layer(
+                            x, s_out, s_in, num_e),
                         tol=tol,
                         xtol=xtol,
                         max_iter=max_iter,
                         verbose=verbose,
                         full_return=True)
-
                 elif method == "fixed-point":
                     sol = mt.fixed_point_solver(
                         x0=log(x0),
