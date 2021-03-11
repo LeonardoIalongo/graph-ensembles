@@ -6,7 +6,7 @@ import numpy as np
 
 
 N = int(1e3)
-L = np.array([9.9e4, 35, 89, 12], dtype=np.uint64)
+L = np.array([9.99e5, 3500, 890, 12], dtype=np.uint64)
 W = np.array([9.3e6, 25342, 1543, 532], dtype=np.float64)
 
 start = perf_counter()
@@ -31,18 +31,15 @@ stripe.fit(method='newton')
 perf = perf_counter() - start
 print('Time for newton fit: ', perf)
 
-print(stripe.solver_output[0].f_seq)
-print(stripe.solver_output[0].x_seq)
-
-if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
-                   rtol=1e-6, atol=1e-8):
+if not np.allclose(stripe.expected_num_edges(), stripe.num_edges, atol=1e-8):
     print(stripe.expected_num_edges() - stripe.num_edges)
 
-# start = perf_counter()
-# stripe.fit(method='fixed-point')
-# perf = perf_counter() - start
-# print('Time for fixed-point fit: ', perf)
+start = perf_counter()
+stripe.fit(method='fixed-point')
+perf = perf_counter() - start
+print('Time for fixed-point fit: ', perf)
 
-# if not np.allclose(stripe.expected_num_edges(), stripe.num_edges,
-#                    rtol=1e-6, atol=1e-8):
-#     print(stripe.expected_num_edges() - stripe.num_edges)
+print(stripe.expected_num_edges() - stripe.num_edges)
+
+if not np.allclose(stripe.expected_num_edges(), stripe.num_edges, atol=1e-8):
+    print(stripe.expected_num_edges() - stripe.num_edges)

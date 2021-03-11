@@ -130,11 +130,8 @@ def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
             s_in = in_strength[j].value
             if ind_out != ind_in:
                 tmp1 = s_out*s_in
-                tmp = exp(z)*s_out*s_in
-                if isinf(tmp):
-                    aux += 0
-                else:
-                    aux += tmp1 / (1 + tmp)
+                tmp = z*s_out*s_in
+                aux += tmp1 / (1 + tmp)
 
     return n_edges/aux
 
