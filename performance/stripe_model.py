@@ -34,12 +34,19 @@ print('Time for newton fit: ', perf)
 if not np.allclose(stripe.expected_num_edges(), stripe.num_edges, atol=1e-8):
     print(stripe.expected_num_edges() - stripe.num_edges)
 
+# start = perf_counter()
+# stripe.fit(method='fixed-point')
+# perf = perf_counter() - start
+# print('Time for fixed-point fit: ', perf)
+
+# print(stripe.expected_num_edges() - stripe.num_edges)
+
+# if not np.allclose(stripe.expected_num_edges(), stripe.num_edges, atol=1e-8):
+#     print(stripe.expected_num_edges() - stripe.num_edges)
+
 start = perf_counter()
-stripe.fit(method='fixed-point')
+g_sample = stripe.sample()
 perf = perf_counter() - start
-print('Time for fixed-point fit: ', perf)
+print('Time for stripe sample: ', perf)
 
-print(stripe.expected_num_edges() - stripe.num_edges)
-
-if not np.allclose(stripe.expected_num_edges(), stripe.num_edges, atol=1e-8):
-    print(stripe.expected_num_edges() - stripe.num_edges)
+print(g_sample)

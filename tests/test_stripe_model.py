@@ -47,7 +47,7 @@ num_vertices = 4
 num_edges = np.array([1, 1, 3])
 num_edges_tot = 5
 num_labels = 3
-z = np.log(np.array([1.006638e+08, 1.610613e+07, 4.346469e-01]))
+z = np.array([1.006638e+08, 1.610613e+07, 4.346469e-01])
 
 
 class TestStripeFitnessModel():

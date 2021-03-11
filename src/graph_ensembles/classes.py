@@ -4,7 +4,6 @@ reconstruction, filtering or pattern detection among others. """
 
 import numpy as np
 from numpy.lib.recfunctions import rec_append_fields as append_fields
-from numpy.random import default_rng
 import pandas as pd
 from . import methods as mt
 import warnings
@@ -993,66 +992,75 @@ class RandomGraph(GraphEnsemble):
 
         # Sample edges
         if self.num_labels is None:
-            e = mt.random_graph(self.num_vertices, self.p)
-            e = e.view(type=np.recarray,
-                       dtype=[('src', 'u8'),
-                              ('dst', 'u8')]).reshape((e.shape[0],))
-            e = e.astype([('src', g.id_dtype), ('dst', g.id_dtype)])
+            if hasattr(self, 'q'):
+                e = mt.random_graph(self.num_vertices, self.p,
+                                    self.q, self.discrete_weights)
+                e = e.view(type=np.recarray,
+                           dtype=[('src', 'f8'),
+                                  ('dst', 'f8'),
+                                  ('weight', 'f8')]).reshape((e.shape[0],))
+                e = e.astype([('src', g.id_dtype),
+                              ('dst', g.id_dtype),
+                              ('weight', 'f8')])
+                g.total_weight = np.sum(e.weight)
+
+            else:
+                e = mt.random_graph(self.num_vertices, self.p)
+                e = e.view(type=np.recarray,
+                           dtype=[('src', 'f8'),
+                                  ('dst', 'f8')]).reshape((e.shape[0],))
+                e = e.astype([('src', g.id_dtype), ('dst', g.id_dtype)])
+
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
             g.num_edges = len(g.e)
-        else:
-            e = mt.random_labelgraph(self.num_vertices,
-                                     self.num_labels,
-                                     self.p)
-            e = e.view(type=np.recarray,
-                       dtype=[('label', 'u8'),
-                              ('src', 'u8'),
-                              ('dst', 'u8')]).reshape((e.shape[0],))
-            g.num_labels = self.num_labels
-            num_bytes = mt.get_num_bytes(g.num_labels)
-            g.label_dtype = np.dtype('u' + str(num_bytes))
 
-            e = e.astype([('label', g.label_dtype),
-                          ('src', g.id_dtype),
-                          ('dst', g.id_dtype)])
+        else:
+            if hasattr(self, 'q'):
+                e = mt.random_labelgraph(self.num_vertices,
+                                         self.num_labels,
+                                         self.p,
+                                         self.q,
+                                         self.discrete_weights)
+                e = e.view(type=np.recarray,
+                           dtype=[('label', 'f8'),
+                                  ('src', 'f8'),
+                                  ('dst', 'f8'),
+                                  ('weight', 'f8')]).reshape((e.shape[0],))
+                g.num_labels = self.num_labels
+                num_bytes = mt.get_num_bytes(g.num_labels)
+                g.label_dtype = np.dtype('u' + str(num_bytes))
+
+                e = e.astype([('label', g.label_dtype),
+                              ('src', g.id_dtype),
+                              ('dst', g.id_dtype),
+                              ('weight', 'f8')])
+                g.total_weight = np.sum(e.weight)
+                g.total_weight_label = mt.compute_tot_weight_by_label(
+                    e, self.num_labels)
+
+            else:
+                e = mt.random_labelgraph(self.num_vertices,
+                                         self.num_labels,
+                                         self.p)
+                e = e.view(type=np.recarray,
+                           dtype=[('label', 'f8'),
+                                  ('src', 'f8'),
+                                  ('dst', 'f8')]).reshape((e.shape[0],))
+                g.num_labels = self.num_labels
+                num_bytes = mt.get_num_bytes(g.num_labels)
+                g.label_dtype = np.dtype('u' + str(num_bytes))
+
+                e = e.astype([('label', g.label_dtype),
+                              ('src', g.id_dtype),
+                              ('dst', g.id_dtype)])
+
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
             g.num_edges = len(g.e)
             ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
             dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
             g.num_edges_label = ne_label.astype(dtype)
-
-        # Add weights if available
-        if hasattr(self, 'q'):
-            rnd = default_rng()
-            if self.num_labels is None:
-                if self.discrete_weights:
-                    weights = rnd.geometric(1 - self.q, g.num_edges)
-                else:
-                    weights = rnd.exponential(1/self.q, g.num_edges)
-            else:
-                weights = np.empty(g.num_edges, dtype=np.float64)
-                start = 0
-                for i in range(self.num_labels):
-                    end = start + g.num_edges_label[i]
-                    if self.discrete_weights:
-                        w = rnd.geometric(1-self.q[i], g.num_edges_label[i])
-                    else:
-                        w = rnd.exponential(1/self.q[i], g.num_edges_label[i])
-
-                    weights[start:end] = w
-                    start = end
-
-            g.e = append_fields(g.e,
-                                'weight',
-                                weights)
-
-            g.total_weight = np.sum(weights)
-
-            if self.num_labels is not None:
-                g.total_weight_label = mt.compute_tot_weight_by_label(
-                    g.e, g.num_labels)
 
         return g
 
@@ -1313,7 +1321,51 @@ class StripeFitnessModel(GraphEnsemble):
             raise Exception('Model must be fitted before hand.')
 
     def sample(self):
-        pass
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'z'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = WeightedLabelGraph.__new__(WeightedLabelGraph)
+        g.lv = LabelVertexList()
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        num_bytes = mt.get_num_bytes(self.num_vertices)
+        g.id_dtype = np.dtype('u' + str(num_bytes))
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges and extract properties
+        e = mt.stripe_sample(self.z, self.out_strength,
+                             self.in_strength, self.num_labels)
+        e = e.view(type=np.recarray,
+                   dtype=[('label', 'f8'),
+                          ('src', 'f8'),
+                          ('dst', 'f8'),
+                          ('weight', 'f8')]).reshape((e.shape[0],))
+        g.num_labels = self.num_labels
+        num_bytes = mt.get_num_bytes(g.num_labels)
+        g.label_dtype = np.dtype('u' + str(num_bytes))
+        e = e.astype([('label', g.label_dtype),
+                      ('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = len(g.e)
+        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        g.num_edges_label = ne_label.astype(dtype)
+        g.total_weight = np.sum(e.weight)
+        g.total_weight_label = mt.compute_tot_weight_by_label(
+                g.e, g.num_labels)
+
+        return g
 
 
 class BlockFitnessModel(GraphEnsemble):

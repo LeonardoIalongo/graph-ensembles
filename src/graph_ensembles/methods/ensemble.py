@@ -1,51 +1,67 @@
 import numpy as np
-from random import random
+import numpy.random as rng
 from numba import jit, prange
-from math import ceil, exp, isinf, sqrt
+from math import ceil, sqrt
 
 
 # --------------- RANDOM GRAPH METHODS ---------------
 @jit(nopython=True)
-def random_graph(n, p):
+def random_graph(n, p, q=None, discrete_weights=False):
     """ Generates a edge list given the number of vertices and the probability
     p of observing a link.
     """
+    if q is None:
+        n_clm = 2
+    else:
+        n_clm = 3
+
     if n > 10:
         if p > 0.95:
-            a = np.empty((n*(n-1), 2), dtype=np.uint64)
+            a = np.empty((n*(n-1), n_clm), dtype=np.float64)
         else:
             max_len = int(ceil(n*(n-1)*p + 4*sqrt(n*(n-1)*p*(1-p))))
-            a = np.empty((max_len, 2), dtype=np.uint64)
+            a = np.empty((max_len, n_clm), dtype=np.float64)
     else:
-        a = np.empty((n*(n-1), 2), dtype=np.uint64)
+        a = np.empty((n*(n-1), n_clm), dtype=np.float64)
 
     count = 0
     msg = 'Miscalculated bounds of max successful draws.'
     for i in range(n):
         for j in range(n):
             if i != j:
-                if random() < p:
+                if rng.random() < p:
                     assert count < max_len, msg
                     a[count, 0] = i
                     a[count, 1] = j
+                    if q is not None:
+                        if discrete_weights:
+                            w = rng.geometric(1 - q)
+                        else:
+                            w = rng.exponential(1/q)
+                        a[count, 2] = w
                     count += 1
 
     return a[0:count, :].copy()
 
 
 @jit(nopython=True)
-def random_labelgraph(n, l, p):  # noqa: E741
+def random_labelgraph(n, l, p, q=None, discrete_weights=False):  # noqa: E741
     """ Generates a edge list given the number of vertices and the probability
     p of observing a link.
     """
+    if q is None:
+        n_clm = 3
+    else:
+        n_clm = 4
+
     if n > 10:
         p_aux = p.copy()
         p_aux[p_aux > 0.95] = 1
         max_len = int(np.ceil(np.sum(
             n*(n-1)*p_aux + 4*np.sqrt(n*(n-1)*p_aux*(1-p_aux)))))
-        a = np.empty((max_len, 3), dtype=np.uint64)
+        a = np.empty((max_len, n_clm), dtype=np.float64)
     else:
-        a = np.empty((n*(n-1)*l, 3), dtype=np.uint64)
+        a = np.empty((n*(n-1)*l, n_clm), dtype=np.float64)
 
     count = 0
     msg = 'Miscalculated bounds of max successful draws.'
@@ -53,11 +69,17 @@ def random_labelgraph(n, l, p):  # noqa: E741
         for j in range(n):
             for k in range(n):
                 if j != k:
-                    if random() < p[i]:
+                    if rng.random() < p[i]:
                         assert count < max_len, msg
                         a[count, 0] = i
                         a[count, 1] = j
                         a[count, 2] = k
+                        if q is not None:
+                            if discrete_weights:
+                                w = rng.geometric(1 - q[i])
+                            else:
+                                w = rng.exponential(1/q[i])
+                            a[count, 3] = w
                         count += 1
 
     return a[0:count, :].copy()
@@ -136,8 +158,46 @@ def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
     return n_edges/aux
 
 
-# --------------- OLD METHODS ---------------
+@jit(nopython=True)
+def sample_stripe_single_layer(z, out_strength, in_strength, label):
+    """ Compute the expected number of edges for a single label of the stripe
+    model.
+    """
+    s_tot = np.sum(out_strength.value)
+    msg = 'Sum of in/out strengths not the same.'
+    assert np.abs(1 - np.sum(in_strength.value)/s_tot) < 1e-6, msg
+    sample = []
+    for i in np.arange(len(out_strength)):
+        ind_out = out_strength[i].id
+        s_out = out_strength[i].value
+        for j in np.arange(len(in_strength)):
+            ind_in = in_strength[j].id
+            s_in = in_strength[j].value
+            if ind_out != ind_in:
+                tmp = z*s_out*s_in
+                p = tmp / (1 + tmp)
+                if rng.random() < p:
+                    w = np.float64(rng.exponential(s_out*s_in/(s_tot*p)))
+                    sample.append((label, ind_out, ind_in, w))
 
+    return sample
+
+
+@jit(nopython=True)
+def stripe_sample(z, out_strength, in_strength, num_labels):
+    """ Sample edges and weights from the stripe ensemble.
+    """
+    sample = []
+    for i in range(num_labels):
+        s_out = out_strength[out_strength.label == i]
+        s_in = in_strength[in_strength.label == i]
+        label = s_out[0].label
+        sample.extend(sample_stripe_single_layer(z[i], s_out, s_in, label))
+
+    return np.array(sample, dtype=np.float64)
+
+
+# --------------- OLD METHODS ---------------
 @jit(nopython=True)
 def iterative_stripe_one_z(z, out_str, in_str, L):
     """
