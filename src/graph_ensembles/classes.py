@@ -1249,7 +1249,7 @@ class StripeFitnessModel(GraphEnsemble):
                 num_e = self.num_edges[i]
 
                 if method == "newton":
-                    sol = mt.solver(
+                    sol = mt.newton_solver(
                         x0,
                         fun=lambda x: mt.exp_edges_stripe_single_layer(
                             x, s_out, s_in) - num_e,
@@ -1258,23 +1258,19 @@ class StripeFitnessModel(GraphEnsemble):
                         tol=tol,
                         xtol=xtol,
                         max_iter=max_iter,
-                        method="newton",
                         verbose=verbose,
                         full_return=True)
 
                 elif method == "fixed-point":
-                    sol = mt.solver(
+                    sol = mt.fixed_point_solver(
                         x0,
                         fun=lambda x: mt.iterative_stripe_single_layer(
                             x,
                             s_out,
                             s_in,
                             num_e),
-                        fun_jac=None,
-                        tol=tol,
                         xtol=xtol,
                         max_iter=max_iter,
-                        method="fixed-point",
                         verbose=verbose,
                         full_return=True)
 
@@ -1294,15 +1290,15 @@ class StripeFitnessModel(GraphEnsemble):
                                'reached the max number of iterations. \n'
                                'Final distance from root = {}'.format(mod))
                         warnings.warn(msg, UserWarning)
-                    elif sol.no_change_stop:
-                        msg = ('Fit of layer {} '.format(i) + 'did not '
-                               'converge: \n solver stopped because the '
-                               'update of x was smaller than the '
-                               ' tolerance. \n Final distance from'
-                               ' root = {}'.format(mod))
-                        warnings.warn(msg, UserWarning)
-                    else:
-                        raise Exception('Unclear stopping condition.')
+
+                    if method == 'newton':
+                        if sol.no_change_stop:
+                            msg = ('Fit of layer {} '.format(i) + 'did not '
+                                   'converge: \n solver stopped because the '
+                                   'update of x was smaller than the '
+                                   ' tolerance. \n Final distance from'
+                                   ' root = {}'.format(mod))
+                            warnings.warn(msg, UserWarning)
 
             # Collate results
             self.z = z
