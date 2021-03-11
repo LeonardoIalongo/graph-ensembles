@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.random as rng
 from numba import jit, prange
-from math import ceil, sqrt
+from math import ceil, sqrt, isinf, exp, log
 
 
 # --------------- RANDOM GRAPH METHODS ---------------
@@ -99,8 +99,11 @@ def exp_edges_stripe_single_layer(z, out_strength, in_strength):
             ind_in = in_strength[j].id
             s_in = in_strength[j].value
             if ind_out != ind_in:
-                tmp = z*s_out*s_in
-                exp_edges += tmp / (1 + tmp)
+                tmp = exp(z)*s_out*s_in
+                if isinf(tmp):
+                    exp_edges += 1
+                else:
+                    exp_edges += tmp / (1 + tmp)
 
     return exp_edges
 
@@ -113,7 +116,7 @@ def exp_edges_stripe(z, out_strength, in_strength, num_labels):
     exp_edges = np.zeros(len(z), dtype=np.float64)
     for i in prange(num_labels):
         exp_edges[i] = exp_edges_stripe_single_layer(
-            z[i],
+            log(z[i]),
             out_strength[out_strength.label == i],
             in_strength[in_strength.label == i])
     return exp_edges
@@ -132,10 +135,37 @@ def jac_stripe_single_layer(z, out_strength, in_strength):
             ind_in = in_strength[j].id
             s_in = in_strength[j].value
             if ind_out != ind_in:
-                tmp = s_out*s_in
-                jac += tmp / (1 + z*tmp)**2
+                tmp = exp(z)*s_out*s_in
+                if isinf(tmp):
+                    jac += 0
+                else:
+                    jac += tmp / (1 + tmp)**2
 
     return jac
+
+
+@jit(nopython=True)
+def stripe_newton_init(out_strength, in_strength, n_e, steps):
+    """ Compute initial conditions for the stripe solvers.
+    """
+    z = 0
+    for n in range(steps):
+        jac = 0
+        f = 0
+        for i in np.arange(len(out_strength)):
+            ind_out = out_strength[i].id
+            s_out = out_strength[i].value
+            for j in np.arange(len(in_strength)):
+                ind_in = in_strength[j].id
+                s_in = in_strength[j].value
+                if ind_out != ind_in:
+                    tmp = s_out*s_in
+                    tmp1 = z*tmp
+                    jac += tmp / (1 + tmp1)**2
+                    f += z*tmp1 / (1 + z*tmp1)
+        z = z - (f-n_e)/jac
+
+    return z
 
 
 @jit(nopython=True)
@@ -152,9 +182,9 @@ def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
             s_in = in_strength[j].value
             if ind_out != ind_in:
                 tmp = s_out*s_in
-                aux += tmp / (1 + z*tmp)
+                aux += tmp / (1 + exp(z)*tmp)
 
-    return n_edges/aux
+    return log(n_edges/aux)
 
 
 @jit(nopython=True)

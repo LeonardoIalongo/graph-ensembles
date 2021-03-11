@@ -7,6 +7,7 @@ from numpy.lib.recfunctions import rec_append_fields as append_fields
 import pandas as pd
 from . import methods as mt
 import warnings
+from math import exp, log
 
 
 class Graph():
@@ -1213,7 +1214,7 @@ class StripeFitnessModel(GraphEnsemble):
                                                  self.num_labels)
 
     def fit(self, z0=None, method="newton", tol=1e-8,
-            xtol=1e-14, max_iter=100, verbose=False):
+            xtol=1e-8, max_iter=100, verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
@@ -1233,24 +1234,24 @@ class StripeFitnessModel(GraphEnsemble):
             if true print debug info while iterating
 
         """
-        if z0 is None:
-            if isinstance(self.num_edges, np.ndarray):
-                z0 = np.zeros(self.num_labels, dtype=np.float64)
-            else:
-                raise ValueError('Single z not yet supported.')
-
         if isinstance(self.num_edges, np.ndarray):
             z = np.empty(self.num_labels, dtype=np.float64)
             self.solver_output = [None]*self.num_labels
             for i in range(self.num_labels):
                 s_out = self.out_strength[self.out_strength.label == i]
                 s_in = self.in_strength[self.in_strength.label == i]
-                x0 = z0[i]
                 num_e = self.num_edges[i]
+                if z0 is None:
+                    x0 = mt.stripe_newton_init(s_out, s_in, num_e, 2)
+                else:
+                    if isinstance(z0, np.ndarray):
+                        x0 = z0[i]
+                    else:
+                        raise ValueError('Single z not yet supported.')
 
                 if method == "newton":
                     sol = mt.newton_solver(
-                        x0,
+                        x0=log(x0),
                         fun=lambda x: mt.exp_edges_stripe_single_layer(
                             x, s_out, s_in) - num_e,
                         fun_jac=lambda x:
@@ -1263,7 +1264,7 @@ class StripeFitnessModel(GraphEnsemble):
 
                 elif method == "fixed-point":
                     sol = mt.fixed_point_solver(
-                        x0,
+                        x0=log(x0),
                         fun=lambda x: mt.iterative_stripe_single_layer(
                             x,
                             s_out,
@@ -1278,12 +1279,16 @@ class StripeFitnessModel(GraphEnsemble):
                     raise ValueError("The selected method is not valid.")
 
                 # Update results and check convergence
-                z[i] = sol.x
+                z[i] = exp(sol.x)
                 self.solver_output[i] = sol
 
                 if not sol.converged:
                     self.solver_output[i] = sol
-                    mod = sol.norm_seq[-1]
+                    if method == 'newton':
+                        mod = sol.norm_seq[-1]
+                    else:
+                        mod = mt.exp_edges_stripe_single_layer(
+                            log(z[i]), s_out, s_in) - num_e
                     if sol.max_iter_reached:
                         msg = ('Fit of layer {} '.format(i) + 'did not '
                                'converge: \n solver stopped because it '
