@@ -1,7 +1,11 @@
 include HISTORY.rst
 include LICENSE.txt
 include README.rst
+include pytest.ini
+include tox.ini
+include *.sh
 
+recursive-include src *.py
 recursive-include examples *.ipynb
 recursive-include performance *.py
 recursive-include tests *.py

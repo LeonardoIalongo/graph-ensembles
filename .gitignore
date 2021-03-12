@@ -1,5 +1,6 @@
 env/
 venv/
+notes/
 input_data/
 __pycache__/
 dist/

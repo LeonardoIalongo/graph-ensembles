@@ -11,7 +11,7 @@ setup(
     author="Leonardo Niccolò Ialongo",
     author_email='leonardo.ialongo@gmail.com',
     python_requires='>=3.0',
-    version='0.0.2',
+    version='0.0.3',
     url='https://github.com/LeonardoIalongo/graph-ensembles',
     description=("The graph ensemble package contains a set of methods to"
                  " build fitness based graph ensembles from marginal"
@@ -26,12 +26,12 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Operating System :: OS Independent',
     ],
     packages=['graph_ensembles'],
     package_dir={'': 'src'},
     install_requires=["numpy>=1.20",
-                      "scipy>=1.0",
                       "numba==0.53.rc3",
                       "pandas>=1.1"
                       ],
