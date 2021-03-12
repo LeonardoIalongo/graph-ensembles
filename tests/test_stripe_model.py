@@ -27,27 +27,29 @@ g = ge.Graph(v, e, v_id=['name', 'country'],
              weight='value')
 
 # Define graph marginals to check computation
-out_strength = np.array([(0, 0, 2),
-                         (1, 1, 5),
-                         (2, 2, 6),
-                         (2, 3, 1)],
-                        dtype=[('label', 'u1'),
-                               ('id', 'u1'),
-                               ('value', 'f8')]).view(np.recarray)
+out_strength = np.rec.array([(0, 0, 1e6),
+                             (0, 1, 1e4),
+                             (0, 3, 3e3),
+                             (1, 2, 2.3e7),
+                             (2, 3, 7e5),
+                             (3, 1, 4e5)],
+                            dtype=[('label', np.uint8),
+                                   ('id', np.uint8),
+                                   ('value', np.float64)])
 
-in_strength = np.array([(0, 3, 2),
-                        (1, 0, 5),
-                        (2, 0, 4),
-                        (2, 1, 3)],
-                       dtype=[('label', 'u1'),
-                              ('id', 'u1'),
-                              ('value', 'f8')]).view(np.recarray)
+in_strength = np.rec.array([(0, 1, 1e6 + 3e3),
+                            (0, 2, 1e4),
+                            (1, 1, 2.3e7),
+                            (2, 1, 7e5),
+                            (3, 0, 4e5)],
+                           dtype=[('label', np.uint8),
+                                  ('id', np.uint8),
+                                  ('value', np.float64)])
 
 num_vertices = 4
-num_edges = np.array([1, 1, 3])
-num_edges_tot = 5
-num_labels = 3
-z = np.array([1.006638e+08, 1.610613e+07, 4.346469e-01])
+num_edges = np.array([3, 1, 1, 1])
+num_labels = 4
+z = np.array([1.826529e-09, 3.060207e-07, 3.303774e-04, 1.011781e-03])
 
 
 class TestStripeFitnessModel():
@@ -102,147 +104,43 @@ class TestStripeFitnessModel():
                ' elements equal to the number of labels.')
         assert e_info.value.args[0] == msg
 
-    # def test_solver_single_LS(self):
-    #     """ Check that the scipy least-squares solver is fitting the parameter z correctly. """
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links_tot)
-    #     model.fit(z0=0, method="least-squares")
-    #     np.testing.assert_allclose(model.z,
-    #                                0.730334,
-    #                                rtol=1e-6)
+    def test_solver_newton(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly. """
+        model = ge.StripeFitnessModel(g)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-8, rtol=0)
 
-    # def test_solver_single_fixed_point(self):
-    #     """ Check that the fixed-point solver is fitting the parameter z correctly. """
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links_tot)
-    #     model.fit(z0=0.1, method="fixed-point")
-    #     np.testing.assert_allclose(model.z,
-    #                                0.730334,
-    #                                rtol=1e-6)
+    def test_solver_fixed_point(self):
+        """ Check that the fixed-point solver is fitting the z parameters
+        correctly.
 
-    # def test_solver_single_newton(self):
-    #     """ Check that the newton solver is fitting the parameter z
-    #     correctly. """
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links_tot)
-    #     model.fit(z0=0.1, method="newton")
-    #     np.testing.assert_allclose(model.z,
-    #                                0.730334,
-    #                                rtol=1e-6)
+        NOTE: currently very slow convergence!
+        """
+        model = ge.StripeFitnessModel(g)
+        model.fit(method="fixed-point", max_iter=100000, xtol=1e-5)
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-4, rtol=0)
 
-    # def test_solver_multi_LS(self):
-    #     """ Check that the scipy least-squares solver is fitting the
-    #     parameter z correctly. """
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links)
-    #     model.fit(z0=[0, 0, 0], method="least-squares")
-    #     np.testing.assert_allclose(model.z,
-    #                                [1.006638e+08, 1.610613e+07, 4.346469e-01],
-    #                                rtol=1e-6)
+    def test_sampling(self):
+        """ Check that properties of the sample correspond to ensemble.
+        """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      z=z)
 
-    # def test_solver_multi_fixed_point(self):
-    #     """ Check that the fixed-point solver is fitting the parameter z correctly. """
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links)
-    #     model.fit(z0=np.array([0.1, 0.1, 0.1]), method="fixed-point", max_steps=10000)
-    #     np.testing.assert_allclose(model.probability_matrix.sum(),
-    #                                model.num_links.sum(),
-    #                                rtol=1e-3)
+        samples = 10000
+        s_n_e = np.empty((samples, num_labels))
+        for i in range(samples):
+            sample = model.sample()
+            s_n_e[i] = sample.num_edges_label
+            assert np.all(sample.num_labels == num_labels)
+            assert np.all(sample.num_vertices == num_vertices)
 
-    # def test_solver_multi_newton(self):
-    #     """ Check that the newton solver is fitting the parameter z correctly. """
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links)
-    #     model.fit(z0=np.array([0.1, 0.1, 0.1]), method="newton")
-    #     np.testing.assert_allclose(model.probability_matrix.sum(),
-    #                                model.num_links.sum(),
-    #                                rtol=1e-4)
-
-    # def test_probability_array_single(self):
-    #     """ Check that the returned probability array is correct. """
-    #     true_value = np.zeros((num_nodes, num_nodes, num_groups),
-    #                           dtype=np.float64)
-
-    #     true_value[0, 3, 0] = 0.744985
-    #     true_value[1, 0, 1] = 0.948075
-    #     true_value[2, 0, 2] = 0.946028
-    #     true_value[2, 1, 2] = 0.929309
-    #     true_value[3, 0, 2] = 0.744985
-    #     true_value[3, 1, 2] = 0.686619
-
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links_tot)
-    #     np.testing.assert_allclose(model.probability_array,
-    #                                true_value,
-    #                                rtol=1e-6)
-
-    # def test_probability_array_multi(self):
-    #     """ Check that the returned probability array is correct. """
-    #     true_value = np.zeros((num_nodes, num_nodes, num_groups),
-    #                           dtype=np.float64)
-    #     true_value[0, 3, 0] = 1.
-    #     true_value[1, 0, 1] = 1.
-    #     true_value[2, 0, 2] = 0.912523
-    #     true_value[2, 1, 2] = 0.886668
-    #     true_value[3, 0, 2] = 0.634848
-    #     true_value[3, 1, 2] = 0.565961
-
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links)
-    #     np.testing.assert_allclose(model.probability_array,
-    #                                true_value,
-    #                                rtol=1e-6)
-
-    # def test_probability_matrix_single(self):
-    #     """ Check that the returned probability matrix is the correct one. """
-    #     true_value = np.array([[0., 0., 0., 0.744985],
-    #                           [0.948075, 0., 0., 0.],
-    #                           [0.946028, 0.929309, 0., 0.],
-    #                           [0.744985, 0.686619, 0., 0.]])
-
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links_tot)
-    #     np.testing.assert_allclose(model.probability_matrix,
-    #                                true_value,
-    #                                rtol=1e-6)
-
-    # def test_probability_matrix_multi(self):
-    #     """ Check that the returned probability matrix is the correct one. """
-    #     true_value = np.array([[0., 0., 0., 1.],
-    #                           [1., 0., 0., 0.],
-    #                           [0.912523, 0.886668, 0., 0.],
-    #                           [0.634848, 0.565961, 0., 0.]])
-
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links)
-    #     np.testing.assert_allclose(model.probability_matrix,
-    #                                true_value,
-    #                                rtol=1e-6)
-
-    # def test_expected_num_links_single(self):
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links_tot)
-    #     exp_num_links = model.probability_matrix.sum()
-    #     np.testing.assert_allclose(num_links_tot,
-    #                                exp_num_links,
-    #                                rtol=1e-6)
-
-    # def test_expected_num_links_multi(self):
-    #     model = ge.StripeFitnessModel(out_strength,
-    #                                   in_strength,
-    #                                   num_links)
-    #     exp_num_links = np.sum(model.probability_array, axis=(0, 1))
-    #     np.testing.assert_allclose(num_links,
-    #                                exp_num_links,
-    #                                rtol=1e-6)
+        s_n_e = np.average(s_n_e, axis=0)
+        np.testing.assert_allclose(s_n_e, num_edges, atol=1e-2, rtol=0)
