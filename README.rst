@@ -23,34 +23,45 @@ Install using:
 
 Usage
 -----
-Currently only the StripeFitnessModel is fully implemented. An example of how 
-it can be used is the following. For more see the example notebooks in the 
-examples folder.
+Currently only the RandomGraph and StripeFitnessModel are fully implemented.
+An example of how it can be used is the following. 
+For more see the example notebooks in the examples folder.
 
 .. code-block:: python
 
-   # Define graph marginals
-    out_strength = np.array([[0, 0, 2],
-                            [1, 1, 5],
-                            [2, 2, 6],
-                            [3, 2, 1]])
+    import graph_ensembles as ge
+    import pandas as pd
 
-    in_strength = np.array([[0, 1, 5],
-                            [0, 2, 4],
-                            [1, 2, 3],
-                            [3, 0, 2]])
+    v = pd.DataFrame([['ING', 'NL'],
+                     ['ABN', 'NL'],
+                     ['BNP', 'FR'],
+                     ['BNP', 'IT']],
+                     columns=['name', 'country'])
 
-    num_nodes = 4
-    num_links = np.array([1, 1, 3])
+    e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                     ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                     ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                     ['BNP', 'IT', 'ABN', 'NL', 3e3, 'interbank', False],
+                     ['ABN', 'NL', 'BNP', 'FR', 1e4, 'interbank', False],
+                     ['ABN', 'NL', 'ING', 'NL', 4e5, 'external', True]],
+                     columns=['creditor', 'c_country',
+                              'debtor', 'd_country',
+                              'value', 'type', 'EUR'])
+
+    g = ge.Graph(v, e, v_id=['name', 'country'],
+                 src=['creditor', 'c_country'],
+                 dst=['debtor', 'd_country'],
+                 edge_label=['type', 'EUR'],
+                 weight='value')
 
     # Initialize model
-    model = ge.StripeFitnessModel(out_strength, in_strength, num_links)
+    model = ge.StripeFitnessModel(g)
 
     # Fit model parameters
     model.fit()
 
-    # Return probability matrix 
-    prob_mat = model.probability_matrix
+    # Sample from the ensemble
+    model.sample()
 
 Development
 -----------
@@ -65,8 +76,8 @@ To build a development environment run:
 
 .. code-block:: bash
 
-    python3 -m venv venv 
-    source venv/bin/activate 
+    python3 -m venv env 
+    source env/bin/activate 
     pip install -e '.[dev]'
 
 For testing:

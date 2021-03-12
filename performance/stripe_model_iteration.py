@@ -1,16 +1,15 @@
-""" Evaluate the performance of the vector fitness model probability iterator.
+""" Evaluate the performance of the stripe fitness model iteration step.
 
+By iteration step we mean the objective function being minimised. In the case
+of the stripe model it is the expected number of links for a given z.
 It plots how the computation time evolves with increasing number of links and
 edges. The results are platform dependent but the relative performance of
 improvements to the models should be tested.
 
-Current worst case scenario:
-500 0.1 0.1 100 Done in:  9.167050301
 """
 import time
 import graph_ensembles as ge
 import numpy as np
-from itertools import product
 import matplotlib.pyplot as plt
 
 # Specify parameters' space for graph construction
