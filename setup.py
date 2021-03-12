@@ -7,7 +7,7 @@ with open('HISTORY.rst', encoding='utf-8') as history_file:
     history = history_file.read()
 
 setup(
-    name='graph_ensembles',
+    name='graph-ensembles',
     author="Leonardo Niccolò Ialongo",
     author_email='leonardo.ialongo@gmail.com',
     python_requires='>=3.0',
