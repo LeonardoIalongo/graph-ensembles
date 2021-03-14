@@ -5,7 +5,7 @@ reconstruction, filtering or pattern detection among others. """
 import numpy as np
 from numpy.lib.recfunctions import rec_append_fields as append_fields
 import pandas as pd
-from . import methods as mt
+import graph_ensembles.methods as mt
 import warnings
 from math import exp, log
 
