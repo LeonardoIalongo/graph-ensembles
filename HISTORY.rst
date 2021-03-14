@@ -2,6 +2,14 @@
 History
 =======
 
+0.0.3 (2021-03-14)
+------------------
+* Large changes in API with great improvements in usability
+* Added sampling function
+* Added RandomGraph model
+* Added Graph classes for ease of use
+
+
 0.0.2 (2020-11-13)
 ------------------
 * Added steps for CI. 
