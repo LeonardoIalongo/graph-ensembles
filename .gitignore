@@ -1,9 +1,12 @@
+env/
 venv/
+notes/
 input_data/
 __pycache__/
 dist/
 build/
 temp.py
+temp.ipynb
 graph_ensembles.egg-info/
 .coverage*
 .ipynb_checkpoints/

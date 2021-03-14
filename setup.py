@@ -7,11 +7,11 @@ with open('HISTORY.rst', encoding='utf-8') as history_file:
     history = history_file.read()
 
 setup(
-    name='graph_ensembles',
+    name='graph-ensembles',
     author="Leonardo Niccolò Ialongo",
     author_email='leonardo.ialongo@gmail.com',
     python_requires='>=3.0',
-    version='0.0.2',
+    version='0.0.3',
     url='https://github.com/LeonardoIalongo/graph-ensembles',
     description=("The graph ensemble package contains a set of methods to"
                  " build fitness based graph ensembles from marginal"
@@ -26,13 +26,14 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Operating System :: OS Independent',
     ],
-    packages=['graph_ensembles'],
+    packages=['graph_ensembles', 'graph_ensembles.methods'],
     package_dir={'': 'src'},
-    install_requires=["numpy>=1.15",
-                      "scipy>=1.0",
-                      "numba>=0.51"
+    install_requires=["numpy>=1.20",
+                      "numba==0.53.rc3",
+                      "pandas>=1.1"
                       ],
     extras_require={
         "dev": ["pytest==6.0.1",
