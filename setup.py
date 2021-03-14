@@ -29,7 +29,7 @@ setup(
         'Programming Language :: Python :: 3.9',
         'Operating System :: OS Independent',
     ],
-    packages=['graph_ensembles'],
+    packages=['graph_ensembles', 'graph_ensembles.methods'],
     package_dir={'': 'src'},
     install_requires=["numpy>=1.20",
                       "numba==0.53.rc3",
