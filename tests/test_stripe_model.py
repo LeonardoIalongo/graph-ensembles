@@ -143,4 +143,4 @@ class TestStripeFitnessModel():
             assert np.all(sample.num_vertices == num_vertices)
 
         s_n_e = np.average(s_n_e, axis=0)
-        np.testing.assert_allclose(s_n_e, num_edges, atol=1e-2, rtol=0)
+        np.testing.assert_allclose(s_n_e, num_edges, atol=1e-1, rtol=0)
