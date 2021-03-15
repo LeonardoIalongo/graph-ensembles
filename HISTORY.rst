@@ -2,6 +2,10 @@
 History
 =======
 
+0.0.4 (2021-03-15)
+------------------
+* Fixed issues with slow pandas index conversion
+
 0.0.3 (2021-03-14)
 ------------------
 * Large changes in API with great improvements in usability

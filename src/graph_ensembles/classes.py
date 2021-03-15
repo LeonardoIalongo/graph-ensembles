@@ -120,6 +120,14 @@ class sGraph():
         assert isinstance(v, pd.DataFrame), 'Only dataframe input supported.'
         assert isinstance(e, pd.DataFrame), 'Only dataframe input supported.'
 
+        # If column names are passed as lists with one elements extract str
+        if isinstance(v_id, list) and len(v_id) == 1:
+            v_id = v_id[0]
+        if isinstance(src, list) and len(src) == 1:
+            src = src[0]
+        if isinstance(dst, list) and len(dst) == 1:
+            dst = dst[0]
+
         # Determine size of indices
         self.num_vertices = len(v.index)
         self.num_edges = len(e.index)
@@ -136,11 +144,12 @@ class sGraph():
         # and generate optimized edge list
         smsg = 'Some source vertices are not in v.'
         dmsg = 'Some destination vertices are not in v.'
+        src_array = np.empty(self.num_edges, dtype=self.id_dtype)
+        dst_array = np.empty(self.num_edges, dtype=self.id_dtype)
+
         if isinstance(src, list) and isinstance(dst, list):
             n = len(src)
             m = len(dst)
-            src_array = np.empty(self.num_edges, dtype=self.id_dtype)
-            dst_array = np.empty(self.num_edges, dtype=self.id_dtype)
             i = 0
             for row in e[src + dst].itertuples(index=False):
                 row_src = row[0:n]
@@ -153,23 +162,25 @@ class sGraph():
                 dst_array[i] = self.id_dict[row_dst]
                 i += 1
 
-            self.e = np.rec.array(
-                (src_array, dst_array),
-                dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
-
         elif isinstance(src, str) and isinstance(dst, str):
-            assert e[src].isin(self.id_dict).all(), smsg
-            assert e[dst].isin(self.id_dict).all(), dmsg
-
-            self.e = np.rec.array(
-                (e[src].replace(self.id_dict,
-                                inplace=False).to_numpy(dtype=self.id_dtype),
-                 e[dst].replace(self.id_dict,
-                                inplace=False).to_numpy(dtype=self.id_dtype)),
-                dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
+            i = 0
+            for row in e[[src, dst]].itertuples(index=False):
+                row_src = row[0]
+                row_dst = row[1]
+                if row_src not in self.id_dict:
+                    assert False, smsg
+                if row_dst not in self.id_dict:
+                    assert False, dmsg
+                src_array[i] = self.id_dict[row_src]
+                dst_array[i] = self.id_dict[row_dst]
+                i += 1
 
         else:
             raise ValueError('src and dst can be either both lists or str.')
+
+        self.e = np.rec.array(
+                (src_array, dst_array),
+                dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
 
     def degree(self, get=False):
         """ Compute the undirected degree sequence.
@@ -333,6 +344,9 @@ class WeightedGraph(DirectedGraph):
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst)
 
+        if isinstance(weight, list) and len(weight) == 1:
+            weight = weight[0]
+
         # Convert weights to float64 for computations
         self.e = append_fields(
             self.e,
@@ -459,6 +473,9 @@ class LabelGraph(sGraph):
             the graph object
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+
+        if isinstance(edge_label, list) and len(edge_label) == 1:
+            edge_label = edge_label[0]
 
         # Get dictionary of label to numeric internal label
         self.label_dict = mt.generate_label_dict(e, edge_label)
@@ -673,6 +690,9 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
         """
         LabelGraph.__init__(self, v, e, v_id=v_id, src=src, dst=dst,
                             edge_label=edge_label)
+
+        if isinstance(weight, list) and len(weight) == 1:
+            weight = weight[0]
 
         # Convert weights to float64 for computations
         self.e = append_fields(
