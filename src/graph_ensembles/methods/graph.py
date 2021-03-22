@@ -172,14 +172,14 @@ def compute_degree_by_label(e):
 
     d = np.zeros((len(lv_dict), 3), dtype=np.uint64)
     for n in range(len(e)):
-        tmp = (e[n].label, e[n].src)
-        ind = lv_dict[tmp]
-        d[ind, 0:2] = tmp
+        ind = lv_dict[(e[n].label, e[n].src)]
+        d[ind, 0] = e[n].label
+        d[ind, 1] = e[n].src
         d[ind, 2] += 1
 
-        tmp = (e[n].label, e[n].dst)
-        ind = lv_dict[tmp]
-        d[ind, 0:2] = tmp
+        ind = lv_dict[(e[n].label, e[n].dst)]
+        d[ind, 0] = e[n].label
+        d[ind, 1] = e[n].dst
         d[ind, 2] += 1
 
     return d, lv_dict
@@ -222,14 +222,14 @@ def compute_in_out_degree_by_label(e):
     d_out = np.zeros((len(out_dict), 3), dtype=np.uint64)
     d_in = np.zeros((len(in_dict), 3), dtype=np.uint64)
     for n in range(len(e)):
-        tmp = (e[n].label, e[n].src)
-        ind = out_dict[tmp]
-        d_out[ind, 0:2] = tmp
+        ind = out_dict[(e[n].label, e[n].src)]
+        d_out[ind, 0] = e[n].label
+        d_out[ind, 1] = e[n].src
         d_out[ind, 2] += 1
 
-        tmp = (e[n].label, e[n].dst)
-        ind = in_dict[tmp]
-        d_in[ind, 0:2] = tmp
+        ind = in_dict[(e[n].label, e[n].dst)]
+        d_in[ind, 0] = e[n].label
+        d_in[ind, 1] = e[n].dst
         d_in[ind, 2] += 1
 
     return d_out, d_in, out_dict, in_dict
@@ -263,14 +263,14 @@ def compute_strength_by_label(e):
 
     s = np.zeros((len(lv_dict), 3), dtype=np.float64)
     for n in range(len(e)):
-        tmp = (e[n].label, e[n].src)
-        ind = lv_dict[tmp]
-        s[ind, 0:2] = tmp
+        ind = lv_dict[(e[n].label, e[n].src)]
+        s[ind, 0] = e[n].label
+        s[ind, 1] = e[n].src
         s[ind, 2] += e[n].weight
 
-        tmp = (e[n].label, e[n].dst)
-        ind = lv_dict[tmp]
-        s[ind, 0:2] = tmp
+        ind = lv_dict[(e[n].label, e[n].dst)]
+        s[ind, 0] = e[n].label
+        s[ind, 1] = e[n].dst
         s[ind, 2] += e[n].weight
 
     return s, lv_dict
