@@ -26,19 +26,22 @@ def check_unique_labelled_edges(e):
             assert False, 'There are repeated edges.'
 
 
-def generate_id_dict(v, id_col):
-    """ Return id dictionary. """
+def generate_id_dict(df, id_col, no_rep=False):
+    """ Return id dictionary for given dataframe columns.
+
+    If no_rep set to True then if a repetition is found it will raise an error.
+    """
     id_dict = {}
-    rep_msg = 'There is at least one repeated id in the vertex dataframe.'
 
     if isinstance(id_col, list):
         if len(id_col) > 1:
             # Id is a tuple
             i = 0
-            for x in v[id_col].itertuples(index=False):
+            for x in df[id_col].itertuples(index=False):
                 x = tuple(x)
                 if x in id_dict:
-                    raise Exception(rep_msg)
+                    if no_rep:
+                        raise Exception
                 else:
                     id_dict[x] = i
                     i += 1
@@ -46,9 +49,10 @@ def generate_id_dict(v, id_col):
         elif len(id_col) == 1:
             # Extract series
             i = 0
-            for x in v[id_col[0]]:
+            for x in df[id_col[0]]:
                 if x in id_dict:
-                    raise Exception(rep_msg)
+                    if no_rep:
+                        raise Exception
                 else:
                     id_dict[x] = i
                     i += 1
@@ -60,9 +64,10 @@ def generate_id_dict(v, id_col):
     elif isinstance(id_col, str):
         # Extract series
         i = 0
-        for x in v[id_col]:
+        for x in df[id_col]:
             if x in id_dict:
-                raise Exception(rep_msg)
+                if no_rep:
+                    raise Exception
             else:
                 id_dict[x] = i
                 i += 1
@@ -71,52 +76,6 @@ def generate_id_dict(v, id_col):
         raise ValueError('id_col must be string or list of strings.')
 
     return id_dict
-
-
-def generate_label_dict(e, label):
-    """ Return id dictionary. """
-    label_dict = {}
-
-    if isinstance(label, list):
-        if len(label) > 1:
-            # Id is a tuple
-            i = 0
-            for x in e[label].itertuples(index=False):
-                x = tuple(x)
-                if x in label_dict:
-                    pass
-                else:
-                    label_dict[x] = i
-                    i += 1
-
-        elif len(label) == 1:
-            # Extract series
-            i = 0
-            for x in e[label[0]]:
-                if x in label_dict:
-                    pass
-                else:
-                    label_dict[x] = i
-                    i += 1
-
-        else:
-            # No column passed
-            raise ValueError('At least one label column must be given.')
-
-    elif isinstance(label, str):
-        # Extract series
-        i = 0
-        for x in e[label]:
-            if x in label_dict:
-                pass
-            else:
-                label_dict[x] = i
-                i += 1
-
-    else:
-        raise ValueError('edge_label must be string or list of strings.')
-
-    return label_dict
 
 
 @jit(nopython=True)

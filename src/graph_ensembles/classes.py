@@ -16,7 +16,8 @@ class Graph():
     """
     def __new__(cls, v, e, **kwargs):
         # Ensure passed arguments are accepted
-        allowed_arguments = ['v_id', 'src', 'dst', 'weight', 'edge_label']
+        allowed_arguments = ['v_id', 'src', 'dst', 'weight',
+                             'edge_label', 'v_group']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -36,6 +37,11 @@ class Graph():
         else:
             dst_col = kwargs['dst']
 
+        if 'v_group' in kwargs:
+            v_group = kwargs['v_group']
+        else:
+            v_group = None
+
         if 'weight' in kwargs:
             weight_col = kwargs['weight']
             if 'edge_label' in kwargs:
@@ -46,14 +52,16 @@ class Graph():
                                           src=src_col,
                                           dst=dst_col,
                                           weight=weight_col,
-                                          edge_label=label_col)
+                                          edge_label=label_col,
+                                          v_group=v_group)
             else:
                 return WeightedGraph(v,
                                      e,
                                      v_id=id_col,
                                      src=src_col,
                                      dst=dst_col,
-                                     weight=weight_col)
+                                     weight=weight_col,
+                                     v_group=v_group)
 
         else:
             if 'edge_label' in kwargs:
@@ -63,13 +71,15 @@ class Graph():
                                   v_id=id_col,
                                   src=src_col,
                                   dst=dst_col,
-                                  edge_label=label_col)
+                                  edge_label=label_col,
+                                  v_group=v_group)
             else:
                 return DirectedGraph(v,
                                      e,
                                      v_id=id_col,
                                      src=src_col,
-                                     dst=dst_col)
+                                     dst=dst_col,
+                                     v_group=v_group)
 
 
 class sGraph():
@@ -89,6 +99,12 @@ class sGraph():
         dictionary to convert original identifiers to positions in v
     id_dtype: numpy.dtype
         type of the id (e.g. np.uint16)
+    num_groups: int  (or None)
+        number of vertex groups
+    group_dict: dict (or none)
+        dictionary to convert v_group columns into numeric ids
+    group_dtype: numpy.dtype
+        type of the group id
 
     Methods
     -------
@@ -96,7 +112,7 @@ class sGraph():
     degree:
         compute the undirected degree sequence
     """
-    def __init__(self, v, e, v_id, src, dst):
+    def __init__(self, v, e, v_id, src, dst, v_group=None):
         """Return a sGraph object given vertices and edges.
 
         Parameters
@@ -111,6 +127,8 @@ class sGraph():
             identifier column for the source vertex
         dst: str or list of str
             identifier column for the destination vertex
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
@@ -134,11 +152,41 @@ class sGraph():
         num_bytes = mt.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
         self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
-            type=np.recarray, dtype=[('id', self.id_dtype)])
+                type=np.recarray, dtype=[('id', self.id_dtype)])
+
+        # If v_group is given then create dict and add to v
+        if v_group is not None:
+            if isinstance(v_group, list) and len(v_group) == 1:
+                v_group = v_group[0]
+
+            self.group_dict = mt.generate_id_dict(v, v_group)
+            self.num_groups = len(self.group_dict)
+            num_bytes = mt.get_num_bytes(self.num_groups)
+            self.group_dtype = np.dtype('u' + str(num_bytes))
+            groups = np.empty(self.num_vertices, dtype=self.group_dtype)
+            i = 0
+            if isinstance(v_group, list):
+                for row in v[v_group].itertuples(index=False):
+                    groups[i] = self.group_dict[row]
+                    i += 1
+            elif isinstance(v_group, str):
+                for row in v[v_group]:
+                    groups[i] = self.group_dict[row]
+                    i += 1
+            else:
+                raise ValueError('v_group must be str or list of str.')
+            self.v = append_fields(self.v, 'group', groups)
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict = mt.generate_id_dict(v, v_id)
+        try:
+            self.id_dict = mt.generate_id_dict(v, v_id, no_rep=True)
+        except ValueError as err:
+            raise err
+        except Exception:
+            rep_msg = ('There is at least one repeated id in the vertex '
+                       'dataframe.')
+            raise Exception(rep_msg)
 
         # Check that no vertex id in e is not present in v
         # and generate optimized edge list
@@ -215,7 +263,7 @@ class DirectedGraph(sGraph):
         compute the in degree sequence
     """
 
-    def __init__(self, v, e, v_id, src, dst):
+    def __init__(self, v, e, v_id, src, dst, v_group=None):
         """Return a DirectedGraph object given vertices and edges.
 
         Parameters
@@ -230,13 +278,15 @@ class DirectedGraph(sGraph):
             identifier column for the source vertex
         dst: str or list of str
             identifier column for the destination vertex
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
         DirectedGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
 
         # Sort e
         self.sort_ind = np.argsort(self.e)
@@ -319,7 +369,7 @@ class WeightedGraph(DirectedGraph):
     in_strength:
         compute the in strength sequence
     """
-    def __init__(self, v, e, v_id, src, dst, weight):
+    def __init__(self, v, e, v_id, src, dst, weight, v_group=None):
         """Return a WeightedGraph object given vertices and edges.
 
         Parameters
@@ -336,13 +386,15 @@ class WeightedGraph(DirectedGraph):
             identifier column for the destination vertex
         weight:
             identifier column for the weight of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
         WeightedGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
 
         if isinstance(weight, list) and len(weight) == 1:
             weight = weight[0]
@@ -445,7 +497,7 @@ class LabelGraph(DirectedGraph):
     in_degree_by_label:
         compute the in degree of each vertex by label
     """
-    def __init__(self, v, e, v_id, src, dst, edge_label):
+    def __init__(self, v, e, v_id, src, dst, edge_label, v_group=None):
         """Return a LabelGraph object given vertices and edges.
 
         Parameters
@@ -462,19 +514,22 @@ class LabelGraph(DirectedGraph):
             identifier column for the destination vertex
         edge_label:
             identifier column for label of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
         LabelGraph
             the graph object
         """
-        super(DirectedGraph, self).__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super(DirectedGraph, self).__init__(v, e, v_id=v_id, src=src, dst=dst,
+                                            v_group=v_group)
 
         if isinstance(edge_label, list) and len(edge_label) == 1:
             edge_label = edge_label[0]
 
         # Get dictionary of label to numeric internal label
-        self.label_dict = mt.generate_label_dict(e, edge_label)
+        self.label_dict = mt.generate_id_dict(e, edge_label)
         self.num_labels = len(self.label_dict)
         num_bytes = mt.get_num_bytes(self.num_labels)
         self.label_dtype = np.dtype('u' + str(num_bytes))
@@ -619,7 +674,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
     in_strength_by_label:
         compute the in strength of each vertex by label
     """
-    def __init__(self, v, e, v_id, src, dst, weight, edge_label):
+    def __init__(self, v, e, v_id, src, dst, weight, edge_label, v_group=None):
         """Return a WeightedLabelGraph object given vertices and edges.
 
         Parameters
@@ -638,6 +693,8 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
             identifier column for the weight of the edges
         edge_label:
             identifier column for label of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
@@ -645,7 +702,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
             the graph object
         """
         LabelGraph.__init__(self, v, e, v_id=v_id, src=src, dst=dst,
-                            edge_label=edge_label)
+                            edge_label=edge_label, v_group=v_group)
 
         if isinstance(weight, list) and len(weight) == 1:
             weight = weight[0]
