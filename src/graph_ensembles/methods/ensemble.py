@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.random as rng
-from numba import jit, prange
+from numba import jit
 from math import ceil, sqrt, isinf, exp, log
 
 
@@ -108,13 +108,13 @@ def exp_edges_stripe_single_layer(z, out_strength, in_strength):
     return exp_edges
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def exp_edges_stripe(z, out_strength, in_strength, num_labels):
     """ Compute the expected number of edges for the stripe fitness model
     with one parameter controlling for the density for each label.
     """
     exp_edges = np.zeros(len(z), dtype=np.float64)
-    for i in prange(num_labels):
+    for i in range(num_labels):
         exp_edges[i] = exp_edges_stripe_single_layer(
             log(z[i]),
             out_strength[out_strength.label == i],
@@ -393,7 +393,7 @@ def iterative_block_mult_z(z, out_strength, in_strength, L):
     return aux_z
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def vector_fitness_prob_array_block_one_z(out_strength, in_strength,
                                           z, N):
     """
@@ -408,7 +408,7 @@ def vector_fitness_prob_array_block_one_z(out_strength, in_strength,
         sect_node_i = int(out_strength[i, 1])
         sect_out = int(out_strength[i, 2])
         s_out = out_strength[i, 3]
-        for j in prange(in_strength.shape[0]):
+        for j in range(in_strength.shape[0]):
             ind_in = int(in_strength[j, 0])
             sect_node_j = int(in_strength[j, 1])
             sect_in = int(in_strength[j, 2])
@@ -421,7 +421,7 @@ def vector_fitness_prob_array_block_one_z(out_strength, in_strength,
     return p
 
 
-# @jit(forceobj=True, parallel=True)
+# @jit(forceobj=True)
 def expected_links_block_one_z(out_strength, in_strength, z):
     """
     Function computing the expeceted number of links, under the Cimi
@@ -434,7 +434,7 @@ def expected_links_block_one_z(out_strength, in_strength, z):
         sect_node_i = int(out_strength[i, 1])
         sect_out = int(out_strength[i, 2])
         s_out = out_strength[i, 3]
-        for j in prange(in_strength.shape[0]):
+        for j in range(in_strength.shape[0]):
             ind_in = int(in_strength[j, 0])
             sect_node_j = int(in_strength[j, 1])
             sect_in = int(in_strength[j, 2])
@@ -517,7 +517,7 @@ def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
     return W
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def vector_fitness_prob_array_block_mult_z(out_strength, in_strength, z, N):
     """
     Function computing the Probability Matrix of the Cimi block model
@@ -529,7 +529,7 @@ def vector_fitness_prob_array_block_mult_z(out_strength, in_strength, z, N):
         ind_out = int(out_strength[i, 0])
         sect_out = int(out_strength[i, 1])
         s_out = out_strength[i, 2]
-        for j in prange(in_strength.shape[0]):
+        for j in range(in_strength.shape[0]):
             ind_in = int(in_strength[j, 0])
             sect_in = int(in_strength[j, 1])
             s_in = in_strength[j, 2]
@@ -540,7 +540,7 @@ def vector_fitness_prob_array_block_mult_z(out_strength, in_strength, z, N):
     return p
 
 
-# @jit(forceobj=True, parallel=True)
+# @jit(forceobj=True)
 def expected_links_block_mult_z(out_strength, in_strength, z):
     """
     Function computing the expeceted number of links, under the Cimi
@@ -553,7 +553,7 @@ def expected_links_block_mult_z(out_strength, in_strength, z):
         ind_out = int(out_strength[i, 0])
         sect_out = int(out_strength[i, 1])
         s_out = out_strength[i, 2]
-        for j in prange(in_strength.shape[0]):
+        for j in range(in_strength.shape[0]):
             ind_in = int(in_strength[j, 0])
             sect_in = int(in_strength[j, 1])
             s_in = in_strength[j, 2]
