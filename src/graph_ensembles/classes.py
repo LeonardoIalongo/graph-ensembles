@@ -96,7 +96,7 @@ class sGraph():
     num_vertices: int
         number of vertices in the graph
     num_edges: int
-        number of edges in the graph
+        number of distinct directed edges in the graph
     v: numpy.rec.array
         array containing the computed properties of the vertices
     e: numpy.rec.array
@@ -156,7 +156,6 @@ class sGraph():
 
         # Determine size of indices
         self.num_vertices = len(v.index)
-        self.num_edges = len(e.index) # TODO: issues with labels?
         num_bytes = mt.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
         self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
@@ -201,8 +200,8 @@ class sGraph():
         # and generate optimized edge list
         smsg = 'Some source vertices are not in v.'
         dmsg = 'Some destination vertices are not in v.'
-        src_array = np.empty(self.num_edges, dtype=self.id_dtype)
-        dst_array = np.empty(self.num_edges, dtype=self.id_dtype)
+        src_array = np.empty(len(e.index), dtype=self.id_dtype)
+        dst_array = np.empty(len(e.index), dtype=self.id_dtype)
 
         if isinstance(src, list) and isinstance(dst, list):
             n = len(src)
@@ -238,6 +237,7 @@ class sGraph():
         self.e = np.rec.array(
                 (src_array, dst_array),
                 dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
+        self.num_edges = mt.compute_num_edges(self.e)
 
     def degree(self, get=False):
         """ Compute the undirected degree sequence.
@@ -564,7 +564,7 @@ class LabelGraph(DirectedGraph):
         # Convert labels
         if isinstance(edge_label, list):
             n = len(edge_label)
-            lbl_array = np.empty(self.num_edges, dtype=self.label_dtype)
+            lbl_array = np.empty(len(self.e), dtype=self.label_dtype)
             i = 0
             for row in e[edge_label].itertuples(index=False):
                 lbl_array[i] = self.label_dict[row[0:n]]
@@ -996,7 +996,7 @@ class RandomGraph(GraphEnsemble):
                 except Exception:
                     assert False, msg
 
-            self.total_weight = self.get_total_weight()
+            self.total_weight = self.exp_total_weight()
 
     def fit(self):
         """ Fit the parameter p and q to the number of edges and total weight.
@@ -1014,7 +1014,7 @@ class RandomGraph(GraphEnsemble):
         """
         return self.p*self.num_vertices*(self.num_vertices - 1)
 
-    def get_total_weight(self):
+    def exp_total_weight(self):
         """ Compute the expected total weight (per label) given q.
         """
         if self.discrete_weights:
@@ -1074,7 +1074,7 @@ class RandomGraph(GraphEnsemble):
 
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
-            g.num_edges = len(g.e)
+            g.num_edges = mt.compute_num_edges(g.e)
 
         else:
             if hasattr(self, 'q'):
@@ -1118,7 +1118,7 @@ class RandomGraph(GraphEnsemble):
 
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
-            g.num_edges = len(g.e)
+            g.num_edges = mt.compute_num_edges(g.e)
             ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
             dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
             g.num_edges_label = ne_label.astype(dtype)
@@ -1417,7 +1417,7 @@ class StripeFitnessModel(GraphEnsemble):
                       ('weight', 'f8')])
         g.sort_ind = np.argsort(e)
         g.e = e[g.sort_ind]
-        g.num_edges = len(g.e)
+        g.num_edges = mt.compute_num_edges(g.e)
         ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
         dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
         g.num_edges_label = ne_label.astype(dtype)

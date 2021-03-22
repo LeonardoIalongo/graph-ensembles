@@ -265,6 +265,7 @@ class TestLabelGraph():
 
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.LabelGraph)
+        assert g.num_edges == 4
 
     def test_init_edges(self):
         g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',

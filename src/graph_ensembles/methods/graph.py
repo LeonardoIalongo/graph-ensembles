@@ -79,6 +79,16 @@ def generate_id_dict(df, id_col, no_rep=False):
 
 
 @jit(nopython=True)
+def compute_num_edges(e):
+    edges = set()
+    for n in range(len(e)):
+        pair = (e[n].src, e[n].dst)
+        edges.add(pair)
+
+    return len(edges)
+
+
+@jit(nopython=True)
 def compute_num_edges_by_label(e, num_lbl):
     edges = np.zeros(num_lbl, dtype=np.int64)
     for n in range(len(e)):
