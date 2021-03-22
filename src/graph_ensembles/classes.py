@@ -1400,4 +1400,24 @@ class StripeFitnessModel(GraphEnsemble):
 
 
 class BlockFitnessModel(GraphEnsemble):
-    pass
+    """
+    """
+    def __init__(self):
+        pass
+
+    def expected_num_edges(self):
+        if not self.out_strength.has_sorted_indices:
+            self.out_strength.sort_indices()
+        if not self.in_strength.has_sorted_indices:
+            self.in_strength.sort_indices()
+
+        # Extract arrays from sparse matrices
+        s_out_i = self.out_strength.indptr
+        s_out_j = self.out_strength.indices
+        s_out_w = self.out_strength.data
+        s_in_i = self.out_strength.indices
+        s_in_j = self.out_strength.indptr
+        s_in_w = self.out_strength.data
+
+        return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
+                                      s_in_i, s_in_j, s_in_w, self.arr_sect)

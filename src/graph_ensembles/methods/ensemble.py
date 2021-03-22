@@ -229,6 +229,45 @@ def stripe_sample(z, out_strength, in_strength, num_labels):
     return np.array(sample, dtype=np.float64)
 
 
+# --------------- BLOCK METHODS ---------------
+@jit(nopython=True)
+def block_exp_vertex_degree(out_cols, out_vals, in_rows, in_vals):
+    i = 0
+    j = 0
+    d = 0
+    while (i < len(out_cols)) and (j < len(in_rows)):
+        col = out_cols[i]
+        row = in_rows[j]
+        if col == row:
+            d += out_vals[i]*in_vals[j]
+            i += 1
+            j += 1
+        else:
+            if col > row:
+                j += 1
+            else:
+                i += 1
+    return d
+
+
+@jit(nopython=True)
+def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w, arr_sect):
+    num = 0
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[arr_sect[out_row]]
+        s = s_in_j[arr_sect[out_row]+1]
+        out_cols = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+        in_rows = s_in_i[r:s]
+        in_vals = s_in_w[r:s]
+        num += block_exp_vertex_degree(z, out_cols, out_vals, in_rows, in_vals)
+
+    return num
+
+
 # --------------- OLD METHODS ---------------
 @jit(nopython=True)
 def iterative_stripe_one_z(z, out_str, in_str, L):
