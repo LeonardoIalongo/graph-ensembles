@@ -36,6 +36,7 @@ def generate_id_dict(v, id_col):
             # Id is a tuple
             i = 0
             for x in v[id_col].itertuples(index=False):
+                x = tuple(x)
                 if x in id_dict:
                     raise Exception(rep_msg)
                 else:
@@ -81,6 +82,7 @@ def generate_label_dict(e, label):
             # Id is a tuple
             i = 0
             for x in e[label].itertuples(index=False):
+                x = tuple(x)
                 if x in label_dict:
                     pass
                 else:
