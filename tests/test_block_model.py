@@ -2,7 +2,6 @@
 import graph_ensembles as ge
 import numpy as np
 import pandas as pd
-import pytest
 
 v = pd.DataFrame([['ING', 'NL'],
                  ['ABN', 'NL'],

@@ -82,6 +82,12 @@ class Graph():
                                      v_group=v_group)
 
 
+class GroupVertexList():
+    """ Class to store results of group-vertex properties.
+    """
+    pass
+
+
 class sGraph():
     """ General class for graphs.
 
@@ -105,6 +111,8 @@ class sGraph():
         dictionary to convert v_group columns into numeric ids
     group_dtype: numpy.dtype
         type of the group id
+    gv: GroupVertexList
+        collector object for all properties of the group vertex pair
 
     Methods
     -------
@@ -156,6 +164,7 @@ class sGraph():
 
         # If v_group is given then create dict and add to v
         if v_group is not None:
+            self.gv = GroupVertexList()
             if isinstance(v_group, list) and len(v_group) == 1:
                 v_group = v_group[0]
 
@@ -245,6 +254,24 @@ class sGraph():
 
         if get:
             return degree
+
+    def degree_by_group(self, get=False):
+        """ Compute the undirected degree sequence to and from each group.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if self.v_group is None:
+            raise Exception('Graph object does not contain group info.')
+        else:
+            if hasattr(self.gv, 'degree'):
+                degree = self.gv.degree
+            else:
+                degree = mt.compute_degree_group(self.e, self.num_vertices)
+                dtype = 'u' + str(mt.get_num_bytes(np.max(degree)))
+                self.gv.degree = degree.astype(dtype)
+
+            if get:
+                return degree
 
 
 class DirectedGraph(sGraph):
@@ -1104,7 +1131,7 @@ class FitnessModel(GraphEnsemble):
 
 
 class StripeFitnessModel(GraphEnsemble):
-    """ A generalized fitness model that allows for vector strength sequences.
+    """ A generalized fitness model that allows for strengths by label.
 
     This model allows to take into account labels of the edges and include
     this information as part of the model. The strength sequence is therefore
@@ -1129,14 +1156,14 @@ class StripeFitnessModel(GraphEnsemble):
     """
 
     def __init__(self, *args, **kwargs):
-        """ Return a VectorFitnessModel for the given graph data.
+        """ Return a StripeFitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedLabelGraph, the
         strength sequences (in and out) and the number of edges (per label),
         or the strength sequences and the z parameter (per label).
 
-        The model accepts the strength sequences as numpy arrays. The first
-        column must contain the node index, the second column the label index
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the label index, the second column the node index
         to which the strength refers, and in the third column must have the
         value of the strength for the node label pair. All node label pairs
         not included are assumed zero.
@@ -1209,6 +1236,8 @@ class StripeFitnessModel(GraphEnsemble):
             assert clm in ('label', 'id', 'value'), msg
 
         # Ensure that strengths are sorted
+        self.out_strength = self.out_strength[['label', 'id', 'value']]
+        self.in_strength = self.in_strength[['label', 'id', 'value']]
         self.out_strength.sort()
         self.in_strength.sort()
 
@@ -1231,10 +1260,10 @@ class StripeFitnessModel(GraphEnsemble):
         # Check that sum of in and out strengths are equal per label
         tot_out = np.zeros((self.num_labels))
         for row in self.out_strength:
-            tot_out[row[0]] += row[2]
+            tot_out[row.label] += row.value
         tot_in = np.zeros((self.num_labels))
         for row in self.in_strength:
-            tot_in[row[0]] += row[2]
+            tot_in[row.label] += row.value
 
         msg = 'Sum of strengths per label do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-6), msg
@@ -1400,10 +1429,130 @@ class StripeFitnessModel(GraphEnsemble):
 
 
 class BlockFitnessModel(GraphEnsemble):
+    """ A generalized fitness model that allows for grouped vertices.
+
+    This model allows to take into account the group of each vertex and
+    include this information as part of the model. The strength sequence is
+    therefore now subdivided in strength from and to each group.
+
+    The quantity preserved by the ensemble is the total number of edges.
+
+    Attributes
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence
+    in_strength: np.ndarray
+        the in strength sequence
+    num_edges: int
+        the total number of edges
+    num_vertices: int
+        the total number of nodes
+    num_groups: int
+        the total number of groups by which the vector strengths are computed
+    z: float
+        the density parameter
     """
-    """
-    def __init__(self):
-        pass
+
+    def __init__(self, *args, **kwargs):
+        """ Return a BlockFitnessModel for the given graph data.
+
+        The model accepts as arguments either: a DirectedGraph object, the
+        strength sequences (in and out) and the number of edges (per label),
+        or the strength sequences and the z parameter (per label).
+
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the node index, the second column the group index
+        to which the strength refers, and in the third column must have the
+        value of the strength for the node group pair. All node group pairs
+        not included are assumed zero.
+        """
+
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], DirectedGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges
+                self.num_groups = g.num_groups
+                self.out_strength = g.out_strength_by_group(get=True)
+                self.in_strength = g.in_strength_by_group(get=True)
+            else:
+                raise ValueError('First argument passed must be a '
+                                 'DirectedGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'num_groups',
+                             'out_strength', 'in_strength', 'z',
+                             'discrete_weights']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+
+        if not hasattr(self, 'num_groups'):
+            raise ValueError('Number of groups not set.')
+
+        if not hasattr(self, 'out_strength'):
+            raise ValueError('out_strength not set.')
+
+        if not hasattr(self, 'in_strength'):
+            raise ValueError('in_strength not set.')
+
+        if not (hasattr(self, 'num_edges') or
+                hasattr(self, 'z')):
+            raise ValueError('Either num_edges or z must be set.')
+
+        # Ensure that strengths passed adhere to format
+        msg = ("Out strength must be a rec array with columns: "
+               "('id', 'group', 'value')")
+        assert isinstance(self.out_strength, np.recarray), msg
+        for clm in self.out_strength.dtype.names:
+            assert clm in ('id', 'group', 'value'), msg
+
+        msg = ("In strength must be a rec array with columns: "
+               "('id', 'group', 'value')")
+        assert isinstance(self.in_strength, np.recarray), msg
+        for clm in self.in_strength.dtype.names:
+            assert clm in ('id', 'group', 'value'), msg
+
+        # Ensure that strengths are sorted
+        self.out_strength = self.out_strength[['id', 'group', 'value']]
+        self.in_strength = self.in_strength[['id', 'group', 'value']]
+        self.out_strength.sort()
+        self.in_strength.sort()
+
+        # Ensure that the parameters or number of edges are set correctly
+        if hasattr(self, 'num_edges'):
+            if not isinstance(self.num_edges, int):
+                raise ValueError('Number of edges must be an integer.')
+        else:
+            if not isinstance(self.z, float):
+                raise ValueError('z must be a float.')
+
+        # Check that sum of in and out strengths are equal per group
+        tot_out = np.zeros((self.num_groups))
+        for row in self.out_strength:
+            tot_out[row.group] += row.value
+        tot_in = np.zeros((self.num_groups))
+        for row in self.in_strength:
+            tot_in[row.group] += row.value
+
+        msg = 'Sum of strengths per group do not match.'
+        assert np.allclose(tot_out, tot_in, atol=1e-6), msg
+
+        # If z is set computed expected number of edges per label
+        if hasattr(self, 'z'):
+            self.num_edges = self.expected_num_edges()
 
     def expected_num_edges(self):
         if not self.out_strength.has_sorted_indices:
