@@ -233,7 +233,7 @@ class DirectedGraph(sGraph):
 
         Returns
         -------
-        sGraph
+        DirectedGraph
             the graph object
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst)
@@ -339,7 +339,7 @@ class WeightedGraph(DirectedGraph):
 
         Returns
         -------
-        sGraph
+        WeightedGraph
             the graph object
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst)
@@ -420,7 +420,7 @@ class LabelVertexList():
     pass
 
 
-class LabelGraph(sGraph):
+class LabelGraph(DirectedGraph):
     """ General class for directed graphs with labelled edges.
 
     Attributes
@@ -438,10 +438,6 @@ class LabelGraph(sGraph):
 
     Methods
     -------
-    out_degree:
-        compute the out degree sequence
-    in_degree:
-        compute the in degree sequence
     degree_by_label:
         compute the degree of each vertex by label
     out_degree_by_label:
@@ -469,10 +465,10 @@ class LabelGraph(sGraph):
 
         Returns
         -------
-        sGraph
+        LabelGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super(DirectedGraph, self).__init__(v, e, v_id=v_id, src=src, dst=dst)
 
         if isinstance(edge_label, list) and len(edge_label) == 1:
             edge_label = edge_label[0]
@@ -534,46 +530,6 @@ class LabelGraph(sGraph):
 
         # Create lv property
         self.lv = LabelVertexList()
-
-    def out_degree(self, get=False):
-        """ Compute the out degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
-        """
-        if 'out_degree' in self.v.dtype.names:
-            d_out = self.v.out_degree
-        else:
-            d_out, d_in = mt.compute_in_out_degree_labelled(
-                self.e, self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
-                                                   np.max(d_in))))
-            self.v = append_fields(self.v,
-                                   ['out_degree', 'in_degree'],
-                                   (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype])
-
-        if get:
-            return d_out
-
-    def in_degree(self, get=False):
-        """ Compute the out degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
-        """
-        if 'in_degree' in self.v.dtype.names:
-            d_in = self.v.in_degree
-        else:
-            d_out, d_in = mt.compute_in_out_degree_labelled(
-                self.e, self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
-                                                   np.max(d_in))))
-            self.v = append_fields(self.v,
-                                   ['out_degree', 'in_degree'],
-                                   (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype])
-
-        if get:
-            return d_in
 
     def degree_by_label(self, get=False):
         """ Compute the degree sequence by label.

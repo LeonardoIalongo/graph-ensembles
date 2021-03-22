@@ -189,17 +189,6 @@ def compute_degree_by_label(e):
 def compute_in_out_degree(e, num_v):
     d_out = np.zeros(num_v, dtype=np.int64)
     d_in = np.zeros(num_v, dtype=np.int64)
-    for n in range(len(e)):
-        d_out[e[n].src] += 1
-        d_in[e[n].dst] += 1
-
-    return d_out, d_in
-
-
-@jit(nopython=True)
-def compute_in_out_degree_labelled(e, num_v):
-    d_out = np.zeros(num_v, dtype=np.int64)
-    d_in = np.zeros(num_v, dtype=np.int64)
     s = set()
     for n in range(len(e)):
         i = e[n].src
