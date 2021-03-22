@@ -156,7 +156,7 @@ class sGraph():
 
         # Determine size of indices
         self.num_vertices = len(v.index)
-        self.num_edges = len(e.index)
+        self.num_edges = len(e.index) # TODO: issues with labels?
         num_bytes = mt.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
         self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
@@ -939,7 +939,7 @@ class RandomGraph(GraphEnsemble):
                 assert self.num_labels == len(self.p), msg
             else:
                 assert isinstance(self.p, (int, float)), msg
-            self.num_edges = self.get_num_edges()
+            self.num_edges = self.exp_num_edges()
 
         else:
             if not hasattr(self, 'num_edges'):
@@ -1009,7 +1009,7 @@ class RandomGraph(GraphEnsemble):
             else:
                 self.q = self.num_edges/self.total_weight
 
-    def get_num_edges(self):
+    def exp_num_edges(self):
         """ Compute the expected number of edges (per label) given p.
         """
         return self.p*self.num_vertices*(self.num_vertices - 1)
