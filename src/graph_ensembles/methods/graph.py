@@ -204,6 +204,39 @@ def compute_in_out_degree(e, num_v):
 
 
 @jit(nopython=True)
+def compute_in_out_degree_by_group(e, group_dict):
+    out_dict = {}
+    in_dict = {}
+    i = 0
+    j = 0
+    for n in range(len(e)):
+        pair_s = (e[n].src, group_dict[e[n].dst])
+        if pair_s not in out_dict:
+            out_dict[pair_s] = i
+            i += 1
+
+        pair_d = (e[n].dst, group_dict[e[n].src])
+        if pair_d not in in_dict:
+            in_dict[pair_d] = j
+            j += 1
+
+    d_out = np.zeros((len(out_dict), 3), dtype=np.uint64)
+    d_in = np.zeros((len(in_dict), 3), dtype=np.uint64)
+    for n in range(len(e)):
+        ind = out_dict[(e[n].src, group_dict[e[n].dst])]
+        d_out[ind, 0] = e[n].src
+        d_out[ind, 1] = group_dict[e[n].dst]
+        d_out[ind, 2] += 1
+
+        ind = in_dict[(e[n].dst, group_dict[e[n].src])]
+        d_in[ind, 0] = e[n].dst
+        d_in[ind, 1] = group_dict[e[n].src]
+        d_in[ind, 2] += 1
+
+    return d_out, d_in, out_dict, in_dict
+
+
+@jit(nopython=True)
 def compute_in_out_degree_by_label(e):
     out_dict = {}
     in_dict = {}

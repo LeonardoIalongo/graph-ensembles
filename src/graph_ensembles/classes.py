@@ -386,6 +386,57 @@ class DirectedGraph(sGraph):
         if get:
             return d_in
 
+    def out_degree_by_group(self, get=False):
+        """ Compute the out degree sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'out_degree'):
+            d_out, d_in, dout_dict, din_dict = \
+                mt.compute_in_out_degree_by_group(self.e, self.v.group)
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out[:, 2]),
+                                                   np.max(d_in[:, 2]))))
+            self.gv.out_degree = d_out.view(
+                type=np.recarray,
+                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
+                ).reshape((d_out.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', dtype)]
+                )
+            self.gv.in_degree = d_in.view(
+                type=np.recarray,
+                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
+                ).reshape((d_in.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', dtype)]
+                )
+            self.gv.out_degree.sort()
+            self.gv.in_degree.sort()
+            self.gv.out_degree_dict = dout_dict
+            self.gv.in_degree_dict = din_dict
+
+        if get:
+            return self.gv.out_degree
+
+    def in_degree_by_group(self, get=False):
+        """ Compute the in degree sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'in_degree'):
+            self.out_degree_by_group()
+
+        if get:
+            return self.gv.in_degree
+
 
 class WeightedGraph(DirectedGraph):
     """ General class for directed graphs with weighted edges.

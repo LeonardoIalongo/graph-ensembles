@@ -157,6 +157,45 @@ class TestDirectedGraph():
         assert np.all(d_test == d_in), d_test
         assert np.all(g.v.in_degree == d_in), g.v.in_degree
 
+    def test_out_degree_by_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        d = np.rec.array([(0, 0, 1),
+                         (1, 1, 1),
+                         (2, 0, 2)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.uint8)])
+
+        d_test = g.out_degree_by_group(get=True)
+
+        assert np.all(d_test == d), d_test
+        assert np.all(g.gv.out_degree == d), g.gv.out_degree
+
+    def test_in_degree_by_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        d = np.rec.array([(0, 1, 1),
+                         (1, 0, 1),
+                         (1, 1, 1),
+                         (2, 0, 1)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.uint8)])
+
+        d_test = g.in_degree_by_group(get=True)
+
+        assert np.all(d_test == d), d_test
+        assert np.all(g.gv.in_degree == d), g.gv.in_degree
+
     def test_multi_id_init(self):
         v = pd.DataFrame([['ING', 'NL'],
                          ['ABN', 'NL'],
