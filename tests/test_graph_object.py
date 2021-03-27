@@ -290,6 +290,55 @@ class TestWeightedGraph():
         assert np.all(s_test == s_in), s_test
         assert np.all(g.v.in_strength == s_in), g.v.in_strength
 
+    def test_strength_by_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', weight='value',
+                     src='creditor', dst='debtor', v_group='country')
+
+        s = np.rec.array([(0, 0, 1e6),
+                         (1, 0, 1e6),
+                         (1, 1, 1.7e5 + 1e4),
+                         (2, 0, 1.7e5 + 1e4)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.strength_by_group(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.gv.strength == s), g.gv.strength
+
+    def test_out_strength_by_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', weight='value',
+                     src='creditor', dst='debtor', v_group='country')
+
+        s = np.rec.array([(0, 0, 1e6),
+                         (1, 1, 1e4),
+                         (2, 0, 1.7e5)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.out_strength_by_group(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.gv.out_strength == s), g.gv.out_strength
+
+    def test_in_strength_by_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', weight='value',
+                     src='creditor', dst='debtor', v_group='country')
+
+        s = np.rec.array([(1, 0, 1e6),
+                         (1, 1, 1.7e5),
+                         (2, 0, 1e4)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.in_strength_by_group(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.gv.in_strength == s), g.gv.in_strength
+
 
 class TestLabelGraph():
     v = pd.DataFrame([['ING', 'NL'],

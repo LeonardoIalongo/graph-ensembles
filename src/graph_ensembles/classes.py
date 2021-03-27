@@ -551,6 +551,79 @@ class WeightedGraph(DirectedGraph):
         if get:
             return s_in
 
+    def strength_by_group(self, get=False):
+        """ Compute the undirected strength sequence to and from each group.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'strength'):
+            s, s_dict = mt.compute_strength_by_group(self.e, self.v.group)
+            self.gv.strength = s.view(
+                type=np.recarray,
+                dtype=[('id', 'f8'), ('group', 'f8'), ('value', 'f8')]
+                ).reshape((s.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', 'f8')]
+                )
+            self.gv.strength.sort()
+            self.gv.strength_dict = s_dict
+
+        if get:
+            return self.gv.strength
+
+    def out_strength_by_group(self, get=False):
+        """ Compute the out strength sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'out_strength'):
+            s_out, s_in, sout_dict, sin_dict = \
+                mt.compute_in_out_strength_by_group(self.e, self.v.group)
+            self.gv.out_strength = s_out.view(
+                type=np.recarray,
+                dtype=[('id', 'f8'), ('group', 'f8'), ('value', 'f8')]
+                ).reshape((s_out.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', 'f8')]
+                )
+            self.gv.in_strength = s_in.view(
+                type=np.recarray,
+                dtype=[('id', 'f8'), ('group', 'f8'), ('value', 'f8')]
+                ).reshape((s_in.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', 'f8')]
+                )
+            self.gv.out_strength.sort()
+            self.gv.in_strength.sort()
+            self.gv.out_strength_dict = sout_dict
+            self.gv.in_strength_dict = sin_dict
+
+        if get:
+            return self.gv.out_strength
+
+    def in_strength_by_group(self, get=False):
+        """ Compute the in strength sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'in_strength'):
+            self.out_strength_by_group()
+
+        if get:
+            return self.gv.in_strength
+
 
 class LabelVertexList():
     """ Class to store results of label-vertex properties from LabelGraph.

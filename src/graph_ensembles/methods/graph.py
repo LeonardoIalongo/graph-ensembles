@@ -281,6 +281,36 @@ def compute_strength(e, num_v):
 
 
 @jit(nopython=True)
+def compute_strength_by_group(e, group_dict):
+    gv_dict = {}
+    k = 0
+    for n in range(len(e)):
+        pair_s = (e[n].src, group_dict[e[n].dst])
+        if pair_s not in gv_dict:
+            gv_dict[pair_s] = k
+            k += 1
+
+        pair_d = (e[n].dst, group_dict[e[n].src])
+        if pair_d not in gv_dict:
+            gv_dict[pair_d] = k
+            k += 1
+
+    s = np.zeros((len(gv_dict), 3), dtype=np.float64)
+    for n in range(len(e)):
+        ind = gv_dict[(e[n].src, group_dict[e[n].dst])]
+        s[ind, 0] = e[n].src
+        s[ind, 1] = group_dict[e[n].dst]
+        s[ind, 2] += e[n].weight
+
+        ind = gv_dict[(e[n].dst, group_dict[e[n].src])]
+        s[ind, 0] = e[n].dst
+        s[ind, 1] = group_dict[e[n].src]
+        s[ind, 2] += e[n].weight
+
+    return s, gv_dict
+
+
+@jit(nopython=True)
 def compute_strength_by_label(e):
     lv_dict = {}
     i = 0
@@ -319,6 +349,39 @@ def compute_in_out_strength(e, num_v):
         s_in[e[n].dst] += e[n].weight
 
     return s_out, s_in
+
+
+@jit(nopython=True)
+def compute_in_out_strength_by_group(e, group_dict):
+    out_dict = {}
+    in_dict = {}
+    i = 0
+    j = 0
+    for n in range(len(e)):
+        pair_s = (e[n].src, group_dict[e[n].dst])
+        if pair_s not in out_dict:
+            out_dict[pair_s] = i
+            i += 1
+
+        pair_d = (e[n].dst, group_dict[e[n].src])
+        if pair_d not in in_dict:
+            in_dict[pair_d] = j
+            j += 1
+
+    s_out = np.zeros((len(out_dict), 3), dtype=np.float64)
+    s_in = np.zeros((len(in_dict), 3), dtype=np.float64)
+    for n in range(len(e)):
+        ind = out_dict[(e[n].src, group_dict[e[n].dst])]
+        s_out[ind, 0] = e[n].src
+        s_out[ind, 1] = group_dict[e[n].dst]
+        s_out[ind, 2] += e[n].weight
+
+        ind = in_dict[(e[n].dst, group_dict[e[n].src])]
+        s_in[ind, 0] = e[n].dst
+        s_in[ind, 1] = group_dict[e[n].src]
+        s_in[ind, 2] += e[n].weight
+
+    return s_out, s_in, out_dict, in_dict
 
 
 @jit(nopython=True)
