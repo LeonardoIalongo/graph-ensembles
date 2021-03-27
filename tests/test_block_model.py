@@ -9,19 +9,19 @@ v = pd.DataFrame([['ING', 'NL'],
                  ['BNL', 'IT']],
                  columns=['name', 'country'])
 
-e = pd.DataFrame([['ING', 'ABN', 1e6],
-                 ['ABN', 'UNI', 2.3e7],
-                 ['BNL', 'UNI', 7e5],
-                 ['UNI', 'BNL', 3e3]],
-                 columns=['creditor', 'debtor', 'value'])
-
 e_var = pd.DataFrame([['ING', 'ABN', 1e6],
-                      ['ABN', 'UNI', 2.3e7],
-                      ['BNL', 'UNI', 7e5],
-                      ['ABN', 'BNL', 6e4],
-                      ['ING', 'BNL', 5e2],
-                      ['UNI', 'BNL', 3e3]],
+                     ['ABN', 'UNI', 2.3e7],
+                     ['BNL', 'UNI', 7e5],
+                     ['UNI', 'BNL', 3e3]],
                      columns=['creditor', 'debtor', 'value'])
+
+e = pd.DataFrame([['ING', 'ABN', 1e6],
+                  ['ABN', 'UNI', 2.3e7],
+                  ['BNL', 'UNI', 7e5],
+                  ['ABN', 'BNL', 6e4],
+                  ['ING', 'BNL', 5e2],
+                  ['UNI', 'BNL', 3e3]],
+                 columns=['creditor', 'debtor', 'value'])
 
 g = ge.Graph(v, e, v_id='name', src='creditor', dst='debtor',
              weight='value', v_group='country')
@@ -31,7 +31,8 @@ g_var = ge.Graph(v, e_var, v_id='name', src='creditor', dst='debtor',
 
 # Define graph marginals to check computation
 out_strength = np.rec.array([(0, 0, 1e6),
-                             (1, 1, 2.3e7),
+                             (0, 1, 5e2),
+                             (1, 1, 2.3e7 + 6e4),
                              (2, 1, 3e3),
                              (3, 1, 7e5)],
                             dtype=[('id', np.uint8),
@@ -41,18 +42,19 @@ out_strength = np.rec.array([(0, 0, 1e6),
 in_strength = np.rec.array([(1, 0, 1e6),
                             (2, 0, 2.3e7),
                             (2, 1, 7e5),
+                            (3, 0, 5e2 + 6e4),
                             (3, 1, 3e3)],
                            dtype=[('id', np.uint8),
                                   ('group', np.uint8),
                                   ('value', np.float64)])
 
 num_vertices = 4
-num_edges = 4
-num_edges_var = 6
+num_edges = 6
+num_edges_var = 4
 num_groups = 2
 group_dict = {1: 0, 2: 1, 0: 0, 3: 1}
-z = 1
-z_var = 1
+z = 6.08040786e-08
+z_var = 27.843357146819287
 
 
 class TestBlockFitnessModel():
@@ -117,6 +119,7 @@ class TestBlockFitnessModel():
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-8, rtol=0)
+        assert np.isclose(z, model.z, atol=1e-12, rtol=1e-6), model.z
 
     def test_solver_newton_var(self):
         """ Check that the newton solver is fitting the z parameters
