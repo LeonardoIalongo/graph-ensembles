@@ -38,6 +38,7 @@ in_strength = np.rec.array([(1, 0, 1e6),
 num_vertices = 4
 num_edges = 4
 num_groups = 2
+group_dict = {1: 0, 2: 1, 0: 0, 3: 1}
 z = 1.0
 
 
@@ -53,6 +54,7 @@ class TestBlockFitnessModel():
         """
         model = ge.BlockFitnessModel(num_vertices=num_vertices,
                                      num_groups=num_groups,
+                                     group_dict=group_dict,
                                      out_strength=out_strength,
                                      in_strength=in_strength,
                                      num_edges=num_edges)
@@ -60,6 +62,7 @@ class TestBlockFitnessModel():
         assert np.all(model.in_strength == in_strength)
         assert np.all(model.num_edges == num_edges)
         assert np.all(model.num_groups == num_groups)
+        assert np.all(model.group_dict == np.array([0, 0, 1, 1]))
         assert np.all(model.num_vertices == num_vertices)
 
     def test_model_init_z(self):
@@ -68,6 +71,7 @@ class TestBlockFitnessModel():
         """
         model = ge.BlockFitnessModel(num_vertices=num_vertices,
                                      num_groups=num_groups,
+                                     group_dict=group_dict,
                                      out_strength=out_strength,
                                      in_strength=in_strength,
                                      z=z)
@@ -104,6 +108,7 @@ class TestBlockFitnessModel():
         """
         model = ge.BlockFitnessModel(num_vertices=num_vertices,
                                      num_groups=num_groups,
+                                     group_dict=group_dict,
                                      out_strength=out_strength,
                                      in_strength=in_strength,
                                      z=z)

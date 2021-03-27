@@ -26,6 +26,13 @@ def check_unique_labelled_edges(e):
             assert False, 'There are repeated edges.'
 
 
+def dict_to_array(d):
+    arr = np.zeros(len(d.keys()), dtype=int)
+    for item in d.items():
+        arr[item[0]] = item[1]
+    return arr
+
+
 def generate_id_dict(df, id_col, no_rep=False):
     """ Return id dictionary for given dataframe columns.
 

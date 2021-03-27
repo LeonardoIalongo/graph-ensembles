@@ -1606,6 +1606,7 @@ class BlockFitnessModel(GraphEnsemble):
                 self.num_vertices = g.num_vertices
                 self.num_edges = g.num_edges
                 self.num_groups = g.num_groups
+                self.group_dict = g.v.group
                 self.out_strength = g.out_strength_by_group(get=True)
                 self.in_strength = g.in_strength_by_group(get=True)
             else:
@@ -1620,7 +1621,7 @@ class BlockFitnessModel(GraphEnsemble):
         # Get options from keyword arguments
         allowed_arguments = ['num_vertices', 'num_edges', 'num_groups',
                              'out_strength', 'in_strength', 'z',
-                             'discrete_weights']
+                             'discrete_weights', 'group_dict']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -1633,6 +1634,17 @@ class BlockFitnessModel(GraphEnsemble):
 
         if not hasattr(self, 'num_groups'):
             raise ValueError('Number of groups not set.')
+
+        if not hasattr(self, 'group_dict'):
+            raise ValueError('Group dictionary not set.')
+        else:
+            if isinstance(self.group_dict, dict):
+                self.group_dict = mt.dict_to_array(self.group_dict)
+            elif isinstance(self.group_dict, np.ndarray):
+                msg = 'Group_dict must have one element for each vertex.'
+                assert len(self.group_dict) == self.num_vertices
+            else:
+                ValueError('Group dictionary must be a dict or an array.')
 
         if not hasattr(self, 'out_strength'):
             raise ValueError('out_strength not set.')
@@ -1697,12 +1709,12 @@ class BlockFitnessModel(GraphEnsemble):
             s_in.sort_indices()
 
         # Extract arrays from sparse matrices
-        s_out_i = self.out_strength.indptr
-        s_out_j = self.out_strength.indices
-        s_out_w = self.out_strength.data
-        s_in_i = self.in_strength.indices
-        s_in_j = self.in_strength.indptr
-        s_in_w = self.in_strength.data
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indices
+        s_in_j = s_in.indptr
+        s_in_w = s_in.data
 
         return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
-                                      s_in_i, s_in_j, s_in_w, self.v.group)
+                                      s_in_i, s_in_j, s_in_w, self.group_dict)
