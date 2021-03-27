@@ -243,6 +243,23 @@ def block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals):
 
 
 @jit(nopython=True)
+def f_jac_block_i(z, out_g, out_vals, in_gj, in_vals):
+    f = 0
+    jac = 0
+    for i in range(len(out_g)):
+        for j in range(len(in_gj)):
+            if out_g[i] == in_gj[j]:
+                tmp = exp(z)*out_vals[i]*in_vals[j]
+                if isinf(tmp):
+                    f += 1
+                    jac += 0
+                else:
+                    f += tmp / (1 + tmp)
+                    jac += tmp / (1 + tmp)**2
+    return f, jac
+
+
+@jit(nopython=True)
 def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
                         s_in_i, s_in_j, s_in_w, group_arr):
     """ Calculate the expecte number of edges for the block model.
@@ -304,6 +321,150 @@ def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
         num += block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals)
 
     return num
+
+
+@jit(nopython=True)
+def f_jac_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                group_arr, num_e):
+    """ Calculate the objective function and its Jacobian for the block model.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    group. s_out must be a csr matrix and s_in a csc matrix.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by group sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by group sparse csr matrix
+    s_out_w: array
+        data of the out_strength by group sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by group sparse csc matrix
+    s_in_j: array
+        indptr of the in_strength by group sparse csc matrix
+    s_in_w: array
+        data of the in_strength by group sparse csc matrix
+    group_arr: array
+        an array containing the group id for each vertex in order
+    """
+    f = -num_e
+    jac = 0
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        res = f_jac_block_i(z, out_g, out_vals, in_gj, in_vals)
+        f += res[0]
+        jac += res[1]
+
+    return f, jac
+
+
+@jit(nopython=True)
+def block_newton_init(s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                      group_arr, n_e, steps):
+    """ Compute initial conditions for the block model solvers.
+    """
+    z = 0
+    for n in range(steps):
+        jac = 0
+        f = 0
+        for out_row in range(len(s_out_i)-1):
+            n = s_out_i[out_row]
+            m = s_out_i[out_row + 1]
+            r = s_in_j[group_arr[out_row]]
+            s = s_in_j[group_arr[out_row]+1]
+
+            if (n == m) or (r == s):
+                continue
+
+            out_g = s_out_j[n:m]
+            out_vals = s_out_w[n:m]
+            in_j = s_in_i[r:s]
+            notself = in_j != out_row
+
+            if np.sum(notself) == 0:
+                continue
+
+            in_gj = group_arr[in_j][notself]
+            in_vals = s_in_w[r:s][notself]
+
+            for i in range(len(out_g)):
+                for j in range(len(in_gj)):
+                    if out_g[i] == in_gj[j]:
+                        tmp = out_vals[i]*in_vals[j]
+                        tmp1 = z*tmp
+                        jac += tmp / (1 + tmp1)**2
+                        f += z*tmp1 / (1 + z*tmp1)
+
+        z = z - (f-n_e)/jac
+
+    return z
+
+
+@jit(nopython=True)
+def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                    group_arr, num_e):
+    """ Compute the next iteration of the fixed point method of the block model.
+    """
+    aux = 0
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        if (n == m) or (r == s):
+            continue
+
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+        in_j = s_in_i[r:s]
+        notself = in_j != out_row
+
+        if np.sum(notself) == 0:
+            continue
+
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+
+        for i in range(len(out_g)):
+            for j in range(len(in_gj)):
+                if out_g[i] == in_gj[j]:
+                    tmp = out_vals[i]*in_vals[j]
+                    aux += tmp / (1 + exp(z)*tmp)
+
+    return log(num_e/aux)
 
 
 # --------------- OLD METHODS ---------------

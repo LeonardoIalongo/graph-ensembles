@@ -15,8 +15,19 @@ e = pd.DataFrame([['ING', 'ABN', 1e6],
                  ['UNI', 'BNL', 3e3]],
                  columns=['creditor', 'debtor', 'value'])
 
+e_var = pd.DataFrame([['ING', 'ABN', 1e6],
+                      ['ABN', 'UNI', 2.3e7],
+                      ['BNL', 'UNI', 7e5],
+                      ['ABN', 'BNL', 6e4],
+                      ['ING', 'BNL', 5e2],
+                      ['UNI', 'BNL', 3e3]],
+                     columns=['creditor', 'debtor', 'value'])
+
 g = ge.Graph(v, e, v_id='name', src='creditor', dst='debtor',
              weight='value', v_group='country')
+
+g_var = ge.Graph(v, e_var, v_id='name', src='creditor', dst='debtor',
+                 weight='value', v_group='country')
 
 # Define graph marginals to check computation
 out_strength = np.rec.array([(0, 0, 1e6),
@@ -37,9 +48,11 @@ in_strength = np.rec.array([(1, 0, 1e6),
 
 num_vertices = 4
 num_edges = 4
+num_edges_var = 6
 num_groups = 2
 group_dict = {1: 0, 2: 1, 0: 0, 3: 1}
 z = 1
+z_var = 1
 
 
 class TestBlockFitnessModel():
@@ -105,14 +118,33 @@ class TestBlockFitnessModel():
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-8, rtol=0)
 
+    def test_solver_newton_var(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly. """
+        model = ge.BlockFitnessModel(g_var)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges_var, exp_num_edges,
+                                   atol=1e-8, rtol=0)
+
     def test_solver_fixed_point(self):
         """ Check that the fixed-point solver is fitting the z parameters
         correctly.
         """
         model = ge.BlockFitnessModel(g)
-        model.fit(method="fixed-point", max_iter=100000, xtol=1e-5)
+        model.fit(method="fixed-point", max_iter=200000, xtol=1e-5)
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-4, rtol=0)
+
+    def test_solver_fixed_point_var(self):
+        """ Check that the fixed-point solver is fitting the z parameters
+        correctly.
+        """
+        model = ge.BlockFitnessModel(g_var)
+        model.fit(method="fixed-point", max_iter=200000, xtol=1e-5)
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges_var, exp_num_edges,
                                    atol=1e-4, rtol=0)
 
     def test_sampling(self):

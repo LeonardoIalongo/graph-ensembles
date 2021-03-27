@@ -1720,3 +1720,107 @@ class BlockFitnessModel(GraphEnsemble):
 
         return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
                                       s_in_i, s_in_j, s_in_w, self.group_dict)
+
+    def fit(self, z0=None, method="newton", tol=1e-8,
+            xtol=1e-8, max_iter=100, verbose=False):
+        """ Compute the optimal z to match the given number of edges.
+
+        Parameters
+        ----------
+        z0: float or np.ndarray
+            optional initial conditions for z parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol : float
+            tolerance for the exit condition on the norm
+        eps : float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+
+        """
+        if isinstance(self.num_edges, int):
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_groups),
+                                  kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_groups),
+                                 kind='csc')
+
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
+
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indices
+            s_in_j = s_in.indptr
+            s_in_w = s_in.data
+
+            if z0 is None:
+                x0 = mt.block_newton_init(s_out_i, s_out_j, s_out_w,
+                                          s_in_i, s_in_j, s_in_w,
+                                          self.group_dict, self.num_edges, 2)
+            else:
+                try:
+                    x0 = float(self.z)
+                except TypeError:
+                    raise TypeError('z must be a float.')
+
+            if method == "newton":
+                sol = mt.newton_solver(
+                    x0=log(x0),
+                    fun=lambda x: mt.f_jac_block(
+                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                        self.group_dict, self.num_edges),
+                    tol=tol,
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+            elif method == "fixed-point":
+                sol = mt.fixed_point_solver(
+                    x0=log(x0),
+                    fun=lambda x: mt.iterative_block(
+                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                        self.group_dict, self.num_edges),
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+
+            else:
+                raise ValueError("The selected method is not valid.")
+
+            # Update results and check convergence
+            self.z = exp(sol.x)
+            self.solver_output = sol
+
+            if not sol.converged:
+                if method == 'newton':
+                    mod = sol.norm_seq[-1]
+                else:
+                    mod = self.expected_num_edges() - self.num_edges
+                if sol.max_iter_reached:
+                    msg = ('Fit did not converge: \n solver stopped because'
+                           ' it reached the max number of iterations. \n'
+                           'Final distance from root = {}'.format(mod))
+                    warnings.warn(msg, UserWarning)
+
+                if method == 'newton':
+                    if sol.no_change_stop:
+                        msg = ('Fit did not converge: \n solver stopped '
+                               'because the update of x was smaller than the '
+                               ' tolerance. \n Final distance from'
+                               ' root = {}'.format(mod))
+                        warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError('Number of edges must be an integer.')
