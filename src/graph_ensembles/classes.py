@@ -1671,15 +1671,11 @@ class BlockFitnessModel(GraphEnsemble):
             if not isinstance(self.z, float):
                 raise ValueError('z must be a float.')
 
-        # Check that sum of in and out strengths are equal per group
-        tot_out = np.zeros((self.num_groups))
-        for row in self.out_strength:
-            tot_out[row.group] += row.value
-        tot_in = np.zeros((self.num_groups))
-        for row in self.in_strength:
-            tot_in[row.group] += row.value
+        # Check that sum of in and out strengths are equal
+        tot_out = np.sum(self.out_strength.value)
+        tot_in = np.sum(self.in_strength.value)
 
-        msg = 'Sum of strengths per group do not match.'
+        msg = 'Sum of strengths do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-6), msg
 
         # If z is set computed expected number of edges per label
