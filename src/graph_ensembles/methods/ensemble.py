@@ -252,13 +252,13 @@ def block_exp_vertex_degree(out_cols, out_vals, in_rows, in_vals):
 
 @jit(nopython=True)
 def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
-                        s_in_i, s_in_j, s_in_w, arr_sect):
+                        s_in_i, s_in_j, s_in_w, group_arr):
     num = 0
     for out_row in range(len(s_out_i)-1):
         n = s_out_i[out_row]
         m = s_out_i[out_row + 1]
-        r = s_in_j[arr_sect[out_row]]
-        s = s_in_j[arr_sect[out_row]+1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
         out_cols = s_out_j[n:m]
         out_vals = s_out_w[n:m]
         in_rows = s_in_i[r:s]

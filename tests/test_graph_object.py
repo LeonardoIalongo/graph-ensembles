@@ -105,6 +105,27 @@ class TestDirectedGraph():
 
         assert np.all(g.v.degree == d), g.v.degree
 
+    def test_degree_by_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        d = np.rec.array([(0, 0, 1),
+                         (0, 1, 1),
+                         (1, 0, 1),
+                         (1, 1, 2),
+                         (2, 0, 3)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.uint8)])
+
+        d_test = g.degree_by_group(get=True)
+
+        assert np.all(d_test == d), d_test
+        assert np.all(g.gv.degree == d), g.gv.degree
+
     def test_vertices_with_no_edge(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
                          columns=['name'])

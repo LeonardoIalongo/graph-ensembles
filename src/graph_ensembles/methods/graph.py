@@ -127,6 +127,36 @@ def compute_degree(e, num_v):
 
 
 @jit(nopython=True)
+def compute_degree_by_group(e, group_dict):
+    gv_dict = {}
+    k = 0
+    for n in range(len(e)):
+        pair_s = (e[n].src, group_dict[e[n].dst])
+        if pair_s not in gv_dict:
+            gv_dict[pair_s] = k
+            k += 1
+
+        pair_d = (e[n].dst, group_dict[e[n].src])
+        if pair_d not in gv_dict:
+            gv_dict[pair_d] = k
+            k += 1
+
+    d = np.zeros((len(gv_dict), 3), dtype=np.uint64)
+    for n in range(len(e)):
+        ind = gv_dict[(e[n].src, group_dict[e[n].dst])]
+        d[ind, 0] = e[n].src
+        d[ind, 1] = group_dict[e[n].dst]
+        d[ind, 2] += 1
+
+        ind = gv_dict[(e[n].dst, group_dict[e[n].src])]
+        d[ind, 0] = e[n].dst
+        d[ind, 1] = group_dict[e[n].src]
+        d[ind, 2] += 1
+
+    return d, gv_dict
+
+
+@jit(nopython=True)
 def compute_degree_by_label(e):
     lv_dict = {}
     i = 0

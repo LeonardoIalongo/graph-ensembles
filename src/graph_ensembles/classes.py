@@ -261,18 +261,25 @@ class sGraph():
 
         If get is true it returns the array otherwise it adds the result to v.
         """
-        if self.v_group is None:
+        if not hasattr(self, 'gv'):
             raise Exception('Graph object does not contain group info.')
-        else:
-            if hasattr(self.gv, 'degree'):
-                degree = self.gv.degree
-            else:
-                degree = mt.compute_degree_group(self.e, self.num_vertices)
-                dtype = 'u' + str(mt.get_num_bytes(np.max(degree)))
-                self.gv.degree = degree.astype(dtype)
 
-            if get:
-                return degree
+        if not hasattr(self.gv, 'degree'):
+            d, d_dict = mt.compute_degree_by_group(self.e, self.v.group)
+            dtype = 'u' + str(mt.get_num_bytes(np.max(d[:, 2])))
+            self.gv.degree = d.view(
+                type=np.recarray,
+                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
+                ).reshape((d.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', dtype)]
+                )
+            self.gv.degree.sort()
+            self.gv.degree_dict = d_dict
+
+        if get:
+            return self.gv.degree
 
 
 class DirectedGraph(sGraph):
@@ -1578,4 +1585,4 @@ class BlockFitnessModel(GraphEnsemble):
         s_in_w = self.in_strength.data
 
         return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
-                                      s_in_i, s_in_j, s_in_w, self.arr_sect)
+                                      s_in_i, s_in_j, s_in_w, self.v.group)
