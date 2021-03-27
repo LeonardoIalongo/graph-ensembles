@@ -8,6 +8,7 @@ import pandas as pd
 import graph_ensembles.methods as mt
 import warnings
 from math import exp, log
+from . import lib
 
 
 class Graph():
@@ -1555,10 +1556,18 @@ class BlockFitnessModel(GraphEnsemble):
             self.num_edges = self.expected_num_edges()
 
     def expected_num_edges(self):
-        if not self.out_strength.has_sorted_indices:
-            self.out_strength.sort_indices()
-        if not self.in_strength.has_sorted_indices:
-            self.in_strength.sort_indices()
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csr')
+        s_in = lib.to_sparse(self.out_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csc')
+
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
 
         # Extract arrays from sparse matrices
         s_out_i = self.out_strength.indptr
