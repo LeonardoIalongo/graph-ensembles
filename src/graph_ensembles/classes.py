@@ -1564,9 +1564,9 @@ class BlockFitnessModel(GraphEnsemble):
         s_out_i = self.out_strength.indptr
         s_out_j = self.out_strength.indices
         s_out_w = self.out_strength.data
-        s_in_i = self.out_strength.indices
-        s_in_j = self.out_strength.indptr
-        s_in_w = self.out_strength.data
+        s_in_i = self.in_strength.indices
+        s_in_j = self.in_strength.indptr
+        s_in_w = self.in_strength.data
 
         return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
                                       s_in_i, s_in_j, s_in_w, self.arr_sect)
