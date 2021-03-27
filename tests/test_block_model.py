@@ -21,8 +21,8 @@ g = ge.Graph(v, e, v_id='name', src='creditor', dst='debtor',
 # Define graph marginals to check computation
 out_strength = np.rec.array([(0, 0, 1e6),
                              (1, 1, 2.3e7),
-                             (2, 1, 7e5),
-                             (3, 1, 3e3)],
+                             (2, 1, 3e3),
+                             (3, 1, 7e5)],
                             dtype=[('id', np.uint8),
                                    ('group', np.uint8),
                                    ('value', np.float64)])
@@ -39,7 +39,7 @@ num_vertices = 4
 num_edges = 4
 num_groups = 2
 group_dict = {1: 0, 2: 1, 0: 0, 3: 1}
-z = 1.0
+z = 1
 
 
 class TestBlockFitnessModel():
@@ -58,6 +58,18 @@ class TestBlockFitnessModel():
                                      out_strength=out_strength,
                                      in_strength=in_strength,
                                      num_edges=num_edges)
+        assert np.all(model.out_strength == out_strength)
+        assert np.all(model.in_strength == in_strength)
+        assert np.all(model.num_edges == num_edges)
+        assert np.all(model.num_groups == num_groups)
+        assert np.all(model.group_dict == np.array([0, 0, 1, 1]))
+        assert np.all(model.num_vertices == num_vertices)
+
+    def test_model_init_g(self):
+        """ Check that the block model can be correctly initialized from a
+        graph.
+        """
+        model = ge.BlockFitnessModel(g)
         assert np.all(model.out_strength == out_strength)
         assert np.all(model.in_strength == in_strength)
         assert np.all(model.num_edges == num_edges)

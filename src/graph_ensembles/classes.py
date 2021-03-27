@@ -1680,8 +1680,10 @@ class BlockFitnessModel(GraphEnsemble):
             if not isinstance(self.num_edges, int):
                 raise ValueError('Number of edges must be an integer.')
         else:
-            if not isinstance(self.z, float):
-                raise ValueError('z must be a float.')
+            try:
+                self.z = float(self.z)
+            except TypeError:
+                raise TypeError('z must be a float.')
 
         # Check that sum of in and out strengths are equal
         tot_out = np.sum(self.out_strength.value)
@@ -1699,7 +1701,7 @@ class BlockFitnessModel(GraphEnsemble):
         s_out = lib.to_sparse(self.out_strength,
                               (self.num_vertices, self.num_groups),
                               kind='csr')
-        s_in = lib.to_sparse(self.out_strength,
+        s_in = lib.to_sparse(self.in_strength,
                              (self.num_vertices, self.num_groups),
                              kind='csc')
 

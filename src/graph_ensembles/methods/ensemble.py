@@ -231,39 +231,77 @@ def stripe_sample(z, out_strength, in_strength, num_labels):
 
 # --------------- BLOCK METHODS ---------------
 @jit(nopython=True)
-def block_exp_vertex_degree(out_cols, out_vals, in_rows, in_vals):
-    i = 0
-    j = 0
+def block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals):
     d = 0
-    while (i < len(out_cols)) and (j < len(in_rows)):
-        col = out_cols[i]
-        row = in_rows[j]
-        if col == row:
-            d += out_vals[i]*in_vals[j]
-            i += 1
-            j += 1
-        else:
-            if col > row:
-                j += 1
-            else:
-                i += 1
+    for i in range(len(out_g)):
+        for j in range(len(in_gj)):
+            if out_g[i] == in_gj[j]:
+                tmp = z*out_vals[i]*in_vals[j]
+                d += tmp / (1 + tmp)
+
     return d
 
 
 @jit(nopython=True)
 def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
                         s_in_i, s_in_j, s_in_w, group_arr):
+    """ Calculate the expecte number of edges for the block model.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    group. s_out must be a csr matrix and s_in a csc matrix.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by group sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by group sparse csr matrix
+    s_out_w: array
+        data of the out_strength by group sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by group sparse csc matrix
+    s_in_j: array
+        indptr of the in_strength by group sparse csc matrix
+    s_in_w: array
+        data of the in_strength by group sparse csc matrix
+    group_arr: array
+        an array containing the group id for each vertex in order
+    """
     num = 0
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
     for out_row in range(len(s_out_i)-1):
         n = s_out_i[out_row]
         m = s_out_i[out_row + 1]
         r = s_in_j[group_arr[out_row]]
         s = s_in_j[group_arr[out_row]+1]
-        out_cols = s_out_j[n:m]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
         out_vals = s_out_w[n:m]
-        in_rows = s_in_i[r:s]
-        in_vals = s_in_w[r:s]
-        num += block_exp_vertex_degree(z, out_cols, out_vals, in_rows, in_vals)
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        num += block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals)
 
     return num
 
