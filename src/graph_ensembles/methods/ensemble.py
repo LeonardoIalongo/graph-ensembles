@@ -467,6 +467,65 @@ def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
     return log(num_e/aux)
 
 
+def sample_block_vertex(z, out_i, out_g, out_vals,
+                        in_j, in_gj, in_vals, s_tot):
+    """ Sample edges going out from a single vertex.
+    """
+    sample = []
+    for i in range(len(out_g)):
+        for j in range(len(in_gj)):
+            if out_g[i] == in_gj[j]:
+                tmp = out_vals[i]*in_vals[j]
+                tmp1 = z*tmp
+                p = tmp1 / (1 + tmp1)
+                if rng.random() < p:
+                    w = np.float64(rng.exponential(tmp/(s_tot*p)))
+                    sample.append((out_i, in_j[j], w))
+
+    return sample
+
+
+def block_sample(z, s_out_i, s_out_j, s_out_w,
+                 s_in_i, s_in_j, s_in_w, group_arr):
+    """ Sample from block model.
+    """
+    s_tot = np.sum(s_out_w)
+    assert np.isclose(s_tot, np.sum(s_in_w)), 'Total strengths not matching.'
+    sample = []
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        sample.extend(
+            sample_block_vertex(z, out_row, out_g, out_vals,
+                                in_j[notself], in_gj, in_vals, s_tot))
+
+    return np.array(sample, dtype=np.float64)
+
+
 # --------------- OLD METHODS ---------------
 @jit(nopython=True)
 def iterative_stripe_one_z(z, out_str, in_str, L):

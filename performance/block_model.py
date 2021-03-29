@@ -5,14 +5,14 @@ import graph_ensembles as ge
 import numpy as np
 
 
-N = int(1e5)
-L = 1e6
+N = int(1e4)
+L = 1e5
 W = 9.364e9
-G = np.random.randint(0, 99, shape=N)
+G = np.random.randint(0, 99, N)
 
 start = perf_counter()
 g_rand = ge.RandomGraph(num_vertices=N, num_edges=L, total_weight=W,
-                        group_dict=G, discrete_weights=False)
+                        discrete_weights=False)
 g_rand.fit()
 perf = perf_counter() - start
 print('Time for random graph initialization and fit: ', perf)
@@ -21,6 +21,9 @@ start = perf_counter()
 g = g_rand.sample()
 perf = perf_counter() - start
 print('Time for random graph sample: ', perf)
+
+# Add groups
+ge.lib.add_groups(g, G)
 
 start = perf_counter()
 block = ge.BlockFitnessModel(g)
@@ -32,22 +35,22 @@ block.fit(method='newton')
 perf = perf_counter() - start
 print('Time for newton fit: ', perf)
 
-print(block.solver_output.n_iter)
+print('Number of iterations: ', block.solver_output.n_iter)
 
 if not np.isclose(block.expected_num_edges(), block.num_edges,
                   atol=1e-8, rtol=0):
-    print(block.expected_num_edges() - block.num_edges)
+    print('Distance from root: ', block.expected_num_edges() - block.num_edges)
 
 start = perf_counter()
 block.fit(method='fixed-point')
 perf = perf_counter() - start
 print('Time for fixed-point fit: ', perf)
 
-print(block.solver_output.n_iter)
+print('Number of iterations: ', block.solver_output.n_iter)
 
 if not np.isclose(block.expected_num_edges(), block.num_edges,
                   atol=1e-8, rtol=0):
-    print(block.expected_num_edges() - block.num_edges)
+    print('Distance from root: ', block.expected_num_edges() - block.num_edges)
 
 start = perf_counter()
 g_sample = block.sample()

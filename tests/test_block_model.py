@@ -169,4 +169,4 @@ class TestBlockFitnessModel():
             assert sample.num_vertices == num_vertices
 
         avg = avg / samples
-        np.testing.assert_isclose(avg, num_edges, atol=1e-1, rtol=0)
+        assert np.isclose(avg, num_edges, atol=1e-1, rtol=0)

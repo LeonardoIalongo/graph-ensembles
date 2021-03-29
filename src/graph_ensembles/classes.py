@@ -1824,3 +1824,62 @@ class BlockFitnessModel(GraphEnsemble):
 
         else:
             raise ValueError('Number of edges must be an integer.')
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'z'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = WeightedGraph.__new__(WeightedGraph)
+        g.gv = GroupVertexList()
+        g.num_groups = len(np.unique(self.group_dict))
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        num_bytes = mt.get_num_bytes(self.num_vertices)
+        g.id_dtype = np.dtype('u' + str(num_bytes))
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csc')
+
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
+
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indices
+        s_in_j = s_in.indptr
+        s_in_w = s_in.data
+
+        # Sample edges and extract properties
+        e = mt.block_sample(self.z, s_out_i, s_out_j, s_out_w,
+                            s_in_i, s_in_j, s_in_w, self.group_dict)
+        e = e.view(type=np.recarray,
+                   dtype=[('src', 'f8'),
+                          ('dst', 'f8'),
+                          ('weight', 'f8')]).reshape((e.shape[0],))
+        e = e.astype([('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        g.total_weight = np.sum(e.weight)
+
+        return g

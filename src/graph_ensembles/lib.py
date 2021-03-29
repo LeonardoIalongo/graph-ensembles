@@ -2,7 +2,11 @@
     GraphEnsemble classes or on its attributes.
 """
 
+import graph_ensembles as ge
+import numpy as np
 from scipy.sparse import coo_matrix
+from numpy.lib.recfunctions import rec_append_fields as append_fields
+import warnings
 
 
 def to_sparse(coo_arr, shape, kind='coo', i_col=0, j_col=1, data_col=2):
@@ -35,3 +39,21 @@ def to_sparse(coo_arr, shape, kind='coo', i_col=0, j_col=1, data_col=2):
         return mat
     else:
         return mat.asformat(kind)
+
+
+def add_groups(g, group_dict):
+    """ Add group info to a sGraph object, if already presents it raises a warning.
+    """
+    if hasattr(g, 'gv'):
+        msg = 'Group info already present, will overwrite.'
+        warnings.warn(msg, UserWarning)
+
+    g.gv = ge.GroupVertexList()
+    g.group_dict = group_dict
+    g.num_groups = len(group_dict)
+    num_bytes = ge.methods.get_num_bytes(g.num_groups)
+    g.group_dtype = np.dtype('u' + str(num_bytes))
+    if 'group' in g.v.dtype.names:
+        g.v.group = group_dict
+    else:
+        g.v = append_fields(g.v, 'group', group_dict)
