@@ -125,11 +125,22 @@ def exp_edges_stripe(z, out_strength, in_strength, num_labels):
 @jit(nopython=True)
 def pij_stripe(z, out_label, out_vals, in_label, in_vals):
     p = 0
-    for i in range(len(out_label)):
-        for j in range(len(in_label)):
-            if out_label[i] == in_label[j]:
-                tmp = z[out_label[i]]*out_vals*in_vals
-                p += tmp / (1 + tmp)
+    i = 0
+    j = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            tmp = z[out_label[i]]*out_vals*in_vals
+            p += tmp / (1 + tmp)
+            i += 1
+            j += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    return p
 
 
 @jit(nopython=True)
