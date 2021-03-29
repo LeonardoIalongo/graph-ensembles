@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.random as rng
-from numba import jit, prange
+from numba import jit
 from math import ceil, sqrt, isinf, exp, log
 
 
@@ -108,18 +108,101 @@ def exp_edges_stripe_single_layer(z, out_strength, in_strength):
     return exp_edges
 
 
-@jit(nopython=True, parallel=True)
+@jit(nopython=True)
 def exp_edges_stripe(z, out_strength, in_strength, num_labels):
     """ Compute the expected number of edges for the stripe fitness model
     with one parameter controlling for the density for each label.
     """
     exp_edges = np.zeros(len(z), dtype=np.float64)
-    for i in prange(num_labels):
+    for i in range(num_labels):
         exp_edges[i] = exp_edges_stripe_single_layer(
             log(z[i]),
             out_strength[out_strength.label == i],
             in_strength[in_strength.label == i])
     return exp_edges
+
+
+@jit(nopython=True)
+def pij_stripe(z, out_label, out_vals, in_label, in_vals):
+    p = 0
+    i = 0
+    j = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            tmp = z[out_label[i]]*out_vals*in_vals
+            p += tmp / (1 + tmp)
+            i += 1
+            j += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    return p
+
+
+@jit(nopython=True)
+def stripe_exp_degree(z, s_out_i, s_out_j, s_out_w,
+                      s_in_i, s_in_j, s_in_w, N):
+    """ Calculate the expected degree for the stripe model.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    label. s_out and s_in must be csr matrices.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by label sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by label sparse csr matrix
+    s_out_w: array
+        data of the out_strength by label sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by label sparse csr matrix
+    s_in_j: array
+        indptr of the in_strength by label sparse csr matrix
+    s_in_w: array
+        data of the in_strength by label sparse csr matrix
+    group_arr: array
+        an array containing the label id for each vertex in order
+    """
+    out_degree = np.zeros(N, dtype=np.int64)
+    in_degree = np.zeros(N, dtype=np.int64)
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        # Get non-zero out strengths for vertex out_row of label out_label
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        out_label = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        for in_row in range(len(s_out_i)-1):
+            # No self-loops
+            if out_row == in_row:
+                continue
+
+            # Get non-zero in strengths for vertex out_row of label out_label
+            r = s_in_i[in_row]
+            s = s_in_i[in_row + 1]
+            in_label = s_in_j[r:s]
+            in_vals = s_in_w[r:s]
+
+            if (n == m) or (r == s):
+                continue
+
+            # Get pij
+            pij = pij_stripe(z, out_label, out_vals, in_label, in_vals)
+            out_degree[out_row] += pij
+            in_degree[in_row] += pij
+
+    return out_degree, in_degree
 
 
 @jit(nopython=True)
@@ -229,336 +312,363 @@ def stripe_sample(z, out_strength, in_strength, num_labels):
     return np.array(sample, dtype=np.float64)
 
 
-# --------------- OLD METHODS ---------------
+# --------------- BLOCK METHODS ---------------
 @jit(nopython=True)
-def iterative_stripe_one_z(z, out_str, in_str, L):
-    """
-    function computing the next iteration with
-    the fixed point method for CSM-I model
-    """
-    aux1 = 0.0
-    for i in np.arange(out_str.shape[0]):
-        ind_out = int(out_str[i, 0])
-        sect_out = int(out_str[i, 1])
-        s_out = out_str[i, 2]
-        for j in np.arange(in_str.shape[0]):
-            ind_in = int(in_str[j, 0])
-            sect_in = int(in_str[j, 1])
-            s_in = in_str[j, 2]
-            if (ind_out != ind_in) & (sect_out == sect_in):
-                aux2 = s_out*s_in
-                aux1 += aux2/(1+z*aux2)
-    aux_z = L/aux1
-    return aux_z
+def block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals):
+    d = 0
+    for i in range(len(out_g)):
+        for j in range(len(in_gj)):
+            if out_g[i] == in_gj[j]:
+                tmp = z*out_vals[i]*in_vals[j]
+                d += tmp / (1 + tmp)
+
+    return d
 
 
 @jit(nopython=True)
-def loglikelihood_prime_stripe_one_z(z, out_str, in_str, L):
-    """
-    first derivative of the loglikelihood function
-    of the CSM-I model
-    """
-    aux1 = 0.0
-    for i in np.arange(out_str.shape[0]):
-        ind_out = int(out_str[i, 0])
-        sect_out = int(out_str[i, 1])
-        s_out = out_str[i, 2]
-        for j in np.arange(in_str.shape[0]):
-            ind_in = int(in_str[j, 0])
-            sect_in = int(in_str[j, 1])
-            s_in = in_str[j, 2]
-            if (ind_out != ind_in) & (sect_out == sect_in):
-                aux2 = z*s_out*s_in
-                aux1 += aux2/(1+aux2)
-    aux_z = L - aux1
-    return aux_z
+def f_jac_block_i(z, out_g, out_vals, in_gj, in_vals):
+    f = 0
+    jac = 0
+    for i in range(len(out_g)):
+        for j in range(len(in_gj)):
+            if out_g[i] == in_gj[j]:
+                tmp = exp(z)*out_vals[i]*in_vals[j]
+                if isinf(tmp):
+                    f += 1
+                    jac += 0
+                else:
+                    f += tmp / (1 + tmp)
+                    jac += tmp / (1 + tmp)**2
+    return f, jac
 
 
 @jit(nopython=True)
-def loglikelihood_hessian_stripe_one_z(z, out_str, in_str):
-    """
-    second derivative of the loglikelihood function
-    of the CSM-I model
-    """
-    aux1 = 0.0
-    for i in np.arange(out_str.shape[0]):
-        ind_out = int(out_str[i, 0])
-        sect_out = int(out_str[i, 1])
-        s_out = out_str[i, 2]
-        for j in np.arange(in_str.shape[0]):
-            ind_in = int(in_str[j, 0])
-            sect_in = int(in_str[j, 1])
-            s_in = in_str[j, 2]
-            if (ind_out != ind_in) & (sect_out == sect_in):
-                aux2 = s_out*s_in
-                aux1 -= aux2 / (1 + z*aux2)**2
-    return aux1
+def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w, group_arr):
+    """ Calculate the expecte number of edges for the block model.
 
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    group. s_out must be a csr matrix and s_in a csc matrix.
 
-@jit(nopython=True)
-def iterative_block_one_z(z, out_str, in_str, L):
-    """
-    function computing the next iteration with
-    the fixed point method for CBM-I model
-    """
-    aux1 = 0.0
-    for i in np.arange(out_str.shape[0]):
-        ind_out = int(out_str[i, 0])
-        sect_out = int(out_str[i, 1])
-        sect_node_i = int(out_str[i, 2])
-        s_out = out_str[i, 3]
-        for j in np.arange(in_str.shape[0]):
-            ind_in = int(in_str[j, 0])
-            sect_in = int(in_str[j, 1])
-            sect_node_j = int(in_str[j, 2])
-            s_in = in_str[j, 3]
-            if (ind_out != ind_in) & (sect_out == sect_node_j) & (
-                 sect_in == sect_node_i):
-                aux2 = s_out*s_in
-                aux1 += aux2/(1+z*aux2)
-    aux_z = L/aux1
-    return aux_z
-
-
-@jit(nopython=True)
-def loglikelihood_prime_block_one_z(z, out_str, in_str, L):
-    """
-    first derivative of the loglikelihood function
-    of the CBM-I model
-    """
-    aux1 = 0.0
-    for i in np.arange(out_str.shape[0]):
-        ind_out = int(out_str[i, 0])
-        sect_out = int(out_str[i, 1])
-        sect_node_i = int(out_str[i, 2])
-        s_out = out_str[i, 3]
-        for j in np.arange(in_str.shape[0]):
-            ind_in = int(in_str[j, 0])
-            sect_in = int(in_str[j, 1])
-            sect_node_j = int(in_str[j, 2])
-            s_in = in_str[j, 3]
-            if (ind_out != ind_in) & (sect_out == sect_node_j) & (
-                 sect_in == sect_node_i):
-                aux2 = z*s_out*s_in
-                aux1 += aux2/(1+aux2)
-    aux_z = L - aux1
-    return aux_z
-
-
-@jit(nopython=True)
-def loglikelihood_hessian_block_one_z(z, out_str, in_str):
-    """
-    second derivative of the loglikelihood function
-    of the CBM-I model
-    """
-    aux1 = 0.0
-    for i in np.arange(out_str.shape[0]):
-        ind_out = int(out_str[i, 0])
-        sect_out = int(out_str[i, 1])
-        sect_node_i = int(out_str[i, 2])
-        s_out = out_str[i, 3]
-        for j in np.arange(in_str.shape[0]):
-            ind_in = int(in_str[j, 0])
-            sect_in = int(in_str[j, 1])
-            sect_node_j = int(in_str[j, 2])
-            s_in = in_str[j, 3]
-            if (ind_out != ind_in) & (sect_out == sect_node_j) & (
-                 sect_in == sect_node_i):
-                aux2 = s_out*s_in
-                aux1 -= aux2 / (1 + z*aux2)**2
-    return aux1
-
-
-@jit(nopython=True)
-def iterative_block_mult_z(z, out_strength, in_strength, L):
-    """
-    function computing the next iteration with
-    the fixed point method for CBM-II model
-    """
-    n_sector = int(np.sqrt(max(z.shape)))
-    aux1 = np.zeros(shape=(n_sector, n_sector), dtype=np.float)
-    z = np.reshape(z, newshape=(n_sector, n_sector))
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_out = int(out_strength[i, 1])
-        s_out = out_strength[i, 2]
-        for j in np.arange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_in = int(in_strength[j, 1])
-            s_in = in_strength[j, 2]
-            if (ind_out != ind_in):
-                aux2 = s_out * s_in
-                aux1[sect_out, sect_in] += aux2/(1+z[sect_out, sect_in]*aux2)
-    aux_z = L/aux1
-    return aux_z
-
-
-@jit(nopython=True, parallel=True)
-def vector_fitness_prob_array_block_one_z(out_strength, in_strength,
-                                          z, N):
-    """
-    Function computing the Probability Matrix of the Cimi block model
-    with just one parameter controlling for the density.
-    """
-
-    p = np.zeros((N, N), dtype=np.float64)
-
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_node_i = int(out_strength[i, 1])
-        sect_out = int(out_strength[i, 2])
-        s_out = out_strength[i, 3]
-        for j in prange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_node_j = int(in_strength[j, 1])
-            sect_in = int(in_strength[j, 2])
-            s_in = in_strength[j, 3]
-            if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-               (sect_in == sect_node_i)):
-                tmp = s_out*s_in
-                tmp2 = z*tmp
-                p[ind_out, ind_in] = tmp2 / (1 + tmp2)
-    return p
-
-
-# @jit(forceobj=True, parallel=True)
-def expected_links_block_one_z(out_strength, in_strength, z):
-    """
-    Function computing the expeceted number of links, under the Cimi
-    stripe model, given the parameter z controlling for the density.
-    """
-    p = 0.0
-
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_node_i = int(out_strength[i, 1])
-        sect_out = int(out_strength[i, 2])
-        s_out = out_strength[i, 3]
-        for j in prange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_node_j = int(in_strength[j, 1])
-            sect_in = int(in_strength[j, 2])
-            s_in = in_strength[j, 3]
-            if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-               (sect_in == sect_node_i)):
-                tmp = s_out*s_in
-                tmp2 = z*tmp
-                p += tmp2 / (1 + tmp2)
-    return p
-
-
-@jit(nopython=True)
-def assign_weights_cimi_block_one_z(p, out_strength, in_strength,
-                                    N, strengths_block, expected=True):
-    """Function returning the weighted adjacency matrix of the Cimi block
-    model with just one global parameter z controlling for the density.
-    Depending on the value of "expected" the weighted adjacency matrix can be
-    the expceted one or just an ensemble realisation.
-
-    Parameters
+    Arguments
     ----------
-    p: scipy.sparse.matrix or np.ndarray or list of lists
-        the binary probability matrix
-    out_strength: np.ndarray
-        the out strength sequence of graph organised by sector
-    in_strength: np.ndarray
-        the in strength sequence of graph organised by sector
-    strengths_block: np.ndarray
-        total strengths between every couple of groups
-    expected: bool
-        If True the strength of each link is the expected one otherwise
-        it is just a single realisation
-    Returns
-    -------
-    np.ndarray
-        Depending on the value of expected, returns the expected weighted
-        matrix or an ensemble realisation
-
-    TODO: Currently implemented with numpy arrays and standard iteration over
-    all indices. Consider allowing for sparse matrices in case of groups and
-    to avoid iteration over all indices.
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by group sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by group sparse csr matrix
+    s_out_w: array
+        data of the out_strength by group sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by group sparse csc matrix
+    s_in_j: array
+        indptr of the in_strength by group sparse csc matrix
+    s_in_w: array
+        data of the in_strength by group sparse csc matrix
+    group_arr: array
+        an array containing the group id for each vertex in order
     """
+    num = 0
 
-    W = np.zeros((N, N), dtype=np.float64)
-    if expected:
-        for i in np.arange(out_strength.shape[0]):
-            ind_out = int(out_strength[i, 0])
-            sect_node_i = int(out_strength[i, 1])
-            sect_out = int(out_strength[i, 2])
-            s_out = out_strength[i, 3]
-            for j in np.arange(in_strength.shape[0]):
-                ind_in = int(in_strength[j, 0])
-                sect_node_j = int(in_strength[j, 1])
-                sect_in = int(in_strength[j, 2])
-                s_in = in_strength[j, 3]
-                if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-                   (sect_in == sect_node_i)):
-                    tot_w = strengths_block[sect_node_i, sect_node_j]
-                    tmp = s_out*s_in
-                    W[ind_out, ind_in] = (tmp)/(tot_w)
-    else:
-        for i in np.arange(out_strength.shape[0]):
-            ind_out = int(out_strength[i, 0])
-            sect_node_i = int(out_strength[i, 1])
-            sect_out = int(out_strength[i, 2])
-            s_out = out_strength[i, 3]
-            for j in np.arange(in_strength.shape[0]):
-                ind_in = int(in_strength[j, 0])
-                sect_node_j = int(in_strength[j, 1])
-                sect_in = int(in_strength[j, 2])
-                s_in = in_strength[j, 3]
-                if ((ind_out != ind_in) & (sect_out == sect_node_j) &
-                   (sect_in == sect_node_i)):
-                    if p[ind_out, ind_in] > np.random.random():
-                        tot_w = strengths_block[sect_out, sect_in]
-                        tmp = s_out*s_in
-                        W[ind_out, ind_in] = (tmp)/(tot_w * p[ind_out, ind_in])
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
 
-    return W
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        num += block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals)
+
+    return num
 
 
-@jit(nopython=True, parallel=True)
-def vector_fitness_prob_array_block_mult_z(out_strength, in_strength, z, N):
+@jit(nopython=True)
+def block_exp_out_degree(z, s_out_i, s_out_j, s_out_w,
+                         s_in_i, s_in_j, s_in_w, group_arr):
+    """ Calculate the expected out degree for the block model.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    group. s_out must be a csr matrix and s_in a csc matrix.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by group sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by group sparse csr matrix
+    s_out_w: array
+        data of the out_strength by group sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by group sparse csc matrix
+    s_in_j: array
+        indptr of the in_strength by group sparse csc matrix
+    s_in_w: array
+        data of the in_strength by group sparse csc matrix
+    group_arr: array
+        an array containing the group id for each vertex in order
     """
-    Function computing the Probability Matrix of the Cimi block model
-    with just one parameter controlling for the density.
-    """
-    p = np.zeros((N, N), dtype=np.float64)
+    out_degree = np.zeros(len(group_arr), dtype=np.int64)
 
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_out = int(out_strength[i, 1])
-        s_out = out_strength[i, 2]
-        for j in prange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_in = int(in_strength[j, 1])
-            s_in = in_strength[j, 2]
-            if (ind_out != ind_in):
-                tmp = s_out*s_in
-                tmp2 = z[sect_out, sect_in]*tmp
-                p[ind_out, ind_in] = tmp2 / (1 + tmp2)
-    return p
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        out_degree[out_row] = block_exp_vertex_degree(
+            z, out_g, out_vals, in_gj, in_vals)
+
+    return out_degree
 
 
-# @jit(forceobj=True, parallel=True)
-def expected_links_block_mult_z(out_strength, in_strength, z):
+@jit(nopython=True)
+def f_jac_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                group_arr, num_e):
+    """ Calculate the objective function and its Jacobian for the block model.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    group. s_out must be a csr matrix and s_in a csc matrix.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by group sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by group sparse csr matrix
+    s_out_w: array
+        data of the out_strength by group sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by group sparse csc matrix
+    s_in_j: array
+        indptr of the in_strength by group sparse csc matrix
+    s_in_w: array
+        data of the in_strength by group sparse csc matrix
+    group_arr: array
+        an array containing the group id for each vertex in order
     """
-    Function computing the expeceted number of links, under the Cimi
-    stripe model, given the parameter z controlling for the density.
+    f = -num_e
+    jac = 0
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        res = f_jac_block_i(z, out_g, out_vals, in_gj, in_vals)
+        f += res[0]
+        jac += res[1]
+
+    return f, jac
+
+
+@jit(nopython=True)
+def block_newton_init(s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                      group_arr, n_e, steps):
+    """ Compute initial conditions for the block model solvers.
     """
-    n_sector = int(np.sqrt(max(z.shape)))
-    p = np.zeros(shape=(n_sector, n_sector), dtype=np.float)
-    z = np.reshape(z, newshape=(n_sector, n_sector))
-    for i in np.arange(out_strength.shape[0]):
-        ind_out = int(out_strength[i, 0])
-        sect_out = int(out_strength[i, 1])
-        s_out = out_strength[i, 2]
-        for j in prange(in_strength.shape[0]):
-            ind_in = int(in_strength[j, 0])
-            sect_in = int(in_strength[j, 1])
-            s_in = in_strength[j, 2]
-            if (ind_out != ind_in):
-                tmp = s_out*s_in
-                tmp2 = z[sect_out, sect_in]*tmp
-                p[sect_out, sect_in] += tmp2 / (1 + tmp2)
-    return np.reshape(p, -1)
+    z = 0
+    for n in range(steps):
+        jac = 0
+        f = 0
+        for out_row in range(len(s_out_i)-1):
+            n = s_out_i[out_row]
+            m = s_out_i[out_row + 1]
+            r = s_in_j[group_arr[out_row]]
+            s = s_in_j[group_arr[out_row]+1]
+
+            if (n == m) or (r == s):
+                continue
+
+            out_g = s_out_j[n:m]
+            out_vals = s_out_w[n:m]
+            in_j = s_in_i[r:s]
+            notself = in_j != out_row
+
+            if np.sum(notself) == 0:
+                continue
+
+            in_gj = group_arr[in_j][notself]
+            in_vals = s_in_w[r:s][notself]
+
+            for i in range(len(out_g)):
+                for j in range(len(in_gj)):
+                    if out_g[i] == in_gj[j]:
+                        tmp = out_vals[i]*in_vals[j]
+                        tmp1 = z*tmp
+                        jac += tmp / (1 + tmp1)**2
+                        f += z*tmp1 / (1 + z*tmp1)
+
+        z = z - (f-n_e)/jac
+
+    return z
+
+
+@jit(nopython=True)
+def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                    group_arr, num_e):
+    """ Compute the next iteration of the fixed point method of the block model.
+    """
+    aux = 0
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        if (n == m) or (r == s):
+            continue
+
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+        in_j = s_in_i[r:s]
+        notself = in_j != out_row
+
+        if np.sum(notself) == 0:
+            continue
+
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+
+        for i in range(len(out_g)):
+            for j in range(len(in_gj)):
+                if out_g[i] == in_gj[j]:
+                    tmp = out_vals[i]*in_vals[j]
+                    aux += tmp / (1 + exp(z)*tmp)
+
+    return log(num_e/aux)
+
+
+def sample_block_vertex(z, out_i, out_g, out_vals,
+                        in_j, in_gj, in_vals, s_tot):
+    """ Sample edges going out from a single vertex.
+    """
+    sample = []
+    for i in range(len(out_g)):
+        for j in range(len(in_gj)):
+            if out_g[i] == in_gj[j]:
+                tmp = out_vals[i]*in_vals[j]
+                tmp1 = z*tmp
+                p = tmp1 / (1 + tmp1)
+                if rng.random() < p:
+                    w = np.float64(rng.exponential(tmp/(s_tot*p)))
+                    sample.append((out_i, in_j[j], w))
+
+    return sample
+
+
+def block_sample(z, s_out_i, s_out_j, s_out_w,
+                 s_in_i, s_in_j, s_in_w, group_arr):
+    """ Sample from block model.
+    """
+    s_tot = np.sum(s_out_w)
+    assert np.isclose(s_tot, np.sum(s_in_w)), 'Total strengths not matching.'
+    sample = []
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        sample.extend(
+            sample_block_vertex(z, out_row, out_g, out_vals,
+                                in_j[notself], in_gj, in_vals, s_tot))
+
+    return np.array(sample, dtype=np.float64)

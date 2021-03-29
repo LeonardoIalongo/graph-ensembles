@@ -82,6 +82,19 @@ class TestDirectedGraph():
         msg = 'Some destination vertices are not in v.'
         assert e_info.value.args[0] == msg
 
+    def test_vertex_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        test_v = np.array([0, 0, 1], dtype=np.uint8)
+
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.DirectedGraph)
+        assert np.all(g.v.group == test_v), g.v.group
+
     def test_degree_init(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
                          columns=['name'])
@@ -91,6 +104,27 @@ class TestDirectedGraph():
             g = ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
         assert np.all(g.v.degree == d), g.v.degree
+
+    def test_degree_by_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        d = np.rec.array([(0, 0, 1),
+                         (0, 1, 1),
+                         (1, 0, 1),
+                         (1, 1, 2),
+                         (2, 0, 3)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.uint8)])
+
+        d_test = g.degree_by_group(get=True)
+
+        assert np.all(d_test == d), d_test
+        assert np.all(g.gv.degree == d), g.gv.degree
 
     def test_vertices_with_no_edge(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB']],
@@ -122,6 +156,45 @@ class TestDirectedGraph():
 
         assert np.all(d_test == d_in), d_test
         assert np.all(g.v.in_degree == d_in), g.v.in_degree
+
+    def test_out_degree_by_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        d = np.rec.array([(0, 0, 1),
+                         (1, 1, 1),
+                         (2, 0, 2)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.uint8)])
+
+        d_test = g.out_degree_by_group(get=True)
+
+        assert np.all(d_test == d), d_test
+        assert np.all(g.gv.out_degree == d), g.gv.out_degree
+
+    def test_in_degree_by_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        d = np.rec.array([(0, 1, 1),
+                         (1, 0, 1),
+                         (1, 1, 1),
+                         (2, 0, 1)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.uint8)])
+
+        d_test = g.in_degree_by_group(get=True)
+
+        assert np.all(d_test == d), d_test
+        assert np.all(g.gv.in_degree == d), g.gv.in_degree
 
     def test_multi_id_init(self):
         v = pd.DataFrame([['ING', 'NL'],
@@ -174,6 +247,16 @@ class TestWeightedGraph():
         assert isinstance(g, ge.WeightedGraph)
         assert np.all(g.e == self._e), g.e
 
+    def test_vertex_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value', v_group='country')
+
+        test_v = np.array([0, 0, 1], dtype=np.uint8)
+
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.WeightedGraph)
+        assert np.all(g.v.group == test_v), g.v.group
+
     def test_total_weight(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
                      dst='debtor', weight='value')
@@ -206,6 +289,55 @@ class TestWeightedGraph():
 
         assert np.all(s_test == s_in), s_test
         assert np.all(g.v.in_strength == s_in), g.v.in_strength
+
+    def test_strength_by_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', weight='value',
+                     src='creditor', dst='debtor', v_group='country')
+
+        s = np.rec.array([(0, 0, 1e6),
+                         (1, 0, 1e6),
+                         (1, 1, 1.7e5 + 1e4),
+                         (2, 0, 1.7e5 + 1e4)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.strength_by_group(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.gv.strength == s), g.gv.strength
+
+    def test_out_strength_by_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', weight='value',
+                     src='creditor', dst='debtor', v_group='country')
+
+        s = np.rec.array([(0, 0, 1e6),
+                         (1, 1, 1e4),
+                         (2, 0, 1.7e5)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.out_strength_by_group(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.gv.out_strength == s), g.gv.out_strength
+
+    def test_in_strength_by_group(self):
+        g = ge.Graph(self.v, self.e, v_id='name', weight='value',
+                     src='creditor', dst='debtor', v_group='country')
+
+        s = np.rec.array([(1, 0, 1e6),
+                         (1, 1, 1.7e5),
+                         (2, 0, 1e4)],
+                         dtype=[('id', np.uint8),
+                                ('group', np.uint8),
+                                ('value', np.float64)])
+
+        s_test = g.in_strength_by_group(get=True)
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g.gv.in_strength == s), g.gv.in_strength
 
 
 class TestLabelGraph():
@@ -242,6 +374,7 @@ class TestLabelGraph():
 
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.LabelGraph)
+        assert g.num_edges == 4
 
     def test_init_edges(self):
         g = ge.Graph(self.v_s, self.e_s, v_id='name', src='creditor',
@@ -366,6 +499,19 @@ class TestLabelGraph():
 
         msg = 'Some destination vertices are not in v.'
         assert e_info.value.args[0] == msg
+
+    def test_vertex_group(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     v_group='country')
+
+        test_v = np.array([0, 0, 1, 2], dtype=np.uint8)
+
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.LabelGraph)
+        assert np.all(g.v.group == test_v), g.v.group
 
     def test_degree_init(self):
         v = pd.DataFrame([['ING', 'NL'],
@@ -499,11 +645,11 @@ class TestLabelGraph():
 
 
 class TestWeightedLabelGraph():
-    v = pd.DataFrame([['ING', 'NL'],
-                     ['ABN', 'NL'],
-                     ['BNP', 'FR'],
-                     ['BNP', 'IT']],
-                     columns=['name', 'country'])
+    v = pd.DataFrame([['ING', 'NL', 'HQ'],
+                     ['ABN', 'NL', 'HQ'],
+                     ['BNP', 'FR', 'HQ'],
+                     ['BNP', 'IT', 'branch']],
+                     columns=['name', 'country', 'legal'])
 
     e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
                      ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
@@ -536,6 +682,20 @@ class TestWeightedLabelGraph():
         assert isinstance(g, ge.sGraph)
         assert isinstance(g, ge.WeightedLabelGraph)
         assert np.all(g.e == test_e), g.e
+
+    def test_vertex_group(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value',
+                     v_group=['country', 'legal'])
+
+        test_v = np.array([0, 0, 1, 2], dtype=np.uint8)
+
+        assert isinstance(g, ge.sGraph)
+        assert isinstance(g, ge.WeightedLabelGraph)
+        assert np.all(g.v.group == test_v), g.v.group
 
     def test_total_weight(self):
         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
