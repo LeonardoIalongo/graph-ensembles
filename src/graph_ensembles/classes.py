@@ -8,6 +8,7 @@ import pandas as pd
 import graph_ensembles.methods as mt
 import warnings
 from math import exp, log
+from . import lib
 
 
 class Graph():
@@ -16,7 +17,8 @@ class Graph():
     """
     def __new__(cls, v, e, **kwargs):
         # Ensure passed arguments are accepted
-        allowed_arguments = ['v_id', 'src', 'dst', 'weight', 'edge_label']
+        allowed_arguments = ['v_id', 'src', 'dst', 'weight',
+                             'edge_label', 'v_group']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -36,6 +38,11 @@ class Graph():
         else:
             dst_col = kwargs['dst']
 
+        if 'v_group' in kwargs:
+            v_group = kwargs['v_group']
+        else:
+            v_group = None
+
         if 'weight' in kwargs:
             weight_col = kwargs['weight']
             if 'edge_label' in kwargs:
@@ -46,14 +53,16 @@ class Graph():
                                           src=src_col,
                                           dst=dst_col,
                                           weight=weight_col,
-                                          edge_label=label_col)
+                                          edge_label=label_col,
+                                          v_group=v_group)
             else:
                 return WeightedGraph(v,
                                      e,
                                      v_id=id_col,
                                      src=src_col,
                                      dst=dst_col,
-                                     weight=weight_col)
+                                     weight=weight_col,
+                                     v_group=v_group)
 
         else:
             if 'edge_label' in kwargs:
@@ -63,13 +72,21 @@ class Graph():
                                   v_id=id_col,
                                   src=src_col,
                                   dst=dst_col,
-                                  edge_label=label_col)
+                                  edge_label=label_col,
+                                  v_group=v_group)
             else:
                 return DirectedGraph(v,
                                      e,
                                      v_id=id_col,
                                      src=src_col,
-                                     dst=dst_col)
+                                     dst=dst_col,
+                                     v_group=v_group)
+
+
+class GroupVertexList():
+    """ Class to store results of group-vertex properties.
+    """
+    pass
 
 
 class sGraph():
@@ -80,7 +97,7 @@ class sGraph():
     num_vertices: int
         number of vertices in the graph
     num_edges: int
-        number of edges in the graph
+        number of distinct directed edges in the graph
     v: numpy.rec.array
         array containing the computed properties of the vertices
     e: numpy.rec.array
@@ -89,6 +106,14 @@ class sGraph():
         dictionary to convert original identifiers to positions in v
     id_dtype: numpy.dtype
         type of the id (e.g. np.uint16)
+    num_groups: int  (or None)
+        number of vertex groups
+    group_dict: dict (or none)
+        dictionary to convert v_group columns into numeric ids
+    group_dtype: numpy.dtype
+        type of the group id
+    gv: GroupVertexList
+        collector object for all properties of the group vertex pair
 
     Methods
     -------
@@ -96,7 +121,7 @@ class sGraph():
     degree:
         compute the undirected degree sequence
     """
-    def __init__(self, v, e, v_id, src, dst):
+    def __init__(self, v, e, v_id, src, dst, v_group=None):
         """Return a sGraph object given vertices and edges.
 
         Parameters
@@ -111,6 +136,8 @@ class sGraph():
             identifier column for the source vertex
         dst: str or list of str
             identifier column for the destination vertex
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
@@ -130,22 +157,52 @@ class sGraph():
 
         # Determine size of indices
         self.num_vertices = len(v.index)
-        self.num_edges = len(e.index)
         num_bytes = mt.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
         self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
-            type=np.recarray, dtype=[('id', self.id_dtype)])
+                type=np.recarray, dtype=[('id', self.id_dtype)])
+
+        # If v_group is given then create dict and add to v
+        if v_group is not None:
+            self.gv = GroupVertexList()
+            if isinstance(v_group, list) and len(v_group) == 1:
+                v_group = v_group[0]
+
+            self.group_dict = mt.generate_id_dict(v, v_group)
+            self.num_groups = len(self.group_dict)
+            num_bytes = mt.get_num_bytes(self.num_groups)
+            self.group_dtype = np.dtype('u' + str(num_bytes))
+            groups = np.empty(self.num_vertices, dtype=self.group_dtype)
+            i = 0
+            if isinstance(v_group, list):
+                for row in v[v_group].itertuples(index=False):
+                    groups[i] = self.group_dict[row]
+                    i += 1
+            elif isinstance(v_group, str):
+                for row in v[v_group]:
+                    groups[i] = self.group_dict[row]
+                    i += 1
+            else:
+                raise ValueError('v_group must be str or list of str.')
+            self.v = append_fields(self.v, 'group', groups)
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
-        self.id_dict = mt.generate_id_dict(v, v_id)
+        try:
+            self.id_dict = mt.generate_id_dict(v, v_id, no_rep=True)
+        except ValueError as err:
+            raise err
+        except Exception:
+            rep_msg = ('There is at least one repeated id in the vertex '
+                       'dataframe.')
+            raise Exception(rep_msg)
 
         # Check that no vertex id in e is not present in v
         # and generate optimized edge list
         smsg = 'Some source vertices are not in v.'
         dmsg = 'Some destination vertices are not in v.'
-        src_array = np.empty(self.num_edges, dtype=self.id_dtype)
-        dst_array = np.empty(self.num_edges, dtype=self.id_dtype)
+        src_array = np.empty(len(e.index), dtype=self.id_dtype)
+        dst_array = np.empty(len(e.index), dtype=self.id_dtype)
 
         if isinstance(src, list) and isinstance(dst, list):
             n = len(src)
@@ -181,6 +238,7 @@ class sGraph():
         self.e = np.rec.array(
                 (src_array, dst_array),
                 dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
+        self.num_edges = mt.compute_num_edges(self.e)
 
     def degree(self, get=False):
         """ Compute the undirected degree sequence.
@@ -197,6 +255,31 @@ class sGraph():
 
         if get:
             return degree
+
+    def degree_by_group(self, get=False):
+        """ Compute the undirected degree sequence to and from each group.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'degree'):
+            d, d_dict = mt.compute_degree_by_group(self.e, self.v.group)
+            dtype = 'u' + str(mt.get_num_bytes(np.max(d[:, 2])))
+            self.gv.degree = d.view(
+                type=np.recarray,
+                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
+                ).reshape((d.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', dtype)]
+                )
+            self.gv.degree.sort()
+            self.gv.degree_dict = d_dict
+
+        if get:
+            return self.gv.degree
 
 
 class DirectedGraph(sGraph):
@@ -215,7 +298,7 @@ class DirectedGraph(sGraph):
         compute the in degree sequence
     """
 
-    def __init__(self, v, e, v_id, src, dst):
+    def __init__(self, v, e, v_id, src, dst, v_group=None):
         """Return a DirectedGraph object given vertices and edges.
 
         Parameters
@@ -230,13 +313,15 @@ class DirectedGraph(sGraph):
             identifier column for the source vertex
         dst: str or list of str
             identifier column for the destination vertex
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
-        sGraph
+        DirectedGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
 
         # Sort e
         self.sort_ind = np.argsort(self.e)
@@ -301,6 +386,57 @@ class DirectedGraph(sGraph):
         if get:
             return d_in
 
+    def out_degree_by_group(self, get=False):
+        """ Compute the out degree sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'out_degree'):
+            d_out, d_in, dout_dict, din_dict = \
+                mt.compute_in_out_degree_by_group(self.e, self.v.group)
+            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out[:, 2]),
+                                                   np.max(d_in[:, 2]))))
+            self.gv.out_degree = d_out.view(
+                type=np.recarray,
+                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
+                ).reshape((d_out.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', dtype)]
+                )
+            self.gv.in_degree = d_in.view(
+                type=np.recarray,
+                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
+                ).reshape((d_in.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', dtype)]
+                )
+            self.gv.out_degree.sort()
+            self.gv.in_degree.sort()
+            self.gv.out_degree_dict = dout_dict
+            self.gv.in_degree_dict = din_dict
+
+        if get:
+            return self.gv.out_degree
+
+    def in_degree_by_group(self, get=False):
+        """ Compute the in degree sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'in_degree'):
+            self.out_degree_by_group()
+
+        if get:
+            return self.gv.in_degree
+
 
 class WeightedGraph(DirectedGraph):
     """ General class for directed graphs with weighted edges.
@@ -319,7 +455,7 @@ class WeightedGraph(DirectedGraph):
     in_strength:
         compute the in strength sequence
     """
-    def __init__(self, v, e, v_id, src, dst, weight):
+    def __init__(self, v, e, v_id, src, dst, weight, v_group=None):
         """Return a WeightedGraph object given vertices and edges.
 
         Parameters
@@ -336,13 +472,15 @@ class WeightedGraph(DirectedGraph):
             identifier column for the destination vertex
         weight:
             identifier column for the weight of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
-        sGraph
+        WeightedGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
 
         if isinstance(weight, list) and len(weight) == 1:
             weight = weight[0]
@@ -413,6 +551,79 @@ class WeightedGraph(DirectedGraph):
         if get:
             return s_in
 
+    def strength_by_group(self, get=False):
+        """ Compute the undirected strength sequence to and from each group.
+
+        If get is true it returns the array otherwise it adds the result to v.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'strength'):
+            s, s_dict = mt.compute_strength_by_group(self.e, self.v.group)
+            self.gv.strength = s.view(
+                type=np.recarray,
+                dtype=[('id', 'f8'), ('group', 'f8'), ('value', 'f8')]
+                ).reshape((s.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', 'f8')]
+                )
+            self.gv.strength.sort()
+            self.gv.strength_dict = s_dict
+
+        if get:
+            return self.gv.strength
+
+    def out_strength_by_group(self, get=False):
+        """ Compute the out strength sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'out_strength'):
+            s_out, s_in, sout_dict, sin_dict = \
+                mt.compute_in_out_strength_by_group(self.e, self.v.group)
+            self.gv.out_strength = s_out.view(
+                type=np.recarray,
+                dtype=[('id', 'f8'), ('group', 'f8'), ('value', 'f8')]
+                ).reshape((s_out.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', 'f8')]
+                )
+            self.gv.in_strength = s_in.view(
+                type=np.recarray,
+                dtype=[('id', 'f8'), ('group', 'f8'), ('value', 'f8')]
+                ).reshape((s_in.shape[0],)).astype(
+                [('id', self.id_dtype),
+                 ('group', self.group_dtype),
+                 ('value', 'f8')]
+                )
+            self.gv.out_strength.sort()
+            self.gv.in_strength.sort()
+            self.gv.out_strength_dict = sout_dict
+            self.gv.in_strength_dict = sin_dict
+
+        if get:
+            return self.gv.out_strength
+
+    def in_strength_by_group(self, get=False):
+        """ Compute the in strength sequence to and from each group.
+
+        If get is true it returns the array, else it adds the result to gv.
+        """
+        if not hasattr(self, 'gv'):
+            raise Exception('Graph object does not contain group info.')
+
+        if not hasattr(self.gv, 'in_strength'):
+            self.out_strength_by_group()
+
+        if get:
+            return self.gv.in_strength
+
 
 class LabelVertexList():
     """ Class to store results of label-vertex properties from LabelGraph.
@@ -420,7 +631,7 @@ class LabelVertexList():
     pass
 
 
-class LabelGraph(sGraph):
+class LabelGraph(DirectedGraph):
     """ General class for directed graphs with labelled edges.
 
     Attributes
@@ -438,10 +649,6 @@ class LabelGraph(sGraph):
 
     Methods
     -------
-    out_degree:
-        compute the out degree sequence
-    in_degree:
-        compute the in degree sequence
     degree_by_label:
         compute the degree of each vertex by label
     out_degree_by_label:
@@ -449,7 +656,7 @@ class LabelGraph(sGraph):
     in_degree_by_label:
         compute the in degree of each vertex by label
     """
-    def __init__(self, v, e, v_id, src, dst, edge_label):
+    def __init__(self, v, e, v_id, src, dst, edge_label, v_group=None):
         """Return a LabelGraph object given vertices and edges.
 
         Parameters
@@ -466,19 +673,22 @@ class LabelGraph(sGraph):
             identifier column for the destination vertex
         edge_label:
             identifier column for label of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
-        sGraph
+        LabelGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst)
+        super(DirectedGraph, self).__init__(v, e, v_id=v_id, src=src, dst=dst,
+                                            v_group=v_group)
 
         if isinstance(edge_label, list) and len(edge_label) == 1:
             edge_label = edge_label[0]
 
         # Get dictionary of label to numeric internal label
-        self.label_dict = mt.generate_label_dict(e, edge_label)
+        self.label_dict = mt.generate_id_dict(e, edge_label)
         self.num_labels = len(self.label_dict)
         num_bytes = mt.get_num_bytes(self.num_labels)
         self.label_dtype = np.dtype('u' + str(num_bytes))
@@ -486,7 +696,7 @@ class LabelGraph(sGraph):
         # Convert labels
         if isinstance(edge_label, list):
             n = len(edge_label)
-            lbl_array = np.empty(self.num_edges, dtype=self.label_dtype)
+            lbl_array = np.empty(len(self.e), dtype=self.label_dtype)
             i = 0
             for row in e[edge_label].itertuples(index=False):
                 lbl_array[i] = self.label_dict[row[0:n]]
@@ -534,46 +744,6 @@ class LabelGraph(sGraph):
 
         # Create lv property
         self.lv = LabelVertexList()
-
-    def out_degree(self, get=False):
-        """ Compute the out degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
-        """
-        if 'out_degree' in self.v.dtype.names:
-            d_out = self.v.out_degree
-        else:
-            d_out, d_in = mt.compute_in_out_degree_labelled(
-                self.e, self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
-                                                   np.max(d_in))))
-            self.v = append_fields(self.v,
-                                   ['out_degree', 'in_degree'],
-                                   (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype])
-
-        if get:
-            return d_out
-
-    def in_degree(self, get=False):
-        """ Compute the out degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
-        """
-        if 'in_degree' in self.v.dtype.names:
-            d_in = self.v.in_degree
-        else:
-            d_out, d_in = mt.compute_in_out_degree_labelled(
-                self.e, self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
-                                                   np.max(d_in))))
-            self.v = append_fields(self.v,
-                                   ['out_degree', 'in_degree'],
-                                   (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype])
-
-        if get:
-            return d_in
 
     def degree_by_label(self, get=False):
         """ Compute the degree sequence by label.
@@ -663,7 +833,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
     in_strength_by_label:
         compute the in strength of each vertex by label
     """
-    def __init__(self, v, e, v_id, src, dst, weight, edge_label):
+    def __init__(self, v, e, v_id, src, dst, weight, edge_label, v_group=None):
         """Return a WeightedLabelGraph object given vertices and edges.
 
         Parameters
@@ -682,6 +852,8 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
             identifier column for the weight of the edges
         edge_label:
             identifier column for label of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
 
         Returns
         -------
@@ -689,7 +861,7 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
             the graph object
         """
         LabelGraph.__init__(self, v, e, v_id=v_id, src=src, dst=dst,
-                            edge_label=edge_label)
+                            edge_label=edge_label, v_group=v_group)
 
         if isinstance(weight, list) and len(weight) == 1:
             weight = weight[0]
@@ -899,7 +1071,7 @@ class RandomGraph(GraphEnsemble):
                 assert self.num_labels == len(self.p), msg
             else:
                 assert isinstance(self.p, (int, float)), msg
-            self.num_edges = self.get_num_edges()
+            self.num_edges = self.exp_num_edges()
 
         else:
             if not hasattr(self, 'num_edges'):
@@ -956,7 +1128,7 @@ class RandomGraph(GraphEnsemble):
                 except Exception:
                     assert False, msg
 
-            self.total_weight = self.get_total_weight()
+            self.total_weight = self.exp_total_weight()
 
     def fit(self):
         """ Fit the parameter p and q to the number of edges and total weight.
@@ -969,12 +1141,12 @@ class RandomGraph(GraphEnsemble):
             else:
                 self.q = self.num_edges/self.total_weight
 
-    def get_num_edges(self):
+    def exp_num_edges(self):
         """ Compute the expected number of edges (per label) given p.
         """
         return self.p*self.num_vertices*(self.num_vertices - 1)
 
-    def get_total_weight(self):
+    def exp_total_weight(self):
         """ Compute the expected total weight (per label) given q.
         """
         if self.discrete_weights:
@@ -1034,7 +1206,7 @@ class RandomGraph(GraphEnsemble):
 
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
-            g.num_edges = len(g.e)
+            g.num_edges = mt.compute_num_edges(g.e)
 
         else:
             if hasattr(self, 'q'):
@@ -1078,7 +1250,7 @@ class RandomGraph(GraphEnsemble):
 
             g.sort_ind = np.argsort(e)
             g.e = e[g.sort_ind]
-            g.num_edges = len(g.e)
+            g.num_edges = mt.compute_num_edges(g.e)
             ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
             dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
             g.num_edges_label = ne_label.astype(dtype)
@@ -1091,7 +1263,7 @@ class FitnessModel(GraphEnsemble):
 
 
 class StripeFitnessModel(GraphEnsemble):
-    """ A generalized fitness model that allows for vector strength sequences.
+    """ A generalized fitness model that allows for strengths by label.
 
     This model allows to take into account labels of the edges and include
     this information as part of the model. The strength sequence is therefore
@@ -1116,14 +1288,14 @@ class StripeFitnessModel(GraphEnsemble):
     """
 
     def __init__(self, *args, **kwargs):
-        """ Return a VectorFitnessModel for the given graph data.
+        """ Return a StripeFitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedLabelGraph, the
         strength sequences (in and out) and the number of edges (per label),
         or the strength sequences and the z parameter (per label).
 
-        The model accepts the strength sequences as numpy arrays. The first
-        column must contain the node index, the second column the label index
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the label index, the second column the node index
         to which the strength refers, and in the third column must have the
         value of the strength for the node label pair. All node label pairs
         not included are assumed zero.
@@ -1196,6 +1368,8 @@ class StripeFitnessModel(GraphEnsemble):
             assert clm in ('label', 'id', 'value'), msg
 
         # Ensure that strengths are sorted
+        self.out_strength = self.out_strength[['label', 'id', 'value']]
+        self.in_strength = self.in_strength[['label', 'id', 'value']]
         self.out_strength.sort()
         self.in_strength.sort()
 
@@ -1218,10 +1392,10 @@ class StripeFitnessModel(GraphEnsemble):
         # Check that sum of in and out strengths are equal per label
         tot_out = np.zeros((self.num_labels))
         for row in self.out_strength:
-            tot_out[row[0]] += row[2]
+            tot_out[row.label] += row.value
         tot_in = np.zeros((self.num_labels))
         for row in self.in_strength:
-            tot_in[row[0]] += row[2]
+            tot_in[row.label] += row.value
 
         msg = 'Sum of strengths per label do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-6), msg
@@ -1375,7 +1549,7 @@ class StripeFitnessModel(GraphEnsemble):
                       ('weight', 'f8')])
         g.sort_ind = np.argsort(e)
         g.e = e[g.sort_ind]
-        g.num_edges = len(g.e)
+        g.num_edges = mt.compute_num_edges(g.e)
         ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
         dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
         g.num_edges_label = ne_label.astype(dtype)
@@ -1387,4 +1561,325 @@ class StripeFitnessModel(GraphEnsemble):
 
 
 class BlockFitnessModel(GraphEnsemble):
-    pass
+    """ A generalized fitness model that allows for grouped vertices.
+
+    This model allows to take into account the group of each vertex and
+    include this information as part of the model. The strength sequence is
+    therefore now subdivided in strength from and to each group.
+
+    The quantity preserved by the ensemble is the total number of edges.
+
+    Attributes
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence
+    in_strength: np.ndarray
+        the in strength sequence
+    num_edges: int
+        the total number of edges
+    num_vertices: int
+        the total number of nodes
+    num_groups: int
+        the total number of groups by which the vector strengths are computed
+    z: float
+        the density parameter
+    """
+
+    def __init__(self, *args, **kwargs):
+        """ Return a BlockFitnessModel for the given graph data.
+
+        The model accepts as arguments either: a DirectedGraph object, the
+        strength sequences (in and out) and the number of edges (per label),
+        or the strength sequences and the z parameter (per label).
+
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the node index, the second column the group index
+        to which the strength refers, and in the third column must have the
+        value of the strength for the node group pair. All node group pairs
+        not included are assumed zero.
+        """
+
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], DirectedGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges
+                self.num_groups = g.num_groups
+                self.group_dict = g.v.group
+                self.out_strength = g.out_strength_by_group(get=True)
+                self.in_strength = g.in_strength_by_group(get=True)
+            else:
+                raise ValueError('First argument passed must be a '
+                                 'DirectedGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'num_groups',
+                             'out_strength', 'in_strength', 'z',
+                             'discrete_weights', 'group_dict']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+
+        if not hasattr(self, 'num_groups'):
+            raise ValueError('Number of groups not set.')
+
+        if not hasattr(self, 'group_dict'):
+            raise ValueError('Group dictionary not set.')
+        else:
+            if isinstance(self.group_dict, dict):
+                self.group_dict = mt.dict_to_array(self.group_dict)
+            elif isinstance(self.group_dict, np.ndarray):
+                msg = 'Group_dict must have one element for each vertex.'
+                assert len(self.group_dict) == self.num_vertices
+            else:
+                ValueError('Group dictionary must be a dict or an array.')
+
+        if not hasattr(self, 'out_strength'):
+            raise ValueError('out_strength not set.')
+
+        if not hasattr(self, 'in_strength'):
+            raise ValueError('in_strength not set.')
+
+        if not (hasattr(self, 'num_edges') or
+                hasattr(self, 'z')):
+            raise ValueError('Either num_edges or z must be set.')
+
+        # Ensure that strengths passed adhere to format
+        msg = ("Out strength must be a rec array with columns: "
+               "('id', 'group', 'value')")
+        assert isinstance(self.out_strength, np.recarray), msg
+        for clm in self.out_strength.dtype.names:
+            assert clm in ('id', 'group', 'value'), msg
+
+        msg = ("In strength must be a rec array with columns: "
+               "('id', 'group', 'value')")
+        assert isinstance(self.in_strength, np.recarray), msg
+        for clm in self.in_strength.dtype.names:
+            assert clm in ('id', 'group', 'value'), msg
+
+        # Ensure that strengths are sorted
+        self.out_strength = self.out_strength[['id', 'group', 'value']]
+        self.in_strength = self.in_strength[['id', 'group', 'value']]
+        self.out_strength.sort()
+        self.in_strength.sort()
+
+        # Ensure that the parameters or number of edges are set correctly
+        if hasattr(self, 'num_edges'):
+            if not isinstance(self.num_edges, int):
+                raise ValueError('Number of edges must be an integer.')
+        else:
+            try:
+                self.z = float(self.z)
+            except TypeError:
+                raise TypeError('z must be a float.')
+
+        # Check that sum of in and out strengths are equal
+        tot_out = np.sum(self.out_strength.value)
+        tot_in = np.sum(self.in_strength.value)
+
+        msg = 'Sum of strengths do not match.'
+        assert np.allclose(tot_out, tot_in, atol=1e-6), msg
+
+        # If z is set computed expected number of edges per label
+        if hasattr(self, 'z'):
+            self.num_edges = self.expected_num_edges()
+
+    def expected_num_edges(self):
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csc')
+
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
+
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indices
+        s_in_j = s_in.indptr
+        s_in_w = s_in.data
+
+        return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
+                                      s_in_i, s_in_j, s_in_w, self.group_dict)
+
+    def fit(self, z0=None, method="newton", tol=1e-8,
+            xtol=1e-8, max_iter=100, verbose=False):
+        """ Compute the optimal z to match the given number of edges.
+
+        Parameters
+        ----------
+        z0: float or np.ndarray
+            optional initial conditions for z parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol : float
+            tolerance for the exit condition on the norm
+        eps : float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+
+        """
+        if isinstance(self.num_edges, int):
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_groups),
+                                  kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_groups),
+                                 kind='csc')
+
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
+
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indices
+            s_in_j = s_in.indptr
+            s_in_w = s_in.data
+
+            if z0 is None:
+                x0 = mt.block_newton_init(s_out_i, s_out_j, s_out_w,
+                                          s_in_i, s_in_j, s_in_w,
+                                          self.group_dict, self.num_edges, 2)
+            else:
+                try:
+                    x0 = float(self.z)
+                except TypeError:
+                    raise TypeError('z must be a float.')
+
+            if method == "newton":
+                sol = mt.newton_solver(
+                    x0=log(x0),
+                    fun=lambda x: mt.f_jac_block(
+                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                        self.group_dict, self.num_edges),
+                    tol=tol,
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+            elif method == "fixed-point":
+                sol = mt.fixed_point_solver(
+                    x0=log(x0),
+                    fun=lambda x: mt.iterative_block(
+                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                        self.group_dict, self.num_edges),
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+
+            else:
+                raise ValueError("The selected method is not valid.")
+
+            # Update results and check convergence
+            self.z = exp(sol.x)
+            self.solver_output = sol
+
+            if not sol.converged:
+                if method == 'newton':
+                    mod = sol.norm_seq[-1]
+                else:
+                    mod = self.expected_num_edges() - self.num_edges
+                if sol.max_iter_reached:
+                    msg = ('Fit did not converge: \n solver stopped because'
+                           ' it reached the max number of iterations. \n'
+                           'Final distance from root = {}'.format(mod))
+                    warnings.warn(msg, UserWarning)
+
+                if method == 'newton':
+                    if sol.no_change_stop:
+                        msg = ('Fit did not converge: \n solver stopped '
+                               'because the update of x was smaller than the '
+                               ' tolerance. \n Final distance from'
+                               ' root = {}'.format(mod))
+                        warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError('Number of edges must be an integer.')
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'z'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = WeightedGraph.__new__(WeightedGraph)
+        g.gv = GroupVertexList()
+        g.num_groups = len(np.unique(self.group_dict))
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        num_bytes = mt.get_num_bytes(self.num_vertices)
+        g.id_dtype = np.dtype('u' + str(num_bytes))
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csc')
+
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
+
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indices
+        s_in_j = s_in.indptr
+        s_in_w = s_in.data
+
+        # Sample edges and extract properties
+        e = mt.block_sample(self.z, s_out_i, s_out_j, s_out_w,
+                            s_in_i, s_in_j, s_in_w, self.group_dict)
+        e = e.view(type=np.recarray,
+                   dtype=[('src', 'f8'),
+                          ('dst', 'f8'),
+                          ('weight', 'f8')]).reshape((e.shape[0],))
+        e = e.astype([('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        g.total_weight = np.sum(e.weight)
+
+        return g
