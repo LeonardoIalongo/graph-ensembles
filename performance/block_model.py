@@ -56,3 +56,9 @@ start = perf_counter()
 g_sample = block.sample()
 perf = perf_counter() - start
 print('Time for block sample: ', perf)
+
+start = perf_counter()
+out_deg = block.expected_out_degree()
+in_deg = block.expected_in_degree()
+perf = perf_counter() - start
+print('Time for block expected degrees: ', perf)
