@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.1 (2021-03-29)
+------------------
+* Fixed bug in stripe expected degree computation
+* Added testing of expected degree performance
+
 0.1.0 (2021-03-29)
 ------------------
 * Added the block model and group info to graphs

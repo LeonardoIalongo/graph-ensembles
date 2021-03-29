@@ -131,7 +131,7 @@ def pij_stripe(z, out_label, out_vals, in_label, in_vals):
         out_l = out_label[i]
         in_l = in_label[j]
         if out_l == in_l:
-            tmp = z[out_label[i]]*out_vals*in_vals
+            tmp = z[out_l]*out_vals[i]*in_vals[j]
             p += tmp / (1 + tmp)
             i += 1
             j += 1
