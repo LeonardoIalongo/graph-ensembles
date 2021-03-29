@@ -1512,6 +1512,49 @@ class StripeFitnessModel(GraphEnsemble):
         else:
             raise Exception('Model must be fitted before hand.')
 
+    def expected_out_degree(self):
+        """ Compute the expected out degree for a given z.
+        """
+
+        if not hasattr(self, 'exp_out_degree'):
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_labels),
+                                  i_col='id', j_col='label', data_col='value',
+                                  kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_labels),
+                                 i_col='id', j_col='label', data_col='value',
+                                 kind='csr')
+
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
+
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indptr
+            s_in_j = s_in.indices
+            s_in_w = s_in.data
+
+            # Get out_degree
+            self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
+                self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                self.num_vertices)
+
+        return self.exp_out_degree
+
+    def expected_in_degree(self):
+        """ Compute the expected in degree for a given z.
+        """
+        if not hasattr(self, 'exp_in_degree'):
+            _ = self.expected_out_degree()
+
+        return self.exp_in_degree
+
     def sample(self):
         """ Return a Graph sampled from the ensemble.
         """
@@ -1724,64 +1767,66 @@ class BlockFitnessModel(GraphEnsemble):
     def expected_out_degree(self):
         """ Compute the expected out degree for a given z.
         """
-        # Convert to sparse matrices
-        s_out = lib.to_sparse(self.out_strength,
-                              (self.num_vertices, self.num_groups),
-                              kind='csr')
-        s_in = lib.to_sparse(self.in_strength,
-                             (self.num_vertices, self.num_groups),
-                             kind='csc')
+        if not hasattr(self, 'exp_out_degree'):
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_groups),
+                                  kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_groups),
+                                 kind='csc')
 
-        if not s_out.has_sorted_indices:
-            s_out.sort_indices()
-        if not s_in.has_sorted_indices:
-            s_in.sort_indices()
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
 
-        # Extract arrays from sparse matrices
-        s_out_i = s_out.indptr
-        s_out_j = s_out.indices
-        s_out_w = s_out.data
-        s_in_i = s_in.indices
-        s_in_j = s_in.indptr
-        s_in_w = s_in.data
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indices
+            s_in_j = s_in.indptr
+            s_in_w = s_in.data
 
-        # Get out_degree
-        out_degree = mt.block_exp_out_degree(
-            self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-            self.group_dict)
+            # Get out_degree
+            self.exp_out_degree = mt.block_exp_out_degree(
+                self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                self.group_dict)
 
-        return out_degree
+        return self.exp_out_degree
 
     def expected_in_degree(self):
         """ Compute the expected in degree for a given z.
         """
-        # Convert to sparse matrices
-        s_out = lib.to_sparse(self.out_strength,
-                              (self.num_vertices, self.num_groups),
-                              kind='csc')
-        s_in = lib.to_sparse(self.in_strength,
-                             (self.num_vertices, self.num_groups),
-                             kind='csr')
+        if not hasattr(self, 'exp_in_degree'):
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_groups),
+                                  kind='csc')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_groups),
+                                 kind='csr')
 
-        if not s_out.has_sorted_indices:
-            s_out.sort_indices()
-        if not s_in.has_sorted_indices:
-            s_in.sort_indices()
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
 
-        # Extract arrays from sparse matrices
-        s_out_i = s_out.indices
-        s_out_j = s_out.indptr
-        s_out_w = s_out.data
-        s_in_i = s_in.indptr
-        s_in_j = s_in.indices
-        s_in_w = s_in.data
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indices
+            s_out_j = s_out.indptr
+            s_out_w = s_out.data
+            s_in_i = s_in.indptr
+            s_in_j = s_in.indices
+            s_in_w = s_in.data
 
-        # Get in_degree (note switched positions of args)
-        in_degree = mt.block_exp_out_degree(
-            self.z, s_in_i, s_in_j, s_in_w, s_out_i, s_out_j, s_out_w,
-            self.group_dict)
+            # Get in_degree (note switched positions of args)
+            self.exp_in_degree = mt.block_exp_out_degree(
+                self.z, s_in_i, s_in_j, s_in_w, s_out_i, s_out_j, s_out_w,
+                self.group_dict)
 
-        return in_degree
+        return self.exp_in_degree
 
     def fit(self, z0=None, method="newton", tol=1e-8,
             xtol=1e-8, max_iter=100, verbose=False):
