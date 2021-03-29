@@ -324,6 +324,71 @@ def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
 
 
 @jit(nopython=True)
+def block_exp_out_degree(z, s_out_i, s_out_j, s_out_w,
+                         s_in_i, s_in_j, s_in_w, group_arr):
+    """ Calculate the expected out degree for the block model.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    group. s_out must be a csr matrix and s_in a csc matrix.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by group sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by group sparse csr matrix
+    s_out_w: array
+        data of the out_strength by group sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by group sparse csc matrix
+    s_in_j: array
+        indptr of the in_strength by group sparse csc matrix
+    s_in_w: array
+        data of the in_strength by group sparse csc matrix
+    group_arr: array
+        an array containing the group id for each vertex in order
+    """
+    out_degree = np.zeros(len(group_arr), dtype=np.int64)
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+        r = s_in_j[group_arr[out_row]]
+        s = s_in_j[group_arr[out_row]+1]
+
+        # Ensure at least one element exists
+        if (n == m) or (r == s):
+            continue
+
+        # Get non-zero out strengths for vertex out_row towards groups out_g
+        out_g = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        # Get indices of non-zero in strengths from group of vertex out_row
+        in_j = s_in_i[r:s]
+
+        # Remove self loops
+        notself = in_j != out_row
+
+        # Ensure at least one element remains
+        if np.sum(notself) == 0:
+            continue
+
+        # Get groups corresponding to the in_j values
+        in_gj = group_arr[in_j][notself]
+        in_vals = s_in_w[r:s][notself]
+        out_degree[out_row] = block_exp_vertex_degree(
+            z, out_g, out_vals, in_gj, in_vals)
+
+    return out_degree
+
+
+@jit(nopython=True)
 def f_jac_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
                 group_arr, num_e):
     """ Calculate the objective function and its Jacobian for the block model.
