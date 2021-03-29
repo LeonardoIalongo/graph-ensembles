@@ -2,6 +2,12 @@
 History
 =======
 
+0.1.0 (2021-03-29)
+------------------
+* Added the block model and group info to graphs
+* Added fast implementation of theoretical expected degrees
+* Fixed some compatibility issues with multiple item assignments
+
 0.0.4 (2021-03-15)
 ------------------
 * Fixed issues with slow pandas index conversion
