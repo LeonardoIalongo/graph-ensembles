@@ -4,6 +4,25 @@ from numba import jit
 from math import ceil, sqrt, isinf, exp, log
 
 
+# --------------- PROBABILITY FUNCTIONALS ---------------
+@jit(nopython=True)
+def p_fitness(d, x_i, x_j):
+    tmp = d*x_i*x_j
+    if isinf(tmp):
+        return 1
+    else:
+        return tmp / (1 + tmp)
+
+
+@jit(nopython=True)
+def p_invariant(d, x_i, x_j):
+    tmp = d*x_i*x_j
+    if isinf(tmp):
+        return 1
+    else:
+        return 1 - exp(-tmp)
+
+
 # --------------- RANDOM GRAPH METHODS ---------------
 @jit(nopython=True)
 def random_graph(n, p, q=None, discrete_weights=False):
