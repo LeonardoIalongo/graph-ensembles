@@ -1316,6 +1316,8 @@ class StripeFitnessModel(GraphEnsemble):
                 self.num_vertices = g.num_vertices
                 self.num_edges = g.num_edges_label
                 self.num_labels = g.num_labels
+                self.id_dtype = g.id_dtype
+                self.label_dtype = g.label_dtype
                 self.out_strength = g.out_strength_by_label(get=True)
                 self.in_strength = g.in_strength_by_label(get=True)
             else:
@@ -1353,6 +1355,14 @@ class StripeFitnessModel(GraphEnsemble):
         if not (hasattr(self, 'num_edges') or
                 hasattr(self, 'z')):
             raise ValueError('Either num_edges or z must be set.')
+
+        if not hasattr(self, 'id_dtype'):
+            num_bytes = mt.get_num_bytes(self.num_vertices)
+            self.id_dtype = np.dtype('u' + str(num_bytes))
+
+        if not hasattr(self, 'label_dtype'):
+            num_bytes = mt.get_num_bytes(self.num_labels)
+            self.label_dtype = np.dtype('u' + str(num_bytes))
 
         # Ensure that strengths passed adhere to format
         msg = ("Out strength must be a rec array with columns: "
@@ -1555,6 +1565,48 @@ class StripeFitnessModel(GraphEnsemble):
 
         return self.exp_in_degree
 
+    def expected_out_degree_by_label(self):
+        """ Compute the expected out degree by label for a given z.
+        """
+
+        if not hasattr(self, 'exp_out_degree_label'):
+            res = mt.stripe_exp_degree_label(
+                self.z, self.out_strength, self.in_strength, self.num_labels)
+
+            d_out = np.array(res[0])
+            self.exp_out_degree_label = d_out.view(
+                type=np.recarray,
+                dtype=[('label', 'f8'),
+                       ('id', 'f8'),
+                       ('value', 'f8')]
+                ).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', 'f8')]
+                )
+
+            d_in = np.array(res[1])
+            self.exp_in_degree_label = d_in.view(
+                type=np.recarray,
+                dtype=[('label', 'f8'),
+                       ('id', 'f8'),
+                       ('value', 'f8')]
+                ).astype(
+                [('label', self.label_dtype),
+                 ('id', self.id_dtype),
+                 ('value', 'f8')]
+                )
+
+        return self.exp_out_degree_label
+
+    def expected_in_degree_by_label(self):
+        """ Compute the expected in degree by label for a given z.
+        """
+        if not hasattr(self, 'exp_in_degree_label'):
+            _ = self.expected_out_degree_by_label()
+
+        return self.exp_in_degree_label
+
     def sample(self):
         """ Return a Graph sampled from the ensemble.
         """
@@ -1567,8 +1619,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Initialise common object attributes
         g.num_vertices = self.num_vertices
-        num_bytes = mt.get_num_bytes(self.num_vertices)
-        g.id_dtype = np.dtype('u' + str(num_bytes))
+        g.id_dtype = self.id_dtype
         g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
             type=np.recarray, dtype=[('id', g.id_dtype)])
         g.id_dict = {}
@@ -1584,8 +1635,7 @@ class StripeFitnessModel(GraphEnsemble):
                           ('dst', 'f8'),
                           ('weight', 'f8')]).reshape((e.shape[0],))
         g.num_labels = self.num_labels
-        num_bytes = mt.get_num_bytes(g.num_labels)
-        g.label_dtype = np.dtype('u' + str(num_bytes))
+        g.label_dtype = self.label_dtype
         e = e.astype([('label', g.label_dtype),
                       ('src', g.id_dtype),
                       ('dst', g.id_dtype),

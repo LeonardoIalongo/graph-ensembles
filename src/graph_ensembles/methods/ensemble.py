@@ -99,7 +99,7 @@ def exp_edges_stripe_single_layer(z, out_strength, in_strength):
             ind_in = in_strength[j].id
             s_in = in_strength[j].value
             if ind_out != ind_in:
-                tmp = exp(z)*s_out*s_in
+                tmp = z*s_out*s_in
                 if isinf(tmp):
                     exp_edges += 1
                 else:
@@ -116,7 +116,7 @@ def exp_edges_stripe(z, out_strength, in_strength, num_labels):
     exp_edges = np.zeros(len(z), dtype=np.float64)
     for i in range(num_labels):
         exp_edges[i] = exp_edges_stripe_single_layer(
-            log(z[i]),
+            z[i],
             out_strength[out_strength.label == i],
             in_strength[in_strength.label == i])
     return exp_edges
@@ -171,8 +171,8 @@ def stripe_exp_degree(z, s_out_i, s_out_j, s_out_w,
     group_arr: array
         an array containing the label id for each vertex in order
     """
-    out_degree = np.zeros(N, dtype=np.int64)
-    in_degree = np.zeros(N, dtype=np.int64)
+    out_degree = np.zeros(N, dtype=np.float64)
+    in_degree = np.zeros(N, dtype=np.float64)
 
     # Iterate over vertex ids of the out strength and compute for each id the
     # expected degree
@@ -203,6 +203,59 @@ def stripe_exp_degree(z, s_out_i, s_out_j, s_out_w,
             in_degree[in_row] += pij
 
     return out_degree, in_degree
+
+
+@jit(nopython=True)
+def exp_degree_stripe_single_layer(z, out_strength, in_strength, label):
+    """ Compute the expected number of edges for a single label of the stripe
+    model.
+    """
+    exp_d_out = np.zeros(len(out_strength.id), dtype=np.float64)
+    exp_d_in = np.zeros(len(in_strength.id), dtype=np.float64)
+    for i in np.arange(len(out_strength)):
+        ind_out = out_strength[i].id
+        s_out = out_strength[i].value
+        for j in np.arange(len(in_strength)):
+            ind_in = in_strength[j].id
+            s_in = in_strength[j].value
+            if ind_out != ind_in:
+                tmp = z*s_out*s_in
+                if isinf(tmp):
+                    exp_d_out[i] += 1
+                    exp_d_in[j] += 1
+                else:
+                    pij = tmp / (1 + tmp)
+                    exp_d_out[i] += pij
+                    exp_d_in[j] += pij
+
+    d_out = []
+    for i in range(len(exp_d_out)):
+        d_out.append((label, out_strength[i].id, exp_d_out[i]))
+
+    d_in = []
+    for j in range(len(exp_d_in)):
+        d_in.append((label, in_strength[j].id, exp_d_in[j]))
+
+    return d_out, d_in
+
+
+@jit(nopython=True)
+def stripe_exp_degree_label(z, out_strength, in_strength, num_labels):
+    """ Compute the expected degree by label for the stripe fitness model
+    with one parameter controlling for the density for each label.
+    """
+    exp_d_out = []
+    exp_d_in = []
+    for i in range(num_labels):
+        res = exp_degree_stripe_single_layer(
+            z[i],
+            out_strength[out_strength.label == i],
+            in_strength[in_strength.label == i],
+            i)
+        exp_d_out.extend(res[0])
+        exp_d_in.extend(res[1])
+
+    return exp_d_out, exp_d_in
 
 
 @jit(nopython=True)
