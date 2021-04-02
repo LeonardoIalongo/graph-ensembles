@@ -345,7 +345,7 @@ class StripeFitnessModel(GraphEnsemble):
         the density parameter (or vector of)
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, scale_invariant=False, **kwargs):
         """ Return a StripeFitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedLabelGraph, the
@@ -357,6 +357,11 @@ class StripeFitnessModel(GraphEnsemble):
         to which the strength refers, and in the third column must have the
         value of the strength for the node label pair. All node label pairs
         not included are assumed zero.
+
+        The model defaults to the classic fitness model functional but can be
+        set to use the scale invariant formulation by setting the
+        scale_invariant flag to True. This changes the functional used for
+        the computation of the link probability but nothing else.
 
         TO DO: add functionality for single z
         (Note that the number of edges given implicitly determines if the
@@ -468,12 +473,25 @@ class StripeFitnessModel(GraphEnsemble):
         msg = 'Sum of strengths per label do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-6), msg
 
+        # Get the correct probability functional
+        self.scale_invariant = scale_invariant
+        if scale_invariant:
+            self.prob_fun = mt.p_invariant
+            self.jac_fun = mt.jac_invariant
+            self.fit_jac_f = mt.jac_invariant
+        else:
+            self.prob_fun = mt.p_fitness
+            self.jac_fun = mt.jac_fitness
+            self.fit_jac_f = mt.jac_exp_fitness
+
         # If z is set computed expected number of edges per label
         if hasattr(self, 'z'):
-            self.num_edges = mt.exp_edges_stripe(self.z,
-                                                 self.out_strength,
-                                                 self.in_strength,
-                                                 self.num_labels)
+            self.num_edges = mt.exp_edges_stripe(
+                self.prob_fun,
+                self.z,
+                self.out_strength,
+                self.in_strength,
+                self.num_labels)
 
     def fit(self, z0=None, method="newton", tol=1e-8,
             xtol=1e-8, max_iter=100, verbose=False):
@@ -496,6 +514,10 @@ class StripeFitnessModel(GraphEnsemble):
             if true print debug info while iterating
 
         """
+        if (method == 'fixed-point') and self.scale_invariant:
+            raise Exception('Fixed point solver not supported for scale '
+                            'invariant functional.')
+
         if isinstance(self.num_edges, np.ndarray):
             z = np.empty(self.num_labels, dtype=np.float64)
             self.solver_output = [None]*self.num_labels
@@ -504,7 +526,8 @@ class StripeFitnessModel(GraphEnsemble):
                 s_in = self.in_strength[self.in_strength.label == i]
                 num_e = self.num_edges[i]
                 if z0 is None:
-                    x0 = mt.stripe_newton_init(s_out, s_in, num_e, 2)
+                    x0 = mt.stripe_newton_init(
+                        self.prob_fun, self.jac_fun, s_out, s_in, num_e, 2)
                 else:
                     if isinstance(z0, np.ndarray):
                         x0 = z0[i]
@@ -515,7 +538,8 @@ class StripeFitnessModel(GraphEnsemble):
                     sol = mt.newton_solver(
                         x0=log(x0),
                         fun=lambda x: mt.f_jac_stripe_single_layer(
-                            x, s_out, s_in, num_e),
+                            self.prob_fun, self.fit_jac_f, x,
+                            s_out, s_in, num_e),
                         tol=tol,
                         xtol=xtol,
                         max_iter=max_iter,
@@ -525,10 +549,7 @@ class StripeFitnessModel(GraphEnsemble):
                     sol = mt.fixed_point_solver(
                         x0=log(x0),
                         fun=lambda x: mt.iterative_stripe_single_layer(
-                            x,
-                            s_out,
-                            s_in,
-                            num_e),
+                            x, s_out, s_in, num_e),
                         xtol=xtol,
                         max_iter=max_iter,
                         verbose=verbose,
@@ -547,7 +568,7 @@ class StripeFitnessModel(GraphEnsemble):
                         mod = sol.norm_seq[-1]
                     else:
                         mod = mt.exp_edges_stripe_single_layer(
-                            log(z[i]), s_out, s_in) - num_e
+                            self.prob_fun, log(z[i]), s_out, s_in) - num_e
                     if sol.max_iter_reached:
                         msg = ('Fit of layer {} '.format(i) + 'did not '
                                'converge: \n solver stopped because it '
@@ -573,10 +594,12 @@ class StripeFitnessModel(GraphEnsemble):
         """ Compute the expected number of edges (per label).
         """
         if hasattr(self, 'z'):
-            return mt.exp_edges_stripe(self.z,
-                                       self.out_strength,
-                                       self.in_strength,
-                                       self.num_labels)
+            return mt.exp_edges_stripe(
+                self.prob_fun,
+                self.z,
+                self.out_strength,
+                self.in_strength,
+                self.num_labels)
         else:
             raise Exception('Model must be fitted before hand.')
 
@@ -610,8 +633,8 @@ class StripeFitnessModel(GraphEnsemble):
 
             # Get out_degree
             self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
-                self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                self.num_vertices)
+                self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
+                s_in_i, s_in_j, s_in_w, self.num_vertices)
 
         return self.exp_out_degree
 
@@ -629,7 +652,8 @@ class StripeFitnessModel(GraphEnsemble):
 
         if not hasattr(self, 'exp_out_degree_label'):
             res = mt.stripe_exp_degree_label(
-                self.z, self.out_strength, self.in_strength, self.num_labels)
+                self.prob_fun, self.z, self.out_strength, self.in_strength,
+                self.num_labels)
 
             d_out = np.array(res[0])
             self.exp_out_degree_label = d_out.view(
@@ -685,7 +709,7 @@ class StripeFitnessModel(GraphEnsemble):
             g.id_dict[x] = x
 
         # Sample edges and extract properties
-        e = mt.stripe_sample(self.z, self.out_strength,
+        e = mt.stripe_sample(self.prob_fun, self.z, self.out_strength,
                              self.in_strength, self.num_labels)
         e = e.view(type=np.recarray,
                    dtype=[('label', 'f8'),
