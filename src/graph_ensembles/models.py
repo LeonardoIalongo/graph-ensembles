@@ -760,7 +760,7 @@ class BlockFitnessModel(GraphEnsemble):
         the density parameter
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, scale_invariant=False, **kwargs):
         """ Return a BlockFitnessModel for the given graph data.
 
         The model accepts as arguments either: a DirectedGraph object, the
@@ -867,6 +867,17 @@ class BlockFitnessModel(GraphEnsemble):
         msg = 'Sum of strengths do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-6), msg
 
+        # Get the correct probability functional
+        self.scale_invariant = scale_invariant
+        if scale_invariant:
+            self.prob_fun = mt.p_invariant
+            self.jac_fun = mt.jac_invariant
+            self.fit_jac_f = mt.jac_invariant
+        else:
+            self.prob_fun = mt.p_fitness
+            self.jac_fun = mt.jac_fitness
+            self.fit_jac_f = mt.jac_exp_fitness
+
         # If z is set computed expected number of edges per label
         if hasattr(self, 'z'):
             self.num_edges = self.expected_num_edges()
@@ -893,8 +904,9 @@ class BlockFitnessModel(GraphEnsemble):
         s_in_j = s_in.indptr
         s_in_w = s_in.data
 
-        return mt.block_exp_num_edges(self.z, s_out_i, s_out_j, s_out_w,
-                                      s_in_i, s_in_j, s_in_w, self.group_dict)
+        return mt.block_exp_num_edges(
+            self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
+            s_in_i, s_in_j, s_in_w, self.group_dict)
 
     def expected_out_degree(self):
         """ Compute the expected out degree for a given z.
@@ -923,8 +935,8 @@ class BlockFitnessModel(GraphEnsemble):
 
             # Get out_degree
             self.exp_out_degree = mt.block_exp_out_degree(
-                self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                self.group_dict)
+                self.prob_fun, self.z, s_out_i, s_out_j, s_out_w, s_in_i,
+                s_in_j, s_in_w, self.group_dict)
 
         return self.exp_out_degree
 
@@ -955,8 +967,8 @@ class BlockFitnessModel(GraphEnsemble):
 
             # Get in_degree (note switched positions of args)
             self.exp_in_degree = mt.block_exp_out_degree(
-                self.z, s_in_i, s_in_j, s_in_w, s_out_i, s_out_j, s_out_w,
-                self.group_dict)
+                self.prob_fun, self.z, s_in_i, s_in_j, s_in_w, s_out_i,
+                s_out_j, s_out_w, self.group_dict)
 
         return self.exp_in_degree
 
@@ -981,6 +993,10 @@ class BlockFitnessModel(GraphEnsemble):
             if true print debug info while iterating
 
         """
+        if (method == 'fixed-point') and self.scale_invariant:
+            raise Exception('Fixed point solver not supported for scale '
+                            'invariant functional.')
+
         if isinstance(self.num_edges, int):
             # Convert to sparse matrices
             s_out = lib.to_sparse(self.out_strength,
@@ -1004,9 +1020,9 @@ class BlockFitnessModel(GraphEnsemble):
             s_in_w = s_in.data
 
             if z0 is None:
-                x0 = mt.block_newton_init(s_out_i, s_out_j, s_out_w,
-                                          s_in_i, s_in_j, s_in_w,
-                                          self.group_dict, self.num_edges, 2)
+                x0 = mt.block_newton_init(
+                    self.prob_fun, self.jac_fun, s_out_i, s_out_j, s_out_w,
+                    s_in_i, s_in_j, s_in_w, self.group_dict, self.num_edges, 2)
             else:
                 try:
                     x0 = float(self.z)
@@ -1017,8 +1033,9 @@ class BlockFitnessModel(GraphEnsemble):
                 sol = mt.newton_solver(
                     x0=log(x0),
                     fun=lambda x: mt.f_jac_block(
-                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                        self.group_dict, self.num_edges),
+                        self.prob_fun, self.fit_jac_f, x, s_out_i, s_out_j,
+                        s_out_w, s_in_i, s_in_j, s_in_w, self.group_dict,
+                        self.num_edges),
                     tol=tol,
                     xtol=xtol,
                     max_iter=max_iter,
@@ -1107,7 +1124,7 @@ class BlockFitnessModel(GraphEnsemble):
         s_in_w = s_in.data
 
         # Sample edges and extract properties
-        e = mt.block_sample(self.z, s_out_i, s_out_j, s_out_w,
+        e = mt.block_sample(self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
                             s_in_i, s_in_j, s_in_w, self.group_dict)
         e = e.view(type=np.recarray,
                    dtype=[('src', 'f8'),

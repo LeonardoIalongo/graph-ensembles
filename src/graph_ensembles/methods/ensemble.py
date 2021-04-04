@@ -404,38 +404,32 @@ def stripe_sample(p_f, z, out_strength, in_strength, num_labels):
 
 # --------------- BLOCK METHODS ---------------
 @jit(nopython=True)
-def block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals):
+def block_exp_vertex_degree(p_f, z, out_g, out_vals, in_gj, in_vals):
     d = 0
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                tmp = z*out_vals[i]*in_vals[j]
-                d += tmp / (1 + tmp)
+                d += p_f(z, out_vals[i], in_vals[j])
 
     return d
 
 
 @jit(nopython=True)
-def f_jac_block_i(z, out_g, out_vals, in_gj, in_vals):
+def f_jac_block_i(p_f, jac_f, z, out_g, out_vals, in_gj, in_vals):
     f = 0
     jac = 0
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                tmp = exp(z)*out_vals[i]*in_vals[j]
-                if isinf(tmp):
-                    f += 1
-                    jac += 0
-                else:
-                    f += tmp / (1 + tmp)
-                    jac += tmp / (1 + tmp)**2
+                f += p_f(exp(z), out_vals[i], in_vals[j])
+                jac += jac_f(exp(z), out_vals[i], in_vals[j])
     return f, jac
 
 
 @jit(nopython=True)
-def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
+def block_exp_num_edges(p_f, z, s_out_i, s_out_j, s_out_w,
                         s_in_i, s_in_j, s_in_w, group_arr):
-    """ Calculate the expecte number of edges for the block model.
+    """ Calculate the expected number of edges for the block model.
 
     It is assumed that the arguments passed are the three arrays of two sparse
     matrices where the first index represents the vertex id, and the second a
@@ -491,13 +485,13 @@ def block_exp_num_edges(z, s_out_i, s_out_j, s_out_w,
         # Get groups corresponding to the in_j values
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
-        num += block_exp_vertex_degree(z, out_g, out_vals, in_gj, in_vals)
+        num += block_exp_vertex_degree(p_f, z, out_g, out_vals, in_gj, in_vals)
 
     return num
 
 
 @jit(nopython=True)
-def block_exp_out_degree(z, s_out_i, s_out_j, s_out_w,
+def block_exp_out_degree(p_f, z, s_out_i, s_out_j, s_out_w,
                          s_in_i, s_in_j, s_in_w, group_arr):
     """ Calculate the expected out degree for the block model.
 
@@ -556,14 +550,14 @@ def block_exp_out_degree(z, s_out_i, s_out_j, s_out_w,
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
         out_degree[out_row] = block_exp_vertex_degree(
-            z, out_g, out_vals, in_gj, in_vals)
+            p_f, z, out_g, out_vals, in_gj, in_vals)
 
     return out_degree
 
 
 @jit(nopython=True)
-def f_jac_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                group_arr, num_e):
+def f_jac_block(p_f, jac_f, z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
+                s_in_w, group_arr, num_e):
     """ Calculate the objective function and its Jacobian for the block model.
 
     It is assumed that the arguments passed are the three arrays of two sparse
@@ -621,7 +615,7 @@ def f_jac_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
         # Get groups corresponding to the in_j values
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
-        res = f_jac_block_i(z, out_g, out_vals, in_gj, in_vals)
+        res = f_jac_block_i(p_f, jac_f, z, out_g, out_vals, in_gj, in_vals)
         f += res[0]
         jac += res[1]
 
@@ -629,8 +623,8 @@ def f_jac_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
 
 
 @jit(nopython=True)
-def block_newton_init(s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                      group_arr, n_e, steps):
+def block_newton_init(p_f, jac_f, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
+                      s_in_w, group_arr, n_e, steps):
     """ Compute initial conditions for the block model solvers.
     """
     z = 0
@@ -660,10 +654,8 @@ def block_newton_init(s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
             for i in range(len(out_g)):
                 for j in range(len(in_gj)):
                     if out_g[i] == in_gj[j]:
-                        tmp = out_vals[i]*in_vals[j]
-                        tmp1 = z*tmp
-                        jac += tmp / (1 + tmp1)**2
-                        f += z*tmp1 / (1 + z*tmp1)
+                        jac += jac_f(z, out_vals[i], in_vals[j])
+                        f += p_f(z, out_vals[i], in_vals[j])
 
         z = z - (f-n_e)/jac
 
@@ -705,7 +697,7 @@ def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
     return log(num_e/aux)
 
 
-def sample_block_vertex(z, out_i, out_g, out_vals,
+def sample_block_vertex(p_f, z, out_i, out_g, out_vals,
                         in_j, in_gj, in_vals, s_tot):
     """ Sample edges going out from a single vertex.
     """
@@ -713,17 +705,16 @@ def sample_block_vertex(z, out_i, out_g, out_vals,
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                tmp = out_vals[i]*in_vals[j]
-                tmp1 = z*tmp
-                p = tmp1 / (1 + tmp1)
+                p = p_f(z, out_vals[i], in_vals[j])
                 if rng.random() < p:
-                    w = np.float64(rng.exponential(tmp/(s_tot*p)))
+                    w = np.float64(
+                        rng.exponential(out_vals[i]*in_vals[j]/(s_tot*p)))
                     sample.append((out_i, in_j[j], w))
 
     return sample
 
 
-def block_sample(z, s_out_i, s_out_j, s_out_w,
+def block_sample(p_f, z, s_out_i, s_out_j, s_out_w,
                  s_in_i, s_in_j, s_in_w, group_arr):
     """ Sample from block model.
     """
@@ -758,7 +749,7 @@ def block_sample(z, s_out_i, s_out_j, s_out_w,
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
         sample.extend(
-            sample_block_vertex(z, out_row, out_g, out_vals,
+            sample_block_vertex(p_f, z, out_row, out_g, out_vals,
                                 in_j[notself], in_gj, in_vals, s_tot))
 
     return np.array(sample, dtype=np.float64)
