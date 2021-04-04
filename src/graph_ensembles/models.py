@@ -865,7 +865,7 @@ class BlockFitnessModel(GraphEnsemble):
         tot_in = np.sum(self.in_strength.value)
 
         msg = 'Sum of strengths do not match.'
-        assert np.allclose(tot_out, tot_in, atol=1e-6), msg
+        assert np.allclose(tot_out, tot_in, atol=1e-6, rtol=0), msg
 
         # Get the correct probability functional
         self.scale_invariant = scale_invariant

@@ -697,6 +697,7 @@ def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
     return log(num_e/aux)
 
 
+@jit(nopython=True)
 def sample_block_vertex(p_f, z, out_i, out_g, out_vals,
                         in_j, in_gj, in_vals, s_tot):
     """ Sample edges going out from a single vertex.
@@ -714,12 +715,12 @@ def sample_block_vertex(p_f, z, out_i, out_g, out_vals,
     return sample
 
 
+@jit(nopython=True)
 def block_sample(p_f, z, s_out_i, s_out_j, s_out_w,
                  s_in_i, s_in_j, s_in_w, group_arr):
     """ Sample from block model.
     """
     s_tot = np.sum(s_out_w)
-    assert np.isclose(s_tot, np.sum(s_in_w)), 'Total strengths not matching.'
     sample = []
     for out_row in range(len(s_out_i)-1):
         n = s_out_i[out_row]

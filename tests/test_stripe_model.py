@@ -113,6 +113,15 @@ class TestStripeFitnessModel():
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-8, rtol=0)
 
+    def test_solver_invariant(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly for the invariant case. """
+        model = ge.StripeFitnessModel(g, scale_invariant=True)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-8, rtol=0)
+
     def test_solver_fixed_point(self):
         """ Check that the fixed-point solver is fitting the z parameters
         correctly.

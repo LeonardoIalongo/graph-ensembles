@@ -62,3 +62,16 @@ perf = perf_counter() - start
 print('Time for stripe expected degrees: ', perf)
 
 print(np.sum(out_deg - in_deg))
+
+inv = ge.StripeFitnessModel(g, scale_invariant=True)
+start = perf_counter()
+inv.fit()
+perf = perf_counter() - start
+print('Time for invariant fit: ', perf)
+
+print('Number of iterations: ', [x.n_iter for x in inv.solver_output])
+
+if not np.allclose(inv.expected_num_edges(), inv.num_edges,
+                   atol=1e-8, rtol=0):
+    print('Distance from root: ',
+          inv.expected_num_edges() - inv.num_edges)

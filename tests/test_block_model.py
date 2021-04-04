@@ -130,6 +130,26 @@ class TestBlockFitnessModel():
         np.testing.assert_allclose(num_edges_var, exp_num_edges,
                                    atol=1e-8, rtol=0)
 
+    def test_solver_invariant(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly. """
+        model = ge.BlockFitnessModel(g, scale_invariant=True)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-8, rtol=0)
+        assert np.isclose(z, model.z, atol=1e-12, rtol=1e-6), model.z
+
+    def test_solver_invariant_var(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly. """
+        model = ge.BlockFitnessModel(g_var, scale_invariant=True)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-8, rtol=0)
+        assert np.isclose(z, model.z, atol=1e-12, rtol=1e-6), model.z
+
     def test_solver_fixed_point(self):
         """ Check that the fixed-point solver is fitting the z parameters
         correctly.
