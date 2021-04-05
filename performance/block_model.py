@@ -38,7 +38,7 @@ print('Time for newton fit: ', perf)
 print('Number of iterations: ', block.solver_output.n_iter)
 
 if not np.isclose(block.expected_num_edges(), block.num_edges,
-                  atol=1e-8, rtol=0):
+                  atol=1e-5, rtol=0):
     print('Distance from root: ', block.expected_num_edges() - block.num_edges)
 
 start = perf_counter()
@@ -49,7 +49,7 @@ print('Time for fixed-point fit: ', perf)
 print('Number of iterations: ', block.solver_output.n_iter)
 
 if not np.isclose(block.expected_num_edges(), block.num_edges,
-                  atol=1e-8, rtol=0):
+                  atol=1e-5, rtol=0):
     print('Distance from root: ', block.expected_num_edges() - block.num_edges)
 
 start = perf_counter()
@@ -62,3 +62,16 @@ out_deg = block.expected_out_degree()
 in_deg = block.expected_in_degree()
 perf = perf_counter() - start
 print('Time for block expected degrees: ', perf)
+
+inv = ge.BlockFitnessModel(g, scale_invariant=True)
+start = perf_counter()
+inv.fit()
+perf = perf_counter() - start
+print('Time for invariant fit: ', perf)
+
+print('Number of iterations: ', inv.solver_output.n_iter)
+
+if not np.isclose(inv.expected_num_edges(), inv.num_edges,
+                  atol=1e-5, rtol=0):
+    print('Distance from root: ',
+          inv.expected_num_edges() - inv.num_edges)

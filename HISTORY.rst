@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.2 ()
+------------------
+* Added scale invariant probability functional to all models
+* Improved methods for convergence with change in API, xtol now a relative measure
+
 0.1.1 (2021-03-29)
 ------------------
 * Fixed bug in stripe expected degree computation
