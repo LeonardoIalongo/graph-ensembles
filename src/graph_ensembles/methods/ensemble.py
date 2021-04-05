@@ -25,15 +25,6 @@ def jac_fitness(d, x_i, x_j):
 
 
 @jit(nopython=True)
-def jac_exp_fitness(d, x_i, x_j):
-    tmp = d*x_i*x_j
-    if isinf(tmp):
-        return 1
-    else:
-        return tmp / (1 + tmp)**2
-
-
-@jit(nopython=True)
 def p_invariant(d, x_i, x_j):
     tmp = d*x_i*x_j
     if isinf(tmp):
@@ -316,32 +307,10 @@ def f_jac_stripe_single_layer(p_f, jac_f, z, out_strength, in_strength,
             ind_in = in_strength[j].id
             s_in = in_strength[j].value
             if ind_out != ind_in:
-                f += p_f(exp(z), s_out, s_in)
-                jac += jac_f(exp(z), s_out, s_in)
+                f += p_f(z, s_out, s_in)
+                jac += jac_f(z, s_out, s_in)
 
     return f - n_edges, jac
-
-
-@jit(nopython=True)
-def stripe_newton_init(p_f, jac_f, out_strength, in_strength, n_e, steps):
-    """ Compute initial conditions for the stripe solvers.
-    """
-    z = 0
-    for n in range(steps):
-        jac = 0
-        f = 0
-        for i in np.arange(len(out_strength)):
-            ind_out = out_strength[i].id
-            s_out = out_strength[i].value
-            for j in np.arange(len(in_strength)):
-                ind_in = in_strength[j].id
-                s_in = in_strength[j].value
-                if ind_out != ind_in:
-                    jac += jac_f(z, s_out, s_in)
-                    f += p_f(z, s_out, s_in)
-        z = z - (f-n_e)/jac
-
-    return z
 
 
 @jit(nopython=True)
@@ -358,9 +327,9 @@ def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
             s_in = in_strength[j].value
             if ind_out != ind_in:
                 tmp = s_out*s_in
-                aux += tmp / (1 + exp(z)*tmp)
+                aux += tmp / (1 + z*tmp)
 
-    return log(n_edges/aux)
+    return n_edges/aux
 
 
 @jit(nopython=True)
@@ -421,8 +390,8 @@ def f_jac_block_i(p_f, jac_f, z, out_g, out_vals, in_gj, in_vals):
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                f += p_f(exp(z), out_vals[i], in_vals[j])
-                jac += jac_f(exp(z), out_vals[i], in_vals[j])
+                f += p_f(z, out_vals[i], in_vals[j])
+                jac += jac_f(z, out_vals[i], in_vals[j])
     return f, jac
 
 
@@ -623,46 +592,6 @@ def f_jac_block(p_f, jac_f, z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
 
 
 @jit(nopython=True)
-def block_newton_init(p_f, jac_f, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
-                      s_in_w, group_arr, n_e, steps):
-    """ Compute initial conditions for the block model solvers.
-    """
-    z = 0
-    for n in range(steps):
-        jac = 0
-        f = 0
-        for out_row in range(len(s_out_i)-1):
-            n = s_out_i[out_row]
-            m = s_out_i[out_row + 1]
-            r = s_in_j[group_arr[out_row]]
-            s = s_in_j[group_arr[out_row]+1]
-
-            if (n == m) or (r == s):
-                continue
-
-            out_g = s_out_j[n:m]
-            out_vals = s_out_w[n:m]
-            in_j = s_in_i[r:s]
-            notself = in_j != out_row
-
-            if np.sum(notself) == 0:
-                continue
-
-            in_gj = group_arr[in_j][notself]
-            in_vals = s_in_w[r:s][notself]
-
-            for i in range(len(out_g)):
-                for j in range(len(in_gj)):
-                    if out_g[i] == in_gj[j]:
-                        jac += jac_f(z, out_vals[i], in_vals[j])
-                        f += p_f(z, out_vals[i], in_vals[j])
-
-        z = z - (f-n_e)/jac
-
-    return z
-
-
-@jit(nopython=True)
 def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
                     group_arr, num_e):
     """ Compute the next iteration of the fixed point method of the block model.
@@ -692,9 +621,9 @@ def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
             for j in range(len(in_gj)):
                 if out_g[i] == in_gj[j]:
                     tmp = out_vals[i]*in_vals[j]
-                    aux += tmp / (1 + exp(z)*tmp)
+                    aux += tmp / (1 + z*tmp)
 
-    return log(num_e/aux)
+    return num_e/aux
 
 
 @jit(nopython=True)

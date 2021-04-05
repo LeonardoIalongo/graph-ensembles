@@ -478,11 +478,9 @@ class StripeFitnessModel(GraphEnsemble):
         if scale_invariant:
             self.prob_fun = mt.p_invariant
             self.jac_fun = mt.jac_invariant
-            self.fit_jac_f = mt.jac_invariant
         else:
             self.prob_fun = mt.p_fitness
             self.jac_fun = mt.jac_fitness
-            self.fit_jac_f = mt.jac_exp_fitness
 
         # If z is set computed expected number of edges per label
         if hasattr(self, 'z'):
@@ -493,8 +491,8 @@ class StripeFitnessModel(GraphEnsemble):
                 self.in_strength,
                 self.num_labels)
 
-    def fit(self, z0=None, method="newton", tol=1e-8,
-            xtol=1e-8, max_iter=100, verbose=False):
+    def fit(self, z0=None, method="newton", tol=1e-5,
+            xtol=1e-12, max_iter=100, verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
@@ -526,8 +524,7 @@ class StripeFitnessModel(GraphEnsemble):
                 s_in = self.in_strength[self.in_strength.label == i]
                 num_e = self.num_edges[i]
                 if z0 is None:
-                    x0 = mt.stripe_newton_init(
-                        self.prob_fun, self.jac_fun, s_out, s_in, num_e, 2)
+                    x0 = np.float64(0.0)
                 else:
                     if isinstance(z0, np.ndarray):
                         x0 = z0[i]
@@ -536,9 +533,9 @@ class StripeFitnessModel(GraphEnsemble):
 
                 if method == "newton":
                     sol = mt.newton_solver(
-                        x0=log(x0),
+                        x0=x0,
                         fun=lambda x: mt.f_jac_stripe_single_layer(
-                            self.prob_fun, self.fit_jac_f, x,
+                            self.prob_fun, self.jac_fun, x,
                             s_out, s_in, num_e),
                         tol=tol,
                         xtol=xtol,
@@ -547,7 +544,7 @@ class StripeFitnessModel(GraphEnsemble):
                         full_return=True)
                 elif method == "fixed-point":
                     sol = mt.fixed_point_solver(
-                        x0=log(x0),
+                        x0=x0,
                         fun=lambda x: mt.iterative_stripe_single_layer(
                             x, s_out, s_in, num_e),
                         xtol=xtol,
@@ -559,7 +556,7 @@ class StripeFitnessModel(GraphEnsemble):
                     raise ValueError("The selected method is not valid.")
 
                 # Update results and check convergence
-                z[i] = exp(sol.x)
+                z[i] = sol.x
                 self.solver_output[i] = sol
 
                 if not sol.converged:
@@ -568,7 +565,7 @@ class StripeFitnessModel(GraphEnsemble):
                         mod = sol.norm_seq[-1]
                     else:
                         mod = mt.exp_edges_stripe_single_layer(
-                            self.prob_fun, log(z[i]), s_out, s_in) - num_e
+                            self.prob_fun, z[i], s_out, s_in) - num_e
                     if sol.max_iter_reached:
                         msg = ('Fit of layer {} '.format(i) + 'did not '
                                'converge: \n solver stopped because it '
@@ -872,11 +869,9 @@ class BlockFitnessModel(GraphEnsemble):
         if scale_invariant:
             self.prob_fun = mt.p_invariant
             self.jac_fun = mt.jac_invariant
-            self.fit_jac_f = mt.jac_invariant
         else:
             self.prob_fun = mt.p_fitness
             self.jac_fun = mt.jac_fitness
-            self.fit_jac_f = mt.jac_exp_fitness
 
         # If z is set computed expected number of edges per label
         if hasattr(self, 'z'):
@@ -972,8 +967,8 @@ class BlockFitnessModel(GraphEnsemble):
 
         return self.exp_in_degree
 
-    def fit(self, z0=None, method="newton", tol=1e-8,
-            xtol=1e-8, max_iter=100, verbose=False):
+    def fit(self, z0=None, method="newton", tol=1e-5,
+            xtol=1e-12, max_iter=100, verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
@@ -1020,20 +1015,18 @@ class BlockFitnessModel(GraphEnsemble):
             s_in_w = s_in.data
 
             if z0 is None:
-                x0 = mt.block_newton_init(
-                    self.prob_fun, self.jac_fun, s_out_i, s_out_j, s_out_w,
-                    s_in_i, s_in_j, s_in_w, self.group_dict, self.num_edges, 2)
+                x0 = np.float64(0.0)
             else:
                 try:
-                    x0 = float(self.z)
+                    x0 = np.float64(self.z)
                 except TypeError:
                     raise TypeError('z must be a float.')
 
             if method == "newton":
                 sol = mt.newton_solver(
-                    x0=log(x0),
+                    x0=x0,
                     fun=lambda x: mt.f_jac_block(
-                        self.prob_fun, self.fit_jac_f, x, s_out_i, s_out_j,
+                        self.prob_fun, self.jac_fun, x, s_out_i, s_out_j,
                         s_out_w, s_in_i, s_in_j, s_in_w, self.group_dict,
                         self.num_edges),
                     tol=tol,
@@ -1043,7 +1036,7 @@ class BlockFitnessModel(GraphEnsemble):
                     full_return=True)
             elif method == "fixed-point":
                 sol = mt.fixed_point_solver(
-                    x0=log(x0),
+                    x0=x0,
                     fun=lambda x: mt.iterative_block(
                         x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
                         self.group_dict, self.num_edges),
@@ -1056,7 +1049,7 @@ class BlockFitnessModel(GraphEnsemble):
                 raise ValueError("The selected method is not valid.")
 
             # Update results and check convergence
-            self.z = exp(sol.x)
+            self.z = sol.x
             self.solver_output = sol
 
             if not sol.converged:
