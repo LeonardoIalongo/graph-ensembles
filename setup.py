@@ -34,7 +34,8 @@ setup(
     install_requires=["numpy>=1.15",
                       "numba>=0.53",
                       "scipy>=1.0",
-                      "pandas>=1.1"
+                      "pandas>=1.1",
+                      "networkx>=1.0"
                       ],
     extras_require={
         "dev": ["pytest==6.0.1",
@@ -43,7 +44,6 @@ setup(
                 "flake8==3.8.3",
                 "wheel==0.35.1",
                 "matplotlib==3.3.2",
-                "networkx==2.5",
                 "check-manifest==0.44",
                 "setuptools==47.1.0",
                 "twine==3.2.0",

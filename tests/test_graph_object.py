@@ -222,6 +222,59 @@ class TestDirectedGraph():
         assert np.all(g.e == test_e), g.e
         assert test_dict == g.id_dict
 
+    def test_to_sparse(self):
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
+
+        mat = np.array([[0, 1, 0],
+                        [0, 0, 1],
+                        [1, 1, 0]])
+        assert np.all(g.adjacency_matrix().toarray() == mat)
+
+    def test_to_networkx(self):
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
+
+        v = [0, 1, 2]
+        e = [(0, 1), (1, 2), (2, 0), (2, 1)]
+        adj = {0: {1: {}}, 1: {2: {}}, 2: {0: {}, 1: {}}}
+
+        gx = g.to_networkx()
+        assert np.all(list(gx.nodes) == v)
+        assert np.all(list(gx.edges) == e)
+        assert gx.adj == adj
+
+    def test_to_networkx_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name',
+                     src='creditor', dst='debtor', v_group='country')
+
+        v = [(0, {'group': 0}), (1, {'group': 0}), (2, {'group': 1})]
+        e = [(0, 1, {}), (1, 2, {}), (2, 0, {}), (2, 1, {})]
+        adj = {0: {1: {}}, 1: {2: {}}, 2: {0: {}, 1: {}}}
+
+        gx = g.to_networkx()
+        assert np.all(list(gx.nodes(data=True)) == v)
+        assert np.all(list(gx.edges(data=True)) == e)
+        assert gx.adj == adj
+
+    def test_to_networkx_orig(self):
+        g = ge.Graph(self.v, self.e, v_id='name',
+                     src='creditor', dst='debtor')
+
+        v = ['ING', 'ABN', 'BNP']
+        e = [('ING', 'ABN'), ('ABN', 'BNP'), ('BNP', 'ING'), ('BNP', 'ABN')]
+        adj = {'ING': {'ABN': {}},
+               'ABN': {'BNP': {}},
+               'BNP': {'ING': {}, 'ABN': {}}}
+
+        gx = g.to_networkx(original=True)
+        assert np.all(list(gx.nodes) == v)
+        assert np.all(list(gx.edges) == e)
+        assert gx.adj == adj
+
 
 class TestWeightedGraph():
     v = pd.DataFrame([['ING', 'NL', 1e12],
@@ -338,6 +391,72 @@ class TestWeightedGraph():
 
         assert np.all(s_test == s), s_test
         assert np.all(g.gv.in_strength == s), g.gv.in_strength
+
+    def test_to_sparse(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+
+        mat = np.array([[0, 1e6, 0],
+                        [0, 0, 1e4],
+                        [0, 1.7e5, 0]])
+        assert np.all(g.adjacency_matrix().toarray() == mat)
+
+    def test_to_networkx(self):
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', weight='value')
+
+        v = [0, 1, 2]
+        e = [(0, 1), (1, 2), (2, 1)]
+        adj = {0: {1: {'weight': 1e6}},
+               1: {2: {'weight': 1e4}},
+               2: {1: {'weight': 1.7e5}}}
+
+        gx = g.to_networkx()
+        assert np.all(list(gx.nodes) == v)
+        assert np.all(list(gx.edges) == e)
+        assert gx.adj == adj
+
+    def test_to_networkx_group(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(v, self.e, v_id='name', v_group='country',
+                     src='creditor', dst='debtor', weight='value')
+
+        v = [(0, {'group': 0}), (1, {'group': 0}), (2, {'group': 1})]
+        e = [(0, 1, {'weight': 1e6}),
+             (1, 2, {'weight': 1e4}),
+             (2, 1, {'weight': 1.7e5})]
+        adj = {0: {1: {'weight': 1e6}},
+               1: {2: {'weight': 1e4}},
+               2: {1: {'weight': 1.7e5}}}
+
+        gx = g.to_networkx()
+        assert np.all(list(gx.nodes(data=True)) == v)
+        assert np.all(list(gx.edges(data=True)) == e)
+        assert gx.adj == adj
+
+    def test_to_networkx_orig(self):
+        v = pd.DataFrame([['ING', 'NL'], ['ABN', 'NL'], ['BNP', 'FR']],
+                         columns=['name', 'country'])
+
+        g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
+                     dst='debtor', v_group='country', weight='value')
+
+        v = [('ING', {'group': 'NL'}),
+             ('ABN', {'group': 'NL'}),
+             ('BNP', {'group': 'FR'})]
+        e = [('ING', 'ABN', {'weight': 1e6}),
+             ('ABN', 'BNP', {'weight': 1e4}),
+             ('BNP', 'ABN', {'weight': 1.7e5})]
+        adj = {'ING': {'ABN': {'weight': 1e6}},
+               'ABN': {'BNP': {'weight': 1e4}},
+               'BNP': {'ABN': {'weight': 1.7e5}}}
+
+        gx = g.to_networkx(original=True)
+        assert np.all(list(gx.nodes(data=True)) == v)
+        assert np.all(list(gx.edges(data=True)) == e)
+        assert gx.adj == adj
 
 
 class TestLabelGraph():

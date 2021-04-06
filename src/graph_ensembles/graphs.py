@@ -7,6 +7,7 @@ import pandas as pd
 from . import methods as mt
 from . import lib
 import warnings
+import networkx as nx
 
 
 class Graph():
@@ -435,10 +436,24 @@ class DirectedGraph(sGraph):
         if get:
             return self.gv.in_degree
 
-    def adjacency_matrix(self):
+    def adjacency_matrix(self, kind='csr'):
         """ Return the adjacency matrix as a scipy sparse matrix.
         """
-        return lib.to_s
+        return lib.to_sparse(
+            self.e, (self.num_vertices, self.num_vertices), kind=kind,
+            i_col='src', j_col='dst', data_col=np.ones(len(self.e)))
+
+    def to_networkx(self, original=False):
+        G = nx.DiGraph()
+        if hasattr(self, 'gv'):
+            G.add_nodes_from(
+                mt.id_attr_dict(self.v, id_col='id', attr_cols=['group']))
+        else:
+            G.add_nodes_from(self.v.id)
+
+        G.add_edges_from(self.e[['src', 'dst']])
+
+        return G
 
 
 class WeightedGraph(DirectedGraph):
@@ -626,6 +641,25 @@ class WeightedGraph(DirectedGraph):
 
         if get:
             return self.gv.in_strength
+
+    def adjacency_matrix(self, kind='csr'):
+        """ Return the adjacency matrix as a scipy sparse matrix.
+        """
+        return lib.to_sparse(
+            self.e, (self.num_vertices, self.num_vertices), kind=kind,
+            i_col='src', j_col='dst', data_col='weight')
+
+    def to_networkx(self, original=False):
+        G = nx.DiGraph()
+        if hasattr(self, 'gv'):
+            G.add_nodes_from(
+                mt.id_attr_dict(self.v, id_col='id', attr_cols=['group']))
+        else:
+            G.add_nodes_from(self.v.id)
+
+        G.add_weighted_edges_from(self.e[['src', 'dst', 'weight']])
+
+        return G
 
 
 class LabelVertexList():
