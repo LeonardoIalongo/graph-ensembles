@@ -4,7 +4,8 @@ ensembles and the exploration of their properties. """
 import numpy as np
 from numpy.lib.recfunctions import rec_append_fields as append_fields
 import pandas as pd
-import graph_ensembles.methods as mt
+from . import methods as mt
+from . import lib
 import warnings
 
 
@@ -433,6 +434,11 @@ class DirectedGraph(sGraph):
 
         if get:
             return self.gv.in_degree
+
+    def adjacency_matrix(self):
+        """ Return the adjacency matrix as a scipy sparse matrix.
+        """
+        return lib.to_s
 
 
 class WeightedGraph(DirectedGraph):

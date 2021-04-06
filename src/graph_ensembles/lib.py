@@ -2,7 +2,8 @@
     GraphEnsemble classes or on its attributes.
 """
 
-import graph_ensembles as ge
+from . import graphs
+from . import methods as mt
 import numpy as np
 from scipy.sparse import coo_matrix
 from numpy.lib.recfunctions import rec_append_fields as append_fields
@@ -48,12 +49,16 @@ def add_groups(g, group_dict):
         msg = 'Group info already present, will overwrite.'
         warnings.warn(msg, UserWarning)
 
-    g.gv = ge.GroupVertexList()
+    g.gv = graphs.GroupVertexList()
     g.group_dict = group_dict
     g.num_groups = len(group_dict)
-    num_bytes = ge.methods.get_num_bytes(g.num_groups)
+    num_bytes = mt.get_num_bytes(g.num_groups)
     g.group_dtype = np.dtype('u' + str(num_bytes))
     if 'group' in g.v.dtype.names:
         g.v.group = group_dict
     else:
         g.v = append_fields(g.v, 'group', group_dict)
+
+
+def propagate_measure(g, meas, steps):
+    pass

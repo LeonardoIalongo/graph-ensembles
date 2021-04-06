@@ -6,7 +6,6 @@ from . import graphs
 from . import methods as mt
 from . import lib
 import numpy as np
-from math import exp, log
 import warnings
 
 

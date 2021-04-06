@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.random as rng
 from numba import jit
-from math import ceil, sqrt, isinf, exp, log
+from math import ceil, sqrt, isinf, exp
 
 
 # --------------- PROBABILITY FUNCTIONALS ---------------
