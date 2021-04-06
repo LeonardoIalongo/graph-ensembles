@@ -150,7 +150,7 @@ def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
         # Check for convergence
         old_rank = rank
         rank = new_rank
-        if np.absolute(rank - old_rank).sum() < N*tol:
+        if np.all(np.absolute(rank - old_rank) < tol):
             print('Converged in ', n, ' iterations!')
             return rank
 
