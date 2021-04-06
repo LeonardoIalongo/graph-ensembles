@@ -445,13 +445,36 @@ class DirectedGraph(sGraph):
 
     def to_networkx(self, original=False):
         G = nx.DiGraph()
-        if hasattr(self, 'gv'):
-            G.add_nodes_from(
-                mt.id_attr_dict(self.v, id_col='id', attr_cols=['group']))
-        else:
-            G.add_nodes_from(self.v.id)
+        if original:
+            id_conv = list(self.id_dict.keys())
 
-        G.add_edges_from(self.e[['src', 'dst']])
+            if hasattr(self, 'gv'):
+                group_conv = list(self.group_dict.keys())
+                v_num = mt.id_attr_dict(
+                    self.v, id_col='id', attr_cols=['group'])
+                v = []
+                for row in v_num:
+                    v.append((id_conv[row[0]],
+                             {'group': group_conv[row[1]['group']]}))
+            else:
+                v_num = self.v.id
+                v = []
+                for row in v_num:
+                    v.append(id_conv[row])
+
+            e = []
+            for row in self.e[['src', 'dst']]:
+                e.append((id_conv[row[0]], id_conv[row[1]]))
+        else:
+            if hasattr(self, 'gv'):
+                v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
+            else:
+                v = self.v.id
+
+            e = self.e[['src', 'dst']]
+
+        G.add_nodes_from(v)
+        G.add_edges_from(e)
 
         return G
 
@@ -651,13 +674,36 @@ class WeightedGraph(DirectedGraph):
 
     def to_networkx(self, original=False):
         G = nx.DiGraph()
-        if hasattr(self, 'gv'):
-            G.add_nodes_from(
-                mt.id_attr_dict(self.v, id_col='id', attr_cols=['group']))
-        else:
-            G.add_nodes_from(self.v.id)
+        if original:
+            id_conv = list(self.id_dict.keys())
 
-        G.add_weighted_edges_from(self.e[['src', 'dst', 'weight']])
+            if hasattr(self, 'gv'):
+                group_conv = list(self.group_dict.keys())
+                v_num = mt.id_attr_dict(
+                    self.v, id_col='id', attr_cols=['group'])
+                v = []
+                for row in v_num:
+                    v.append((id_conv[row[0]],
+                             {'group': group_conv[row[1]['group']]}))
+            else:
+                v_num = self.v.id
+                v = []
+                for row in v_num:
+                    v.append(id_conv[row])
+
+            e = []
+            for row in self.e[['src', 'dst', 'weight']]:
+                e.append((id_conv[row[0]], id_conv[row[1]], row[2]))
+        else:
+            if hasattr(self, 'gv'):
+                v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
+            else:
+                v = self.v.id
+
+            e = self.e[['src', 'dst', 'weight']]
+
+        G.add_nodes_from(v)
+        G.add_weighted_edges_from(e)
 
         return G
 
