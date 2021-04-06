@@ -916,40 +916,44 @@ class LabelGraph(DirectedGraph):
                     i_col='src', j_col='dst', data_col=np.ones(len(e))))
         return adj
 
-    # def to_networkx(self, original=False):
-    #     G = nx.DiGraph()
-    #     if original:
-    #         id_conv = list(self.id_dict.keys())
+    def to_networkx(self, original=False):
+        G = nx.MultiDiGraph()
+        if original:
+            id_conv = list(self.id_dict.keys())
+            label_conv = list(self.label_dict.keys())
 
-    #         if hasattr(self, 'gv'):
-    #             group_conv = list(self.group_dict.keys())
-    #             v_num = mt.id_attr_dict(
-    #                 self.v, id_col='id', attr_cols=['group'])
-    #             v = []
-    #             for row in v_num:
-    #                 v.append((id_conv[row[0]],
-    #                          {'group': group_conv[row[1]['group']]}))
-    #         else:
-    #             v_num = self.v.id
-    #             v = []
-    #             for row in v_num:
-    #                 v.append(id_conv[row])
+            if hasattr(self, 'gv'):
+                group_conv = list(self.group_dict.keys())
+                v_num = mt.id_attr_dict(
+                    self.v, id_col='id', attr_cols=['group'])
+                v = []
+                for row in v_num:
+                    v.append((id_conv[row[0]],
+                             {'group': group_conv[row[1]['group']]}))
+            else:
+                v_num = self.v.id
+                v = []
+                for row in v_num:
+                    v.append(id_conv[row])
 
-    #         e = []
-    #         for row in self.e[['src', 'dst']]:
-    #             e.append((id_conv[row[0]], id_conv[row[1]]))
-    #     else:
-    #         if hasattr(self, 'gv'):
-    #             v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
-    #         else:
-    #             v = self.v.id
+            e = []
+            for row in self.e:
+                e.append((id_conv[row.src], id_conv[row.dst],
+                         {'label': label_conv[row.label]}))
+        else:
+            if hasattr(self, 'gv'):
+                v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
+            else:
+                v = self.v.id
 
-    #         e = self.e[['src', 'dst']]
+            e = []
+            for row in self.e:
+                e.append((row.src, row.dst, {'label': row.label}))
 
-    #     G.add_nodes_from(v)
-    #     G.add_edges_from(e)
+        G.add_nodes_from(v)
+        G.add_edges_from(e)
 
-    #     return G
+        return G
 
 
 class WeightedLabelGraph(WeightedGraph, LabelGraph):
@@ -1105,37 +1109,44 @@ class WeightedLabelGraph(WeightedGraph, LabelGraph):
                     i_col='src', j_col='dst', data_col='weight'))
         return adj
 
-    # def to_networkx(self, original=False):
-    #     G = nx.DiGraph()
-    #     if original:
-    #         id_conv = list(self.id_dict.keys())
+    def to_networkx(self, original=False):
+        G = nx.MultiDiGraph()
+        if original:
+            id_conv = list(self.id_dict.keys())
+            label_conv = list(self.label_dict.keys())
 
-    #         if hasattr(self, 'gv'):
-    #             group_conv = list(self.group_dict.keys())
-    #             v_num = mt.id_attr_dict(
-    #                 self.v, id_col='id', attr_cols=['group'])
-    #             v = []
-    #             for row in v_num:
-    #                 v.append((id_conv[row[0]],
-    #                          {'group': group_conv[row[1]['group']]}))
-    #         else:
-    #             v_num = self.v.id
-    #             v = []
-    #             for row in v_num:
-    #                 v.append(id_conv[row])
+            if hasattr(self, 'gv'):
+                group_conv = list(self.group_dict.keys())
+                v_num = mt.id_attr_dict(
+                    self.v, id_col='id', attr_cols=['group'])
+                v = []
+                for row in v_num:
+                    v.append((id_conv[row[0]],
+                             {'group': group_conv[row[1]['group']]}))
+            else:
+                v_num = self.v.id
+                v = []
+                for row in v_num:
+                    v.append(id_conv[row])
 
-    #         e = []
-    #         for row in self.e[['src', 'dst', 'weight']]:
-    #             e.append((id_conv[row[0]], id_conv[row[1]], row[2]))
-    #     else:
-    #         if hasattr(self, 'gv'):
-    #             v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
-    #         else:
-    #             v = self.v.id
+            e = []
+            for row in self.e:
+                e.append((id_conv[row.src], id_conv[row.dst],
+                         {'weight': row.weight,
+                          'label': label_conv[row.label]}))
+        else:
+            if hasattr(self, 'gv'):
+                v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
+            else:
+                v = self.v.id
 
-    #         e = self.e[['src', 'dst', 'weight']]
+            e = []
+            for row in self.e:
+                e.append((row.src, row.dst,
+                         {'weight': row.weight,
+                          'label': row.label}))
 
-    #     G.add_nodes_from(v)
-    #     G.add_weighted_edges_from(e)
+        G.add_nodes_from(v)
+        G.add_edges_from(e)
 
-    #     return G
+        return G
