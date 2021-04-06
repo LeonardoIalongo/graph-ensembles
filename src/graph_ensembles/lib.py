@@ -17,6 +17,8 @@ def to_sparse(coo_arr, shape, kind='coo', i_col=0, j_col=1, data_col=2):
         i = coo_arr[coo_arr.dtype.names[i_col]]
     elif isinstance(i_col, str):
         i = coo_arr[i_col]
+    elif isinstance(i_col, np.ndarray):
+        i = i_col
     else:
         raise ValueError('i_col must be an int or a string.')
 
@@ -24,6 +26,8 @@ def to_sparse(coo_arr, shape, kind='coo', i_col=0, j_col=1, data_col=2):
         j = coo_arr[coo_arr.dtype.names[j_col]]
     elif isinstance(j_col, str):
         j = coo_arr[j_col]
+    elif isinstance(j_col, np.ndarray):
+        j = j_col
     else:
         raise ValueError('j_col must be an int or a string.')
 
@@ -31,6 +35,8 @@ def to_sparse(coo_arr, shape, kind='coo', i_col=0, j_col=1, data_col=2):
         data = coo_arr[coo_arr.dtype.names[data_col]]
     elif isinstance(data_col, str):
         data = coo_arr[data_col]
+    elif isinstance(data_col, np.ndarray):
+        data = data_col
     else:
         raise ValueError('data_col must be an int or a string.')
 
