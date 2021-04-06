@@ -762,6 +762,44 @@ class TestLabelGraph():
         assert np.all(d_test == d_in), d_test
         assert np.all(g.lv.in_degree == d_in), g.lv.in_degree
 
+    def test_to_sparse_compressed(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        mat = np.array([[0, 1, 0, 0],
+                        [1, 0, 1, 0],
+                        [0, 1, 0, 0],
+                        [0, 1, 0, 0]], dtype=float)
+        assert np.all(g.adjacency_matrix(compressed=True).toarray() == mat)
+
+    def test_to_sparse(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'])
+
+        mat = [np.array([[0, 1, 0, 0],
+                        [0, 0, 1, 0],
+                        [0, 0, 0, 0],
+                        [0, 1, 0, 0]]),
+               np.array([[0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 1, 0, 0],
+                        [0, 0, 0, 0]]),
+               np.array([[0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 1, 0, 0]]),
+               np.array([[0, 0, 0, 0],
+                        [1, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0]])]
+
+        for i in range(len(mat)):
+            assert np.all(g.adjacency_matrix()[i].toarray() == mat[i])
+
 
 class TestWeightedLabelGraph():
     v = pd.DataFrame([['ING', 'NL', 'HQ'],
@@ -943,3 +981,43 @@ class TestWeightedLabelGraph():
 
         assert np.all(s_test == s_in), s_test
         assert np.all(g.lv.in_strength == s_in), g.v.in_strength
+
+    def test_to_sparse_compressed(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
+        mat = np.array([[0, 1e6, 0, 0],
+                        [4e5, 0, 1e4, 0],
+                        [0, 2.3e7, 0, 0],
+                        [0, 7e5 + 3e3, 0, 0]])
+        assert np.all(g.adjacency_matrix(compressed=True).toarray() == mat)
+
+    def test_to_sparse(self):
+        g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
+        mat = [np.array([[0, 1e6, 0, 0],
+                        [0, 0, 1e4, 0],
+                        [0, 0, 0, 0],
+                        [0, 3e3, 0, 0]]),
+               np.array([[0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 2.3e7, 0, 0],
+                        [0, 0, 0, 0]]),
+               np.array([[0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 7e5, 0, 0]]),
+               np.array([[0, 0, 0, 0],
+                        [4e5, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0]])]
+
+        for i in range(len(mat)):
+            assert np.all(g.adjacency_matrix()[i].toarray() == mat[i])
