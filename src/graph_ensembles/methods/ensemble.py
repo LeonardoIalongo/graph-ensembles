@@ -54,7 +54,7 @@ def random_graph(n, p, q=None, discrete_weights=False):
     else:
         n_clm = 3
 
-    if n > 10:
+    if n > 100:
         if p > 0.95:
             a = np.empty((n*(n-1), n_clm), dtype=np.float64)
         else:
@@ -62,6 +62,7 @@ def random_graph(n, p, q=None, discrete_weights=False):
             a = np.empty((max_len, n_clm), dtype=np.float64)
     else:
         a = np.empty((n*(n-1), n_clm), dtype=np.float64)
+        max_len = (n*(n-1))
 
     count = 0
     msg = 'Miscalculated bounds of max successful draws.'
