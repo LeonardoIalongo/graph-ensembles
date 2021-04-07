@@ -84,25 +84,23 @@ def normalise_rows(rows, clms, weights):
 
 
 @jit(nopython=True)
-def propagate_measure(rows, clms, weights, meas, absorb=False):
+def propagate_measure(indptr, indices, weights, meas, absorb=False):
     N = len(meas)
     update = np.zeros(N, dtype=np.float64)
 
-    for i in range(len(rows) - 1):
-        n = rows[i]
-        m = rows[i + 1]
-        clm = clms[n:m]
+    for i in range(len(indptr) - 1):
+        n = indptr[i]
+        m = indptr[i + 1]
+        neighbours = indices[n:m]
         vals = weights[n:m]
 
         if (n == m):
             if not absorb:
                 for k in range(N):
                     update[k] += meas[i]/N
-                    # if k != i:
-                    #     update[k] += meas[i]/(N - 1)
         else:
-            for k in range(len(clm)):
-                j = clm[k]
+            for k in range(len(neighbours)):
+                j = neighbours[k]
                 update[j] += vals[k]*meas[i]
 
     return update
@@ -115,7 +113,7 @@ def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
     is eliminated by summing the weights over labels. If the graph is not
     weighted then only one link is considered to exist.
     """
-    # Get adj in csc for fast propagation
+    # Get adj in csr for fast propagation
     if isinstance(g, graphs.LabelGraph):
         adj = g.adjacency_matrix(kind='csr', compressed=True)
     else:
@@ -156,3 +154,46 @@ def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
 
     print('Stopped after ', n + 1, ' iterations!')
     return rank
+
+
+def trophic_depth(g, final, max_iter=100, tol=1e-6):
+    """ Compute the trophic depth of each node, given the weighted graph and
+    the size of the connection to the final node (which has depth zero).
+    """
+    # Get adj in csr for fast propagation
+    if isinstance(g, graphs.LabelGraph):
+        adj = g.adjacency_matrix(kind='csc', compressed=True)
+    else:
+        adj = g.adjacency_matrix(kind='csc')
+
+    if not isinstance(g, graphs.WeightedGraph):
+        msg = 'Graph does not have weights, will use weights of one.'
+        warnings.warn(msg, UserWarning)
+
+    # Extract data from csc matrix
+    i = adj.indices
+    j = adj.indptr
+    w = adj.data
+
+    # Initialise result
+    strength = adj.sum(axis=1).A1 + final
+    idx = strength != 0
+    depth = final
+
+    # Iterate measure propagation
+    for n in range(max_iter):
+        # Compute update
+        new_depth = propagate_measure(j, i, w, depth + 1, absorb=True)
+
+        # Divide by total strength
+        new_depth[idx] = (final + new_depth)[idx]/strength[idx]
+
+        # Check for convergence
+        old_depth = depth
+        depth = new_depth
+        if np.all(np.absolute(depth - old_depth) < tol):
+            print('Converged in ', n, ' iterations!')
+            return depth
+
+    print('Stopped after ', n + 1, ' iterations!')
+    return depth
