@@ -156,7 +156,7 @@ def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
     return rank
 
 
-def trophic_depth(g, final, max_iter=100, tol=1e-6):
+def trophic_depth(g, final, max_iter=100, tol=1e-3):
     """ Compute the trophic depth of each node, given the weighted graph and
     the size of the connection to the final node (which has depth zero).
     """
