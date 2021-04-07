@@ -2,10 +2,11 @@
 History
 =======
 
-0.1.2 ()
+0.1.2 (2012-04-07)
 ------------------
 * Added scale invariant probability functional to all models
 * Improved methods for convergence with change in API, xtol now a relative measure
+* Added pagerank and trophic depth to the library
 
 0.1.1 (2021-03-29)
 ------------------
