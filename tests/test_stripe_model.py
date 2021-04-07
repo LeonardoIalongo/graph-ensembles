@@ -89,7 +89,7 @@ class TestStripeFitnessModel():
         assert np.all(model.num_vertices == num_vertices)
         np.testing.assert_allclose(model.num_edges,
                                    num_edges,
-                                   rtol=1e-6)
+                                   rtol=1e-5)
 
     def test_model_wrong_init(self):
         """ Check that the stripe model raises exceptions for wrong inputs."""
@@ -111,16 +111,25 @@ class TestStripeFitnessModel():
         model.fit(method="newton")
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
-                                   atol=1e-8, rtol=0)
+                                   atol=1e-5, rtol=0)
+
+    def test_solver_invariant(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly for the invariant case. """
+        model = ge.StripeFitnessModel(g, scale_invariant=True)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-5, rtol=0)
 
     def test_solver_fixed_point(self):
         """ Check that the fixed-point solver is fitting the z parameters
         correctly.
 
-        NOTE: currently very slow convergence!
+        NOTE: currently very slow convergence for small graphs!
         """
         model = ge.StripeFitnessModel(g)
-        model.fit(method="fixed-point", max_iter=100000, xtol=1e-5)
+        model.fit(method="fixed-point", max_iter=200000, xtol=1e-5)
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-4, rtol=0)

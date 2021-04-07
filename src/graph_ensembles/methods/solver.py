@@ -54,7 +54,7 @@ class Solution():
                 raise ValueError('xtol or diff_seq not set.')
 
 
-def newton_solver(x0, fun, tol=1e-6, xtol=1e-12, max_iter=100,
+def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
                   full_return=False, verbose=False):
     """Find roots of eq. f(x) = 0, using the newton method.
 
@@ -114,7 +114,10 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-12, max_iter=100,
         f, f_p = fun(x)
         # stopping condition computation
         norm = np.abs(f)
-        diff = np.abs(x - x_old)
+        if x_old != 0:
+            diff = np.abs((x - x_old)/x_old)
+        else:
+            diff = 1
 
         if full_return:
             f_seq.append(f)
@@ -152,11 +155,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-12, max_iter=100,
         return x
 
 
-def fixed_point_solver(x0,
-                       fun,
-                       xtol=1e-12,
-                       max_iter=100,
-                       full_return=False,
+def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
                        verbose=False):
     """Find roots of eq. f(x) = 0, using the fixed-point method.
 
@@ -204,7 +203,10 @@ def fixed_point_solver(x0,
         x = x + alpha * dx
         f = fun(x)
         # stopping condition computation
-        diff = np.abs(x - x_old)
+        if x_old != 0:
+            diff = np.abs((x - x_old)/x_old)
+        else:
+            diff = 1
 
         if full_return:
             x_seq.append(x)
