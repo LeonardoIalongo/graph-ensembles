@@ -33,6 +33,19 @@ def dict_to_array(d):
     return arr
 
 
+def id_attr_dict(df, id_col, attr_cols):
+    res = []
+
+    for i in range(len(df)):
+        attr_dict = {}
+        for attr in attr_cols:
+            attr_dict[attr] = df[i][attr]
+        idx = df[i][id_col]
+        res.append((idx, attr_dict))
+
+    return res
+
+
 def generate_id_dict(df, id_col, no_rep=False):
     """ Return id dictionary for given dataframe columns.
 

@@ -7,6 +7,8 @@ History
 * Added scale invariant probability functional to all models
 * Improved methods for convergence with change in API, xtol now a relative measure
 * Added pagerank and trophic depth to the library
+* Added methods for graph conversion to networkx
+* Added methods for computing the adjacency matrix as a sparse matrix
 
 0.1.1 (2021-03-29)
 ------------------
