@@ -125,25 +125,40 @@ def random_labelgraph(n, l, p, q=None, discrete_weights=False):  # noqa: E741
     return a[0:count, :].copy()
 
 
-# --------------- STRIPE METHODS ---------------
+# --------------- FITNESS METHODS ---------------
 @jit(nopython=True)
-def exp_edges_stripe_single_layer(p_f, z, out_strength, in_strength):
+def fit_exp_degree_vertex(p_f, z, i, fit_i, fit_j):
+    """ Compute the expected degree of the i-th vertex.
+    """
+    d = 0
+    for j in np.arange(len(fit_j)):
+        ind = fit_j[j].id
+        val = fit_j[j].value
+        if ind != i:
+            d += p_f(z, fit_i, val)
+
+    return d
+
+
+@jit(nopython=True)
+def fit_exp_edges(p_f, z, fit_out, fit_in):
     """ Compute the expected number of edges for a single label of the stripe
     model.
     """
     exp_edges = 0
-    for i in np.arange(len(out_strength)):
-        ind_out = out_strength[i].id
-        s_out = out_strength[i].value
-        for j in np.arange(len(in_strength)):
-            ind_in = in_strength[j].id
-            s_in = in_strength[j].value
+    for i in np.arange(len(fit_out)):
+        ind_out = fit_out[i].id
+        v_out = fit_out[i].value
+        for j in np.arange(len(fit_in)):
+            ind_in = fit_in[j].id
+            v_in = fit_in[j].value
             if ind_out != ind_in:
-                exp_edges += p_f(z, s_out, s_in)
+                exp_edges += p_f(z, v_out, v_in)
 
     return exp_edges
 
 
+# --------------- STRIPE METHODS ---------------
 @jit(nopython=True)
 def exp_edges_stripe(p_f, z, out_strength, in_strength, num_labels):
     """ Compute the expected number of edges for the stripe fitness model
