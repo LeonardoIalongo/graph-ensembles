@@ -47,9 +47,10 @@ def jac_invariant(d, x_i, x_j):
 def p_fitness_alpha(d, x_i, x_j, a):
     tmp = d*(x_i**a)*(x_j**a)
     if isinf(tmp):
-        return 1
+        res = 1.0
     else:
-        return tmp / (1 + tmp)
+        res = tmp / (1 + tmp)
+    return res
 
 
 @jit(nopython=True)
@@ -145,7 +146,7 @@ def random_labelgraph(n, l, p, q=None, discrete_weights=False):  # noqa: E741
 
 
 # --------------- FITNESS METHODS ---------------
-# @jit(nopython=True)
+@jit(nopython=True)
 def fit_exp_degree_vertex(p_f, z, i, fit_i, fit_j):
     """ Compute the expected degree of the i-th vertex.
     """
@@ -159,7 +160,7 @@ def fit_exp_degree_vertex(p_f, z, i, fit_i, fit_j):
     return d
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def fit_exp_edges(p_f, z, fit_out, fit_in):
     """ Compute the expected number of edges.
     """
@@ -194,7 +195,7 @@ def fit_exp_edges_jac(jac_f, z, fit_out, fit_in):
     return jac
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def fit_exp_edges_jac_alpha(jac_f, z, fit_out, fit_in):
     """ Compute the Jacobian of the objective function of the newton solver and its
     derivative for a single label of the stripe model.
@@ -282,8 +283,12 @@ def fit_iterative(z, out_strength, in_strength, n_edges):
 
 
 def fit_eq_constr_alpha(x, p_f, fit_out, fit_in, num_e):
+    @jit(nopython=True)
+    def f(d, x_i, x_j):
+        return p_f(d, x_i, x_j, x[1])
+
     exp_e = fit_exp_edges(
-         lambda d, x_i, x_j: p_f(d, x_i, x_j, x[1]),
+         f,
          x[0],
          fit_out,
          fit_in)
@@ -292,23 +297,26 @@ def fit_eq_constr_alpha(x, p_f, fit_out, fit_in, num_e):
 
 
 def fit_eq_jac_alpha(x, jac_f, fit_out, fit_in):
-    jac = fit_exp_edges_jac_alpha(
-         lambda d, x_i, x_j: jac_f(d, x_i, x_j, x[1]),
-         x[0],
-         fit_out,
-         fit_in)
+    @jit(nopython=True)
+    def f(d, x_i, x_j):
+        return jac_f(d, x_i, x_j, x[1])
+
+    jac = fit_exp_edges_jac_alpha(f, x[0], fit_out, fit_in)
 
     return np.array([jac[0], jac[1]], dtype=np.float64)
 
 
 def fit_ineq_constr_alpha(x, p_f, i, fit_i, fit_j):
-    deg = fit_exp_degree_vertex(
-        lambda d, x_i, x_j: p_f(d, x_i, x_j, x[1]),
-        x[0], i, fit_i, fit_j)
+    @jit(nopython=True)
+    def f(d, x_i, x_j):
+        return p_f(d, x_i, x_j, x[1])
+
+    deg = fit_exp_degree_vertex(f, x[0], i, fit_i, fit_j)
 
     return np.array([deg], dtype=np.float64)
 
 
+@jit(nopython=True)
 def fit_ineq_jac_alpha(x, jac_f, i, fit_i, fit_j):
     jac = np.zeros(2, dtype=np.float64)
     for j in np.arange(len(fit_j)):
@@ -347,7 +355,7 @@ def sample_stripe_single_layer(p_f, z, out_strength, in_strength, label):
 
 
 # --------------- STRIPE METHODS ---------------
-# @jit(nopython=True)
+@jit(nopython=True)
 def stripe_exp_edges(p_f, z, out_strength, in_strength, num_labels):
     """ Compute the expected number of edges with one parameter controlling
     for the density for each label.
@@ -362,16 +370,19 @@ def stripe_exp_edges(p_f, z, out_strength, in_strength, num_labels):
     return exp_edges
 
 
-# @jit(nopython=True)
 def stripe_exp_edges_alpha(
         p_f, alpha, z, out_strength, in_strength, num_labels):
     """ Compute the expected number of edges with one parameter controlling
     for the density for each label.
     """
+    @jit(nopython=True)
+    def f(d, x_i, x_j):
+        return p_f(d, x_i, x_j, alpha[i])
+
     exp_edges = np.zeros(len(z), dtype=np.float64)
     for i in range(num_labels):
         exp_edges[i] = fit_exp_edges(
-            lambda d, x_i, x_j: p_f(d, x_i, x_j, alpha[i]),
+            f,
             z[i],
             out_strength[out_strength.label == i],
             in_strength[in_strength.label == i])
@@ -493,6 +504,24 @@ def stripe_sample(p_f, z, out_strength, in_strength, num_labels):
         label = s_out[0].label
         sample.extend(
             sample_stripe_single_layer(p_f, z[i], s_out, s_in, label))
+
+    return np.array(sample, dtype=np.float64)
+
+
+def stripe_sample_alpha(p_f, z, alpha, out_strength, in_strength, num_labels):
+    """ Sample edges and weights from the stripe ensemble.
+    """
+    @jit(nopython=True)
+    def f(d, x_i, x_j):
+        return p_f(d, x_i, x_j, alpha[i])
+
+    sample = []
+    for i in range(num_labels):
+        s_out = out_strength[out_strength.label == i]
+        s_in = in_strength[in_strength.label == i]
+        label = s_out[0].label
+        sample.extend(
+            sample_stripe_single_layer(f, z[i], s_out, s_in, label))
 
     return np.array(sample, dtype=np.float64)
 

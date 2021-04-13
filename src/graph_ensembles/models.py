@@ -495,9 +495,9 @@ class StripeFitnessModel(GraphEnsemble):
         if hasattr(self, 'z'):
             if min_degree:
                 if hasattr(self, 'alpha'):
-                    self.num_edges = mt.stripe_exp_edges(
-                        lambda d, x_i, x_j: self.prob_fun(
-                            d, x_i, x_j, self.alpha),
+                    self.num_edges = mt.stripe_exp_edges_alpha(
+                        self.prob_fun,
+                        self.alpha,
                         self.z,
                         self.out_strength,
                         self.in_strength,
@@ -765,6 +765,9 @@ class StripeFitnessModel(GraphEnsemble):
         if not hasattr(self, 'z'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
+        if self.min_degree and not hasattr(self, 'alpha'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
         # Generate uninitialised graph object
         g = graphs.WeightedLabelGraph.__new__(graphs.WeightedLabelGraph)
         g.lv = graphs.LabelVertexList()
@@ -780,9 +783,9 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Sample edges and extract properties
         if self.min_degree:
-            e = mt.stripe_sample(
-                lambda d, x_i, x_j: self.prob_fun(d, x_i, x_j, self.alpha),
-                self.z, self.out_strength, self.in_strength, self.num_labels)
+            e = mt.stripe_sample_alpha(
+                self.prob_fun, self.alpha, self.z, self.out_strength,
+                self.in_strength, self.num_labels)
         else:
             e = mt.stripe_sample(self.prob_fun, self.z, self.out_strength,
                                  self.in_strength, self.num_labels)
