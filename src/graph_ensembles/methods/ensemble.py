@@ -177,6 +177,26 @@ def fit_exp_edges(p_f, z, fit_out, fit_in):
 
 
 @jit(nopython=True)
+def fit_exp_edges_jac(jac_f, z, fit_out, fit_in):
+    """ Compute the Jacobian of the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
+    """
+    jac = 0
+    for i in np.arange(len(fit_out)):
+        ind_out = fit_out[i].id
+        s_out = fit_out[i].value
+        for j in np.arange(len(fit_in)):
+            ind_in = fit_in[j].id
+            s_in = fit_in[j].value
+            if ind_out != ind_in:
+                res = jac_f(z, s_out, s_in)
+                jac[0] += res[0]
+                jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
 def fit_exp_degree(p_f, z, fit_out, fit_in):
     """ Compute the expected in and out degree sequences.
     """
@@ -205,19 +225,18 @@ def fit_exp_degree(p_f, z, fit_out, fit_in):
 
 
 @jit(nopython=True)
-def f_jac_stripe_single_layer(p_f, jac_f, z, out_strength, in_strength,
-                              n_edges):
+def fit_f_jac(p_f, jac_f, z, fit_out, fit_in, n_edges):
     """ Compute the objective function of the newton solver and its
     derivative for a single label of the stripe model.
     """
     jac = 0
     f = 0
-    for i in np.arange(len(out_strength)):
-        ind_out = out_strength[i].id
-        s_out = out_strength[i].value
-        for j in np.arange(len(in_strength)):
-            ind_in = in_strength[j].id
-            s_in = in_strength[j].value
+    for i in np.arange(len(fit_out)):
+        ind_out = fit_out[i].id
+        s_out = fit_out[i].value
+        for j in np.arange(len(fit_in)):
+            ind_in = fit_in[j].id
+            s_in = fit_in[j].value
             if ind_out != ind_in:
                 f += p_f(z, s_out, s_in)
                 jac += jac_f(z, s_out, s_in)
@@ -226,7 +245,7 @@ def f_jac_stripe_single_layer(p_f, jac_f, z, out_strength, in_strength,
 
 
 @jit(nopython=True)
-def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
+def fit_iterative(z, out_strength, in_strength, n_edges):
     """ Compute the next iteration of the fixed point method for a single
     label of the stripe model.
     """
@@ -242,6 +261,47 @@ def iterative_stripe_single_layer(z, out_strength, in_strength, n_edges):
                 aux += tmp / (1 + z*tmp)
 
     return n_edges/aux
+
+
+def fit_eq_constr_alpha(x, p_f, fit_out, fit_in, num_e):
+    exp_e = fit_exp_edges(
+         lambda d, x_i, x_j: p_f(d, x_i, x_j, x[1]),
+         x[0],
+         fit_out,
+         fit_in)
+
+    return np.array([exp_e - num_e], dtype=np.float64)
+
+
+def fit_eq_jac_alpha(x, jac_f, fit_out, fit_in):
+    jac = fit_exp_edges_jac(
+         lambda d, x_i, x_j: jac_f(d, x_i, x_j, x[1]),
+         x[0],
+         fit_out,
+         fit_in)
+
+    return np.array([jac[0], jac[1]], dtype=np.float64)
+
+
+def fit_ineq_constr_alpha(x, p_f, i, fit_i, fit_j):
+    deg = fit_exp_degree_vertex(
+        lambda d, x_i, x_j: p_f(d, x_i, x_j, x[1]),
+        x[0], i, fit_i, fit_j)
+
+    return np.array([deg], dtype=np.float64)
+
+
+def fit_ineq_jac_alpha(x, jac_f, i, fit_i, fit_j):
+    jac = np.zeros(2, dtype=np.float64)
+    for j in np.arange(len(fit_j)):
+        ind_j = fit_j[j].id
+        j_val = fit_j[j].value
+        if i != ind_j:
+            res = jac_f(x[0], fit_i, j_val, x[1])
+            jac[0] += res[0]
+            jac[1] += res[1]
+
+    return jac
 
 
 @jit(nopython=True)

@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import minimize, NonlinearConstraint
 
 
 class Solution():
@@ -14,7 +15,7 @@ class Solution():
 
         # Extract keyword arguments
         allowed_arguments = ['f_seq', 'x_seq', 'norm_seq', 'x_seq',
-                             'diff_seq', 'alpha_seq', 'tol', 'xtol']
+                             'diff_seq', 'tol', 'xtol']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -83,7 +84,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     """
     n_iter = 0
     x = x0
-    alpha = 1
     f, f_p = fun(x)
     norm = np.abs(f)
     diff = 1
@@ -97,7 +97,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
         x_seq = [x]
         norm_seq = [norm]
         diff_seq = [diff]
-        alpha_seq = [1]
 
     while (norm > tol and n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -110,7 +109,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             dx = - f/tol  # Note that H is always positive
 
         # Update values
-        x = x + alpha * dx
+        x = x + dx
         f, f_p = fun(x)
         # stopping condition computation
         norm = np.abs(f)
@@ -124,7 +123,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             x_seq.append(x)
             norm_seq.append(norm)
             diff_seq.append(diff)
-            alpha_seq.append(alpha)
 
         # step update
         n_iter += 1
@@ -134,7 +132,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             print("    fun_prime = {}".format(f_p))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
-            print("    alpha = {}".format(alpha))
             print("    |f(x)| = {}".format(norm))
             print("    diff = {}".format(diff))
             print(' ')
@@ -148,7 +145,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
                         x_seq=np.array(x_seq),
                         norm_seq=np.array(norm_seq),
                         diff_seq=np.array(diff_seq),
-                        alpha_seq=np.array(alpha_seq),
                         tol=tol,
                         xtol=xtol)
     else:
@@ -180,7 +176,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     """
     n_iter = 0
     x = x0
-    alpha = 1
     f = fun(x)
     diff = 1
 
@@ -190,7 +185,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     if full_return:
         x_seq = [x]
         diff_seq = [diff]
-        alpha_seq = [1]
 
     while (n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -200,7 +194,7 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         dx = f - x
 
         # Update values
-        x = x + alpha * dx
+        x = x + dx
         f = fun(x)
         # stopping condition computation
         if x_old != 0:
@@ -211,7 +205,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         if full_return:
             x_seq.append(x)
             diff_seq.append(diff)
-            alpha_seq.append(alpha)
 
         # step update
         n_iter += 1
@@ -219,7 +212,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
             print("    Iteration {}".format(n_iter))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
-            print("    alpha = {}".format(alpha))
             print("    diff = {}".format(diff))
             print(' ')
 
@@ -230,14 +222,13 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         return Solution(x, n_iter, max_iter, 'fixed-point',
                         x_seq=np.array(x_seq),
                         diff_seq=np.array(diff_seq),
-                        alpha_seq=np.array(alpha_seq),
                         xtol=xtol)
     else:
         return x
 
 
-def newton_alpha_solver(x0, fun, min_d, tol=1e-6, xtol=1e-6, max_iter=100,
-                        full_return=False, verbose=False):
+def alpha_solver(x0, fun, jac, min_d, jac_min_d, method='SLSQP', tol=1e-6,
+                 max_iter=100, full_return=False, verbose=False):
     """Find the optimal z and alpha that satisfy the constraints:
         - Expected number of links == empirical number of links
         - Mininum non-zero expected degree is at least one
@@ -254,6 +245,8 @@ def newton_alpha_solver(x0, fun, min_d, tol=1e-6, xtol=1e-6, max_iter=100,
         function that returns both the value of the function and the Jacobian
     min_d: function (z, a)
         function for the minimum degree value
+    method: 'SLSQP' or 'trust-constr'
+        optimization method
     tol: float
         tolerance for the exit condition on the norm
     xtol: float
@@ -269,115 +262,48 @@ def newton_alpha_solver(x0, fun, min_d, tol=1e-6, xtol=1e-6, max_iter=100,
     Solution
         Returns a Solution object.
     """
-    n_iter = 0
-    x = x0
-    a = 1
-    alpha = 1
-    f, f_x, f_a = fun(x, a)
-    d, d_x, d_a = min_d(x, a)
-    norm = np.abs(f)
-    diff = 1
 
-    # Introduce bounds on x (max x with negative f, min x with positive f)
-    x_p = np.inf
-    x_n = 0
+    if method == 'SLSQP':
+        constraints = [{'type': 'eq',
+                        'fun': fun,
+                        'jac': jac},
+                       {'type': 'ineq',
+                        'fun': min_d,
+                        'jac': jac_min_d}]
 
-    if verbose:
-        print("x0 = {}".format(x))
-        print("|f(x0)| = {}".format(norm))
-        print("min_d = {}".format(d))
+        res = minimize(lambda x: (x[1] - 1)**2,
+                       x0,
+                       method=method,
+                       jac=lambda x: np.array([0, 2*(x[1]-1)],
+                                              dtype=np.float64),
+                       bounds=[(0, None), (0, None)],
+                       constraints=constraints,
+                       tol=tol,
+                       options={'maxiter': max_iter})
+    elif method == 'trust-constr':
+        constraints = [NonlinearConstraint(fun=fun, jac=jac, lb=0, ub=0),
+                       NonlinearConstraint(fun=min_d, jac=jac_min_d,
+                                           lb=1, ub=np.inf)]
 
-    if full_return:
-        f_seq = [f]
-        x_seq = [x]
-        a_seq = [a]
-        norm_seq = [norm]
-        min_d_seq = [d]
-        diff_seq = [diff]
-        alpha_seq = [1]
-
-    for n_iter in range(max_iter):
-        # Save previous iteration
-        x_old = x
-
-        # Compute update
-        if f_x > tol:
-            dx = - f/f_x
-        else:
-            dx = - f/tol  # Note that H is always positive
-
-        # Update x
-        x = x + alpha * dx
-        if x <= x_n:
-            alpha = alpha / 2
-            x = x_n
-        elif x >= x_p:
-            alpha = alpha / 2
-            x = x_p
-        else:
-            alpha = 1
-
-        # update a
-        if f >= - tol and d < 1:
-            a = a - d / d_x
-        else:
-            a = 1
-
-        # Update objective functions
-        f, f_z, f_a = fun(x, a)
-        d, d_x, d_a = min_d(x, a)
-
-        # Update bounds (how does it work with alpha changing?)
-        # if f > 0 and x < x_p:
-        #     x_p = x
-        # elif f < 0 and x > x_n:
-        #     x_n = x
-
-        # stopping condition computation
-        norm = np.abs(f)
-        if x_old != 0:
-            diff = np.abs((x - x_old)/x_old)
-        else:
-            diff = 1
-
-        if ((norm <= tol or diff > xtol) and d >= 1):
-            break
-
-        if full_return:
-            f_seq.append(f)
-            min_d_seq.append(d)
-            x_seq.append(x)
-            a_seq.append(a)
-            norm_seq.append(norm)
-            diff_seq.append(diff)
-            alpha_seq.append(alpha)
-
-        if verbose:
-            print("    Iteration {}".format(n_iter))
-            print("    fun = {}".format(f))
-            print("    min_d = {}".format(d))
-            print("    fun_prime = {}".format(f_x))
-            print("    fun_prime_alpha = {}".format(f_a))
-            print("    dx = {}".format(dx))
-            print("    x = {}".format(x))
-            print("    alpha = {}".format(alpha))
-            print("    |f(x)| = {}".format(norm))
-            print("    diff = {}".format(diff))
-            print(' ')
-
-    if verbose:
-        print(' ')
-
-    if full_return:
-        return Solution(x, n_iter, max_iter, 'newton',
-                        f_seq=np.array(f_seq),
-                        min_d_seq=np.array(min_d_seq),
-                        x_seq=np.array(x_seq),
-                        a_seq=np.array(a_seq),
-                        norm_seq=np.array(norm_seq),
-                        diff_seq=np.array(diff_seq),
-                        alpha_seq=np.array(alpha_seq),
-                        tol=tol,
-                        xtol=xtol)
+        res = minimize(lambda x: (x[1] - 1)**2,
+                       x0,
+                       method=method,
+                       hessp=lambda x: np.array([0, 2*x[1]],
+                                                dtype=np.float64),
+                       bounds=[(0, None), (0, None)],
+                       constraints=constraints,
+                       tol=tol,
+                       options={'maxiter': max_iter})
     else:
-        return x
+        raise ValueError('Optimization method not recognised.')
+
+    if full_return:
+        sol = Solution(res.x, res.nit, max_iter, method, tol=tol)
+        sol.converged = res.success
+        sol.status = res.status
+        sol.message = res.message
+        sol.alpha_seq = res.fun
+        sol.maxcv = res.maxcv
+        return sol
+    else:
+        return res.x
