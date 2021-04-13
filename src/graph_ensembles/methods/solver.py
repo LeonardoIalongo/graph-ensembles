@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import minimize, NonlinearConstraint
+from scipy.optimize import minimize
 
 
 class Solution():
@@ -227,7 +227,7 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         return x
 
 
-def alpha_solver(x0, fun, jac, min_d, jac_min_d, method='SLSQP', tol=1e-6,
+def alpha_solver(x0, fun, jac, min_d, jac_min_d, tol=1e-6,
                  max_iter=100, full_return=False, verbose=False):
     """Find the optimal z and alpha that satisfy the constraints:
         - Expected number of links == empirical number of links
@@ -263,47 +263,29 @@ def alpha_solver(x0, fun, jac, min_d, jac_min_d, method='SLSQP', tol=1e-6,
         Returns a Solution object.
     """
 
-    if method == 'SLSQP':
-        constraints = [{'type': 'eq',
-                        'fun': fun,
-                        'jac': jac},
-                       {'type': 'ineq',
-                        'fun': min_d,
-                        'jac': jac_min_d}]
+    constraints = [{'type': 'eq',
+                    'fun': fun,
+                    'jac': jac},
+                   {'type': 'ineq',
+                    'fun': min_d,
+                    'jac': jac_min_d}]
 
-        res = minimize(lambda x: (x[1] - 1)**2,
-                       x0,
-                       method=method,
-                       jac=lambda x: np.array([0, 2*(x[1]-1)],
-                                              dtype=np.float64),
-                       bounds=[(0, None), (0, None)],
-                       constraints=constraints,
-                       tol=tol,
-                       options={'maxiter': max_iter})
-    elif method == 'trust-constr':
-        constraints = [NonlinearConstraint(fun=fun, jac=jac, lb=0, ub=0),
-                       NonlinearConstraint(fun=min_d, jac=jac_min_d,
-                                           lb=1, ub=np.inf)]
-
-        res = minimize(lambda x: (x[1] - 1)**2,
-                       x0,
-                       method=method,
-                       hessp=lambda x: np.array([0, 2*x[1]],
-                                                dtype=np.float64),
-                       bounds=[(0, None), (0, None)],
-                       constraints=constraints,
-                       tol=tol,
-                       options={'maxiter': max_iter})
-    else:
-        raise ValueError('Optimization method not recognised.')
+    res = minimize(lambda x: (x[1] - 1)**2,
+                   x0,
+                   method='SLSQP',
+                   jac=lambda x: np.array([0, 2*(x[1]-1)],
+                                          dtype=np.float64),
+                   bounds=[(0, None), (0, None)],
+                   constraints=constraints,
+                   tol=tol,
+                   options={'maxiter': max_iter})
 
     if full_return:
-        sol = Solution(res.x, res.nit, max_iter, method, tol=tol)
+        sol = Solution(res.x, res.nit, max_iter, 'SLSQP', tol=tol)
         sol.converged = res.success
         sol.status = res.status
         sol.message = res.message
         sol.alpha_seq = res.fun
-        sol.maxcv = res.maxcv
         return sol
     else:
         return res.x

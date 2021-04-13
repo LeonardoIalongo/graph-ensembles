@@ -510,8 +510,8 @@ class StripeFitnessModel(GraphEnsemble):
                     self.in_strength,
                     self.num_labels)
 
-    def fit(self, z0=None, method="newton", tol=1e-5,
-            xtol=1e-12, max_iter=100, verbose=False):
+    def fit(self, z0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
+            verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
@@ -531,14 +531,16 @@ class StripeFitnessModel(GraphEnsemble):
             if true print debug info while iterating
 
         """
+        if method is None:
+            if not self.min_degree:
+                method = 'newton'
+        elif self.min_degree:
+            warnings.warn('Method not recognised for solver with min degree '
+                          'constraint, using default SLSQP.', UserWarning)
+
         if (method == 'fixed-point') and self.scale_invariant:
             raise Exception('Fixed point solver not supported for scale '
                             'invariant functional.')
-        if (((method == 'fixed-point') or (method == 'newton'))
-           and self.min_degree):
-            method = 'SLSQP'
-            warnings.warn('Method not recognised for solver with min degree '
-                          'constraint, using default SLSQP.', UserWarning)
 
         if isinstance(self.num_edges, np.ndarray):
             self.z = np.empty(self.num_labels, dtype=np.float64)
@@ -579,7 +581,7 @@ class StripeFitnessModel(GraphEnsemble):
 
                         def jac_min_d(x):
                             return mt.fit_ineq_jac_alpha(
-                                x, self.prob_fun, min_in_i,
+                                x, self.jac_fun, min_in_i,
                                 s_in.value[min_in_i], s_out)
 
                     # Solve
@@ -590,10 +592,8 @@ class StripeFitnessModel(GraphEnsemble):
                         jac=lambda x: mt.fit_eq_jac_alpha(
                             x, self.jac_fun, s_out, s_in),
                         min_d=min_d,
-                        jac_min_d=lambda x: mt.fit_ineq_jac_alpha(
-                            x, self.prob_fun, s_out, s_in),
+                        jac_min_d=jac_min_d,
                         tol=tol,
-                        xtol=xtol,
                         max_iter=max_iter,
                         verbose=verbose,
                         full_return=True)
@@ -644,8 +644,9 @@ class StripeFitnessModel(GraphEnsemble):
         """
         if hasattr(self, 'z'):
             if self.min_degree:
-                return mt.stripe_exp_edges(
-                    lambda d, x_i, x_j: self.prob_fun(d, x_i, x_j, self.alpha),
+                return mt.stripe_exp_edges_alpha(
+                    self.prob_fun,
+                    self.alpha,
                     self.z,
                     self.out_strength,
                     self.in_strength,
