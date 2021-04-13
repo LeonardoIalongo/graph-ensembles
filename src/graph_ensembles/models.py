@@ -344,7 +344,8 @@ class StripeFitnessModel(GraphEnsemble):
         the density parameter (or vector of)
     """
 
-    def __init__(self, *args, scale_invariant=False, **kwargs):
+    def __init__(self, *args, scale_invariant=False,
+                 min_degree=False, **kwargs):
         """ Return a StripeFitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedLabelGraph, the
@@ -483,7 +484,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         # If z is set computed expected number of edges per label
         if hasattr(self, 'z'):
-            self.num_edges = mt.exp_edges_stripe(
+            self.num_edges = mt.stripe_exp_edges(
                 self.prob_fun,
                 self.z,
                 self.out_strength,
@@ -590,7 +591,7 @@ class StripeFitnessModel(GraphEnsemble):
         """ Compute the expected number of edges (per label).
         """
         if hasattr(self, 'z'):
-            return mt.exp_edges_stripe(
+            return mt.stripe_exp_edges(
                 self.prob_fun,
                 self.z,
                 self.out_strength,
