@@ -449,10 +449,14 @@ def stripe_exp_degree(p_f, z, s_out_i, s_out_j, s_out_w,
         # Get non-zero out strengths for vertex out_row of label out_label
         n = s_out_i[out_row]
         m = s_out_i[out_row + 1]
+
+        if n == m:
+            continue
+
         out_label = s_out_j[n:m]
         out_vals = s_out_w[n:m]
 
-        for in_row in range(len(s_out_i)-1):
+        for in_row in range(len(s_in_i)-1):
             # No self-loops
             if out_row == in_row:
                 continue
@@ -463,7 +467,7 @@ def stripe_exp_degree(p_f, z, s_out_i, s_out_j, s_out_w,
             in_label = s_in_j[r:s]
             in_vals = s_in_w[r:s]
 
-            if (n == m) or (r == s):
+            if r == s:
                 continue
 
             # Get pij
