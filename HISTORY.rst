@@ -2,6 +2,11 @@
 History
 =======
 
+0.1.3 (2012-04-29)
+------------------
+* Added new option for fitting the stripe model that ensures that the minimum non-zero expected degree is one
+* Corrected issue in expected degree calculations
+
 0.1.2 (2012-04-07)
 ------------------
 * Added scale invariant probability functional to all models
