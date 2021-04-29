@@ -2,6 +2,7 @@ env/
 venv/
 notes/
 input_data/
+cov_results/
 __pycache__/
 dist/
 build/
