@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import minimize
 
 
 class Solution():
@@ -14,7 +15,7 @@ class Solution():
 
         # Extract keyword arguments
         allowed_arguments = ['f_seq', 'x_seq', 'norm_seq', 'x_seq',
-                             'diff_seq', 'alpha_seq', 'tol', 'xtol']
+                             'diff_seq', 'tol', 'xtol']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -83,7 +84,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     """
     n_iter = 0
     x = x0
-    alpha = 1
     f, f_p = fun(x)
     norm = np.abs(f)
     diff = 1
@@ -97,7 +97,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
         x_seq = [x]
         norm_seq = [norm]
         diff_seq = [diff]
-        alpha_seq = [1]
 
     while (norm > tol and n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -110,7 +109,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             dx = - f/tol  # Note that H is always positive
 
         # Update values
-        x = x + alpha * dx
+        x = x + dx
         f, f_p = fun(x)
         # stopping condition computation
         norm = np.abs(f)
@@ -124,7 +123,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             x_seq.append(x)
             norm_seq.append(norm)
             diff_seq.append(diff)
-            alpha_seq.append(alpha)
 
         # step update
         n_iter += 1
@@ -134,7 +132,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             print("    fun_prime = {}".format(f_p))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
-            print("    alpha = {}".format(alpha))
             print("    |f(x)| = {}".format(norm))
             print("    diff = {}".format(diff))
             print(' ')
@@ -148,7 +145,6 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
                         x_seq=np.array(x_seq),
                         norm_seq=np.array(norm_seq),
                         diff_seq=np.array(diff_seq),
-                        alpha_seq=np.array(alpha_seq),
                         tol=tol,
                         xtol=xtol)
     else:
@@ -180,7 +176,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     """
     n_iter = 0
     x = x0
-    alpha = 1
     f = fun(x)
     diff = 1
 
@@ -190,7 +185,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     if full_return:
         x_seq = [x]
         diff_seq = [diff]
-        alpha_seq = [1]
 
     while (n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -200,7 +194,7 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         dx = f - x
 
         # Update values
-        x = x + alpha * dx
+        x = x + dx
         f = fun(x)
         # stopping condition computation
         if x_old != 0:
@@ -211,7 +205,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         if full_return:
             x_seq.append(x)
             diff_seq.append(diff)
-            alpha_seq.append(alpha)
 
         # step update
         n_iter += 1
@@ -219,7 +212,6 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
             print("    Iteration {}".format(n_iter))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
-            print("    alpha = {}".format(alpha))
             print("    diff = {}".format(diff))
             print(' ')
 
@@ -230,7 +222,70 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
         return Solution(x, n_iter, max_iter, 'fixed-point',
                         x_seq=np.array(x_seq),
                         diff_seq=np.array(diff_seq),
-                        alpha_seq=np.array(alpha_seq),
                         xtol=xtol)
     else:
         return x
+
+
+def alpha_solver(x0, fun, jac, min_d, jac_min_d, tol=1e-6,
+                 max_iter=100, full_return=False, verbose=False):
+    """Find the optimal z and alpha that satisfy the constraints:
+        - Expected number of links == empirical number of links
+        - Mininum non-zero expected degree is at least one
+        - z > 0 and alpha > 0
+
+    Note alpha will be chosen to be the minimum deviation from one that
+    satisfies the constraints.
+
+    Parameters
+    ----------
+    x0: float or np.ndarray
+        starting points of the method
+    fun: function (z, a)
+        function that returns both the value of the function and the Jacobian
+    min_d: function (z, a)
+        function for the minimum degree value
+    method: 'SLSQP' or 'trust-constr'
+        optimization method
+    tol: float
+        tolerance for the exit condition on the norm
+    xtol: float
+        relative tol for the exit condition on difference between iterations
+    max_iter: int or float
+        maximum number of iteration
+    full_return: boolean
+        if true return all info on convergence
+    verbose: boolean
+        if true print debug info while iterating
+    Returns
+    -------
+    Solution
+        Returns a Solution object.
+    """
+
+    constraints = [{'type': 'eq',
+                    'fun': fun,
+                    'jac': jac},
+                   {'type': 'ineq',
+                    'fun': min_d,
+                    'jac': jac_min_d}]
+
+    res = minimize(lambda x: (x[1] - 1)**2,
+                   x0,
+                   method='SLSQP',
+                   jac=lambda x: np.array([0, 2*(x[1]-1)],
+                                          dtype=np.float64),
+                   bounds=[(0, None), (0, None)],
+                   constraints=constraints,
+                   tol=tol,
+                   options={'maxiter': max_iter})
+
+    if full_return:
+        sol = Solution(res.x, res.nit, max_iter, 'SLSQP', tol=tol)
+        sol.converged = res.success
+        sol.status = res.status
+        sol.message = res.message
+        sol.alpha_seq = res.fun
+        return sol
+    else:
+        return res.x
