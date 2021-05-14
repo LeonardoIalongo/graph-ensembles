@@ -178,6 +178,23 @@ def fit_exp_edges(p_f, z, fit_out, fit_in):
 
 
 @jit(nopython=True)
+def fit_exp_edges_alpha(p_f, a, z, fit_out, fit_in):
+    """ Compute the expected number of edges.
+    """
+    exp_edges = 0
+    for i in np.arange(len(fit_out)):
+        ind_out = fit_out[i].id
+        v_out = fit_out[i].value
+        for j in np.arange(len(fit_in)):
+            ind_in = fit_in[j].id
+            v_in = fit_in[j].value
+            if ind_out != ind_in:
+                exp_edges += p_f(z, v_out, v_in, a)
+
+    return exp_edges
+
+
+@jit(nopython=True)
 def fit_exp_edges_jac(jac_f, z, fit_out, fit_in):
     """ Compute the Jacobian of the objective function of the newton solver and its
     derivative for a single label of the stripe model.

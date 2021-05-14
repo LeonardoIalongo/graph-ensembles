@@ -316,7 +316,160 @@ class RandomGraph(GraphEnsemble):
 
 
 class FitnessModel(GraphEnsemble):
-    pass
+    """ The fitness model takes the strengths of each node in order to
+    construct a probability distribution over all possible graphs.
+
+    Attributes
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence
+    in_strength: np.ndarray
+        the in strength sequence
+    num_edges: int
+        the total number of edges
+    num_vertices: int
+        the total number of nodes
+    z: float
+        the density parameter
+    """
+
+    def __init__(self, *args, scale_invariant=False, min_degree=False,
+                 **kwargs):
+        """ Return a FitnessModel for the given graph data.
+
+        The model accepts as arguments either: a WeightedGraph, the
+        strength sequences (in and out) and the number of edges,
+        or the strength sequences and the z parameter.
+
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the node index to which the strength refers and
+        in the second column there must be the value of the strength.
+        All missing node ids are assumed zero.
+
+        The model defaults to the classic fitness model functional but can be
+        set to use the scale invariant formulation by setting the
+        scale_invariant flag to True. This changes the functional used for
+        the computation of the link probability but nothing else.
+        """
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges
+                self.id_dtype = g.id_dtype
+                self.out_strength = g.out_strength(get=True)
+                self.in_strength = g.in_strength(get=True)
+            else:
+                raise ValueError('First argument passed must be a '
+                                 'WeightedGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'out_strength',
+                             'in_strength', 'z', 'alpha', 'discrete_weights']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+
+        if not hasattr(self, 'out_strength'):
+            raise ValueError('out_strength not set.')
+
+        if not hasattr(self, 'in_strength'):
+            raise ValueError('in_strength not set.')
+
+        if not (hasattr(self, 'num_edges') or
+                hasattr(self, 'z')):
+            raise ValueError('Either num_edges or z must be set.')
+
+        if not hasattr(self, 'id_dtype'):
+            num_bytes = mt.get_num_bytes(self.num_vertices)
+            self.id_dtype = np.dtype('u' + str(num_bytes))
+
+        # Ensure that strengths passed adhere to format
+        msg = ("Out strength must be a recarray with columns: "
+               "('id', 'value')")
+        assert isinstance(self.out_strength, np.recarray), msg
+        for clm in self.out_strength.dtype.names:
+            assert clm in ('id', 'value'), msg
+
+        msg = ("In strength must be a recarray with columns: "
+               "('id', 'value')")
+        assert isinstance(self.in_strength, np.recarray), msg
+        for clm in self.in_strength.dtype.names:
+            assert clm in ('id', 'value'), msg
+
+        # Ensure that strengths are sorted
+        self.out_strength = self.out_strength[['id', 'value']]
+        self.in_strength = self.in_strength[['id', 'value']]
+        self.out_strength.sort()
+        self.in_strength.sort()
+
+        # Ensure that number of constraint matches number of labels
+        if hasattr(self, 'num_edges'):
+            if not isinstance(self.num_edges, (int, float)):
+                raise ValueError('Number of edges must be a number.')
+        else:
+            try:
+                self.z = float(self.z)
+            except Exception:
+                raise ValueError('z must be a number')
+
+        # Check that sum of in and out strengths are equal per label
+        tot_out = 0
+        for row in self.out_strength:
+            tot_out += row.value
+        tot_in = 0
+        for row in self.in_strength:
+            tot_in += row.value
+
+        msg = 'Sum of strengths do not match.'
+        assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
+
+        # Get the correct probability functional
+        self.scale_invariant = scale_invariant
+        self.min_degree = min_degree
+        if scale_invariant:
+            if min_degree:
+                msg = 'Cannot constrain min degree in scale invariant model.'
+                raise ValueError(msg)
+            else:
+                self.prob_fun = mt.p_invariant
+                self.jac_fun = mt.jac_invariant
+        else:
+            if min_degree:
+                self.prob_fun = mt.p_fitness_alpha
+                self.jac_fun = mt.jac_fitness_alpha
+            else:
+                self.prob_fun = mt.p_fitness
+                self.jac_fun = mt.jac_fitness
+
+        # If z is set computed expected number of edges per label
+        if hasattr(self, 'z'):
+            if min_degree:
+                if hasattr(self, 'alpha'):
+                    self.num_edges = mt.fit_exp_edges_alpha(
+                        self.prob_fun,
+                        self.alpha,
+                        self.z,
+                        self.out_strength,
+                        self.in_strength)
+            else:
+                self.num_edges = mt.fit_exp_edges(
+                    self.prob_fun,
+                    self.z,
+                    self.out_strength,
+                    self.in_strength)
 
 
 class StripeFitnessModel(GraphEnsemble):
