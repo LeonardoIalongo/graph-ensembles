@@ -124,7 +124,7 @@ def strengths(k, n, n_l):
     s_in.label = s_out.label.copy()
     s_out.id = rng.randint(0, n, k)
     s_in.id = rng.randint(0, n, k)
-    s_out.value = power_law(k, 2)
+    s_out.value = power_law(k, 2)  # gamma = 2
     s_in.value = s_out.value.copy()
 
     s_out.sort()
@@ -136,8 +136,7 @@ def strengths(k, n, n_l):
 # Define random generation parameters
 n_vertices_list = [10000, 10000, 100000]
 n_labels = 100
-gamma = 2
-z_list = [2e-3, 1e-2, 5e-4]
+z_list = [2e-4, 1e-3, 5e-6]
 
 for n_vertices, z, n in zip(n_vertices_list, z_list, range(3)):
     # Sample node fitness
