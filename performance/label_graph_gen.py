@@ -2,7 +2,6 @@ import numpy as np
 import numpy.random as rng
 from numba import jit
 from math import isinf
-from numpy.lib.recfunctions import merge_arrays
 from graph_ensembles import graphs
 from graph_ensembles import methods as mt
 import pickle as pk
