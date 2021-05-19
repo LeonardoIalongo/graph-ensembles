@@ -396,24 +396,16 @@ class FitnessModel(GraphEnsemble):
             num_bytes = mt.get_num_bytes(self.num_vertices)
             self.id_dtype = np.dtype('u' + str(num_bytes))
 
-        # Ensure that strengths passed adhere to format
-        msg = ("Out strength must be a recarray with columns: "
-               "('id', 'value')")
-        assert isinstance(self.out_strength, np.recarray), msg
-        for clm in self.out_strength.dtype.names:
-            assert clm in ('id', 'value'), msg
+        # Ensure that strengths passed adhere to format (ndarray)
+        msg = ("Out strength must be a numpy array of length " +
+               str(self.num_vertices))
+        assert isinstance(self.out_strength, np.ndarray), msg
+        assert self.out_strength.shape == (self.num_vertices,)
 
-        msg = ("In strength must be a recarray with columns: "
-               "('id', 'value')")
-        assert isinstance(self.in_strength, np.recarray), msg
-        for clm in self.in_strength.dtype.names:
-            assert clm in ('id', 'value'), msg
-
-        # Ensure that strengths are sorted
-        self.out_strength = self.out_strength[['id', 'value']]
-        self.in_strength = self.in_strength[['id', 'value']]
-        self.out_strength.sort()
-        self.in_strength.sort()
+        msg = ("In strength must be a numpy array of length " +
+               str(self.num_vertices))
+        assert isinstance(self.in_strength, np.ndarray), msg
+        assert self.in_strength.shape == (self.num_vertices,)
 
         # Ensure that number of constraint matches number of labels
         if hasattr(self, 'num_edges'):
@@ -426,15 +418,10 @@ class FitnessModel(GraphEnsemble):
                 raise ValueError('z must be a number')
 
         # Check that sum of in and out strengths are equal per label
-        tot_out = 0
-        for row in self.out_strength:
-            tot_out += row.value
-        tot_in = 0
-        for row in self.in_strength:
-            tot_in += row.value
-
         msg = 'Sum of strengths do not match.'
-        assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
+        assert np.allclose(np.sum(self.out_strength),
+                           np.sum(self.in_strength),
+                           atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
         self.scale_invariant = scale_invariant

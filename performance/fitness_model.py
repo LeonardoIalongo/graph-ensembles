@@ -23,6 +23,8 @@ with open("logs/fitness.log", 'w') as f:
 
         with open('data/' + filename, 'rb') as f:
             g = pk.load(f)
+            print(g.e)
+            print(g.e.shape)
 
         print('Testing on graph: ', filename)
         print('Number of vertices: ', g.num_vertices)
@@ -56,13 +58,13 @@ with open("logs/fitness.log", 'w') as f:
         start = perf_counter()
         g_sample = model.sample()
         perf = perf_counter() - start
-        print('Time for stripe sample: ', perf)
+        print('Time for model sample: ', perf)
 
         start = perf_counter()
         out_deg = model.expected_out_degree()
         in_deg = model.expected_in_degree()
         perf = perf_counter() - start
-        print('Time for stripe expected degrees: ', perf)
+        print('Time for model expected degrees: ', perf)
 
         inv = ge.FitnessModel(g, scale_invariant=True)
         start = perf_counter()

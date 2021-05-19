@@ -77,12 +77,10 @@ def sample(z, out_strength, in_strength, num_vertices):
         g.id_dict[x] = x
 
     # Sample edges and extract properties
-    e = np.array(sample_edges(z, out_strength, in_strength))
-
-    e = e.view(type=np.recarray,
-               dtype=[('src', 'f8'),
-                      ('dst', 'f8'),
-                      ('weight', 'f8')])
+    e = np.array(sample_edges(z, out_strength, in_strength),
+                 dtype=[('src', 'f8'),
+                        ('dst', 'f8'),
+                        ('weight', 'f8')]).view(type=np.recarray)
 
     e = e.astype([('src', g.id_dtype),
                   ('dst', g.id_dtype),
