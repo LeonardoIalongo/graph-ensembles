@@ -458,6 +458,221 @@ class FitnessModel(GraphEnsemble):
                     self.out_strength,
                     self.in_strength)
 
+    def fit(self, z0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
+            verbose=False):
+        """ Compute the optimal z to match the given number of edges.
+
+        Parameters
+        ----------
+        z0: float
+            optional initial conditions for z parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol : float
+            tolerance for the exit condition on the norm
+        eps : float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+
+        """
+        if method is None:
+            if not self.min_degree:
+                method = 'newton'
+        elif self.min_degree:
+            warnings.warn('Method not recognised for solver with min degree '
+                          'constraint, using default SLSQP.', UserWarning)
+
+        if (method == 'fixed-point') and self.scale_invariant:
+            raise Exception('Fixed point solver not supported for scale '
+                            'invariant functional.')
+
+        if z0 is None:
+            z0 = np.float64(0.0)
+        else:
+            z0 = np.float64(z0)
+
+        if self.min_degree:
+            # Find min degree node
+            min_out_i = np.argmin(self.out_strength[self.out_strength > 0])
+            min_in_i = np.argmin(self.in_strength[self.in_strength > 0])
+            if self.out_strength[min_out_i] <= self.in_strength[min_in_i]:
+                def min_d(x):
+                    return mt.fit_ineq_constr_alpha(
+                        x, self.prob_fun, min_out_i,
+                        self.out_strength[min_out_i],
+                        self.in_strength)
+
+                def jac_min_d(x):
+                    return mt.fit_ineq_jac_alpha(
+                        x, self.jac_fun, min_out_i,
+                        self.out_strength[min_out_i],
+                        self.in_strength)
+            else:
+                def min_d(x):
+                    return mt.fit_ineq_constr_alpha(
+                        x, self.prob_fun, min_in_i,
+                        self.in_strength[min_in_i],
+                        self.out_strength)
+
+                def jac_min_d(x):
+                    return mt.fit_ineq_jac_alpha(
+                        x, self.jac_fun, min_in_i,
+                        self.in_strength[min_in_i],
+                        self.out_strength)
+
+            # Solve
+            sol = mt.alpha_solver(
+                x0=np.array([z0, 1.0], dtype=np.float64),
+                fun=lambda x: mt.fit_eq_constr_alpha(
+                    x, self.prob_fun, self.out_strength,
+                    self.in_strength, self.num_edges),
+                jac=lambda x: mt.fit_eq_jac_alpha(
+                    x, self.jac_fun, self.out_strength,
+                    self.in_strength),
+                min_d=min_d,
+                jac_min_d=jac_min_d,
+                tol=tol,
+                max_iter=max_iter,
+                verbose=verbose,
+                full_return=True)
+
+        elif method == "newton":
+            sol = mt.newton_solver(
+                x0=z0,
+                fun=lambda x: mt.fit_f_jac(
+                    self.prob_fun, self.jac_fun, x,
+                    self.out_strength, self.in_strength, self.num_edges),
+                tol=tol,
+                xtol=xtol,
+                max_iter=max_iter,
+                verbose=verbose,
+                full_return=True)
+
+        elif method == "fixed-point":
+            sol = mt.fixed_point_solver(
+                x0=z0,
+                fun=lambda x: mt.fit_iterative(
+                    x, self.out_strength, self.in_strength, self.num_edges),
+                xtol=xtol,
+                max_iter=max_iter,
+                verbose=verbose,
+                full_return=True)
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+        # Update results and check convergence
+        if self.min_degree:
+            self.z = sol.x[0]
+            self.alpha = sol.x[1]
+            self.solver_output = sol
+        else:
+            self.z = sol.x
+            self.solver_output = sol
+
+        if verbose:
+            print('Converged: ', sol.converged)
+
+        if not sol.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
+    def expected_num_edges(self):
+        """ Compute the expected number of edges (per label).
+        """
+        if hasattr(self, 'z'):
+            if self.min_degree:
+                return mt.fit_exp_edges_alpha(
+                    self.prob_fun,
+                    self.alpha,
+                    self.z,
+                    self.out_strength,
+                    self.in_strength)
+            else:
+                return mt.fit_exp_edges(
+                    self.prob_fun,
+                    self.z,
+                    self.out_strength,
+                    self.in_strength)
+        else:
+            raise Exception('Model must be fitted before hand.')
+
+    def expected_out_degree(self):
+        """ Compute the expected out degree for a given z.
+        """
+        if not hasattr(self, 'z'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        if self.min_degree and not hasattr(self, 'alpha'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        if self.min_degree:
+            self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree_alpha(
+                self.prob_fun, self.z, self.alpha, self.out_strength,
+                self.in_strength)
+        else:
+            self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
+                self.prob_fun, self.z, self.out_strength,
+                self.in_strength)
+
+        return self.exp_out_degree
+
+    def expected_in_degree(self):
+        """ Compute the expected in degree for a given z.
+        """
+        if not hasattr(self, 'exp_in_degree'):
+            _ = self.expected_out_degree()
+
+        return self.exp_in_degree
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'z'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        if self.min_degree and not hasattr(self, 'alpha'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = graphs.WeightedGraph.__new__(graphs.WeightedGraph)
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        g.id_dtype = self.id_dtype
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges and extract properties
+        if self.min_degree:
+            e = mt.fit_sample_alpha(
+                self.prob_fun, self.z, self.alpha, self.out_strength,
+                self.in_strength)
+        else:
+            e = mt.fit_sample(
+                self.prob_fun, self.z, self.out_strength, self.in_strength)
+
+        e = np.array(e,
+                     dtype=[('src', 'f8'),
+                            ('dst', 'f8'),
+                            ('weight', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        g.total_weight = np.sum(e.weight)
+
+        return g
+
 
 class StripeFitnessModel(GraphEnsemble):
     """ A generalized fitness model that allows for strengths by label.
