@@ -381,6 +381,13 @@ class FitnessModel(GraphEnsemble):
         # Ensure that all necessary fields have been set
         if not hasattr(self, 'num_vertices'):
             raise ValueError('Number of vertices not set.')
+        else:
+            if not isinstance(self.num_vertices, (int, float)):
+                raise ValueError('Number of vertices must be a number.')
+
+            if self.num_vertices <= 0:
+                raise ValueError(
+                    'Number of vertices must be a positive number.')
 
         if not hasattr(self, 'out_strength'):
             raise ValueError('out_strength not set.')
@@ -400,25 +407,40 @@ class FitnessModel(GraphEnsemble):
         msg = ("Out strength must be a numpy array of length " +
                str(self.num_vertices))
         assert isinstance(self.out_strength, np.ndarray), msg
-        assert self.out_strength.shape == (self.num_vertices,)
+        assert self.out_strength.shape == (self.num_vertices,), msg
 
         msg = ("In strength must be a numpy array of length " +
                str(self.num_vertices))
         assert isinstance(self.in_strength, np.ndarray), msg
-        assert self.in_strength.shape == (self.num_vertices,)
+        assert self.in_strength.shape == (self.num_vertices,), msg
 
-        # Ensure that number of constraint matches number of labels
+        # Ensure that strengths have positive values only
+        msg = "Out strength must contain positive values only."
+        assert np.all(self.out_strength >= 0), msg
+
+        msg = "In strength must contain positive values only."
+        assert np.all(self.in_strength >= 0), msg
+
+        # Ensure that number of edges is a positive number
         if hasattr(self, 'num_edges'):
             if not isinstance(self.num_edges, (int, float)):
                 raise ValueError('Number of edges must be a number.')
+
+            if self.num_edges < 0:
+                raise ValueError(
+                    'Number of edges must be a positive number.')
         else:
             try:
                 self.z = float(self.z)
             except Exception:
-                raise ValueError('z must be a number')
+                raise ValueError('z must be a number.')
 
-        # Check that sum of in and out strengths are equal per label
-        msg = 'Sum of strengths do not match.'
+            if self.z < 0:
+                raise ValueError(
+                    'z must be a positive number.')
+
+        # Check that sum of in and out strengths are equal
+        msg = 'Sums of strengths do not match.'
         assert np.allclose(np.sum(self.out_strength),
                            np.sum(self.in_strength),
                            atol=1e-14, rtol=1e-9), msg
@@ -493,7 +515,13 @@ class FitnessModel(GraphEnsemble):
         if z0 is None:
             z0 = np.float64(0.0)
         else:
-            z0 = np.float64(z0)
+            try:
+                z0 = float(z0)
+            except Exception:
+                raise ValueError('z0 must be a number.')
+
+            if z0 < 0:
+                raise ValueError('z0 must be positive.')
 
         if self.min_degree:
             # Find min degree node
