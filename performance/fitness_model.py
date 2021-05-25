@@ -94,7 +94,7 @@ with open("logs/fitness.log", 'w') as f:
         print('Attempting min_degree fit:')
         a_model = ge.FitnessModel(g, min_degree=True)
         start = perf_counter()
-        a_model.fit(tol=tol, verbose=True)
+        a_model.fit(tol=tol, max_iter=1000, verbose=True)
         perf = perf_counter() - start
         print('Time for min_degree fit: ', perf)
 

@@ -527,30 +527,29 @@ class FitnessModel(GraphEnsemble):
             # Find min degree node
             min_out_i = np.argmin(self.out_strength[self.out_strength > 0])
             min_in_i = np.argmin(self.in_strength[self.in_strength > 0])
-            if self.out_strength[min_out_i] <= self.in_strength[min_in_i]:
-                def min_d(x):
-                    return mt.fit_ineq_constr_alpha(
-                        x, self.prob_fun, min_out_i,
-                        self.out_strength[min_out_i],
-                        self.in_strength)
 
-                def jac_min_d(x):
-                    return mt.fit_ineq_jac_alpha(
+            def min_d(x):
+                return np.array([mt.fit_ineq_constr_alpha(
+                                    x, self.prob_fun, min_out_i,
+                                    self.out_strength[min_out_i],
+                                    self.in_strength),
+                                 mt.fit_ineq_constr_alpha(
+                                    x, self.prob_fun, min_in_i,
+                                    self.in_strength[min_in_i],
+                                    self.out_strength)
+                                 ], dtype=np.float64)
+
+            def jac_min_d(x):
+                return np.stack(
+                    (mt.fit_ineq_jac_alpha(
                         x, self.jac_fun, min_out_i,
                         self.out_strength[min_out_i],
-                        self.in_strength)
-            else:
-                def min_d(x):
-                    return mt.fit_ineq_constr_alpha(
-                        x, self.prob_fun, min_in_i,
-                        self.in_strength[min_in_i],
-                        self.out_strength)
-
-                def jac_min_d(x):
-                    return mt.fit_ineq_jac_alpha(
+                        self.in_strength),
+                     mt.fit_ineq_jac_alpha(
                         x, self.jac_fun, min_in_i,
                         self.in_strength[min_in_i],
-                        self.out_strength)
+                        self.out_strength)),
+                    axis=0)
 
             # Solve
             sol = mt.alpha_solver(

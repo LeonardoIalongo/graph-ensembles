@@ -327,7 +327,7 @@ def fit_ineq_constr_alpha(x, p_f, i, fit_i, fit_j):
 
     deg = fit_exp_degree_vertex(f, x[0], i, fit_i, fit_j)
 
-    return np.array([deg - 1], dtype=np.float64)
+    return deg - 1
 
 
 @jit(nopython=True)
