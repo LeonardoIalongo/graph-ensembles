@@ -4,6 +4,7 @@
 import os
 import pickle as pk
 import sys
+import time
 from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
@@ -11,6 +12,14 @@ import numpy as np
 log = True
 tol = 1e-5
 xtol = 1e-6
+
+test_names = ['init', 'newton', 'fixed-p', 'sample', 'degrees',
+              'inv', 'inv-deg', 'min_deg', 'min_d-deg']
+test_times = []
+test_succ = []
+graph_names = []
+
+test_start = time.time()
 
 with open("logs/fitness.log", 'w') as f:
 
@@ -27,8 +36,12 @@ with open("logs/fitness.log", 'w') as f:
         if '_z' not in filename:
             continue
 
-        with open('data/' + filename, 'rb') as f:
-            g = pk.load(f)
+        with open('data/' + filename, 'rb') as fl:
+            g = pk.load(fl)
+
+        graph_names.append(filename)
+        times_tmp = []
+        succ_tmp = []
 
         print('\n--------------------------')
         print('Testing on graph: ', filename)
@@ -39,12 +52,16 @@ with open("logs/fitness.log", 'w') as f:
         model = ge.FitnessModel(g)
         perf = perf_counter() - start
         print('Time for model init: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(isinstance(model, ge.GraphEnsemble))
 
         print('Attempting newton fit:')
         start = perf_counter()
         model.fit(tol=tol, method='newton', verbose=True)
         perf = perf_counter() - start
         print('Time for newton fit: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(model.solver_output.converged)
 
         if not np.allclose(model.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
@@ -56,6 +73,8 @@ with open("logs/fitness.log", 'w') as f:
         model.fit(xtol=1e-6, method='fixed-point', verbose=True)
         perf = perf_counter() - start
         print('Time for fixed-point fit: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(model.solver_output.converged)
 
         if not np.allclose(model.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
@@ -66,12 +85,16 @@ with open("logs/fitness.log", 'w') as f:
         g_sample = model.sample()
         perf = perf_counter() - start
         print('Time for model sample: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(isinstance(g_sample, ge.WeightedGraph))
 
         start = perf_counter()
         out_deg = model.expected_out_degree()
         in_deg = model.expected_in_degree()
         perf = perf_counter() - start
         print('Time for model expected degrees: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
 
         print('Attempting scale_invariant fit:')
         inv = ge.FitnessModel(g, scale_invariant=True)
@@ -79,6 +102,8 @@ with open("logs/fitness.log", 'w') as f:
         inv.fit(tol=tol, verbose=True)
         perf = perf_counter() - start
         print('Time for invariant fit: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(model.solver_output.converged)
 
         if not np.allclose(inv.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
@@ -90,6 +115,8 @@ with open("logs/fitness.log", 'w') as f:
         in_deg = inv.expected_in_degree()
         perf = perf_counter() - start
         print('Time for model expected degrees: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
 
         print('Attempting min_degree fit:')
         a_model = ge.FitnessModel(g, min_degree=True)
@@ -97,6 +124,8 @@ with open("logs/fitness.log", 'w') as f:
         a_model.fit(tol=tol, max_iter=1000, verbose=True)
         perf = perf_counter() - start
         print('Time for min_degree fit: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(model.solver_output.converged)
 
         if not np.allclose(a_model.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
@@ -108,3 +137,18 @@ with open("logs/fitness.log", 'w') as f:
         in_deg = a_model.expected_in_degree()
         perf = perf_counter() - start
         print('Time for model expected degrees: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
+
+        test_times.append(times_tmp)
+        test_succ.append(succ_tmp)
+
+time_format = time.strftime('%H:%M:%S', time.gmtime(time.time() - test_start))
+print('Total test time: ', time_format)
+
+for i in range(len(graph_names)):
+    print('\n--------------------------')
+    print('Graph:', graph_names[i])
+    print('Tests:', *test_names, sep='\t')
+    print('Time:', *test_times[i], sep='\t')
+    print('Status:', *test_succ[i], sep='\t')
