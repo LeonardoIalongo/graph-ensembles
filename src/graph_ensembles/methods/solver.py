@@ -278,7 +278,7 @@ def alpha_solver(x0, fun, jac, min_d, jac_min_d, tol=1e-6,
                    bounds=[(0, None), (0, None)],
                    constraints=constraints,
                    tol=tol,
-                   options={'maxiter': max_iter})
+                   options={'maxiter': max_iter, 'disp': verbose})
 
     if full_return:
         sol = Solution(res.x, res.nit, max_iter, 'SLSQP', tol=tol)

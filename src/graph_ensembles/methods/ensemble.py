@@ -45,7 +45,7 @@ def jac_invariant(d, x_i, x_j):
 
 @jit(nopython=True)
 def p_fitness_alpha(d, x_i, x_j, a):
-    tmp = d*(x_i**a)*(x_j**a)
+    tmp = d*((x_i*x_j)**a)
     if isinf(tmp):
         res = 1.0
     else:
@@ -55,9 +55,11 @@ def p_fitness_alpha(d, x_i, x_j, a):
 
 @jit(nopython=True)
 def jac_fitness_alpha(d, x_i, x_j, a):
-    tmp = (x_i**a)*(x_j**a)
+    tmp = (x_i*x_j)**a
     tmp1 = (1 + d*tmp)**2
     if isinf(tmp1):
+        return 0, 0
+    elif tmp == 0:
         return 0, 0
     else:
         return tmp / tmp1, d*log(x_i*x_j)*tmp / tmp1
@@ -325,7 +327,7 @@ def fit_ineq_constr_alpha(x, p_f, i, fit_i, fit_j):
 
     deg = fit_exp_degree_vertex(f, x[0], i, fit_i, fit_j)
 
-    return np.array([deg], dtype=np.float64)
+    return np.array([deg - 1], dtype=np.float64)
 
 
 @jit(nopython=True)
