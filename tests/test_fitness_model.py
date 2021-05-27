@@ -119,7 +119,8 @@ class TestFitnessModelInit():
                             num_edges=num_edges)
 
     def test_wrong_num_vertices(self):
-        """ Check that wrong initialization of num_edges results in an error.
+        """ Check that wrong initialization of num_vertices results in an
+        error.
         """
         msg = 'Number of vertices not set.'
         with pytest.raises(ValueError, match=msg):
@@ -142,7 +143,7 @@ class TestFitnessModelInit():
                             num_edges=num_edges)
 
     def test_wrong_strengths(self):
-        """ Check that wrong initialization of num_edges results in an error.
+        """ Check that wrong initialization of strengths results in an error.
         """
         msg = 'out_strength not set.'
         with pytest.raises(ValueError, match=msg):
@@ -203,7 +204,7 @@ class TestFitnessModelInit():
                             in_strength=in_strength,
                             num_edges=num_edges)
 
-    def test_wrong_n_edges(self):
+    def test_wrong_num_edges(self):
         """ Check that wrong initialization of num_edges results in an error.
         """
         msg = 'Number of edges must be a number.'
