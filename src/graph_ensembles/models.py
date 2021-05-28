@@ -382,8 +382,11 @@ class FitnessModel(GraphEnsemble):
         if not hasattr(self, 'num_vertices'):
             raise ValueError('Number of vertices not set.')
         else:
-            if not isinstance(self.num_vertices, (int, float)):
-                raise ValueError('Number of vertices must be a number.')
+            try: 
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError('Number of vertices must be an integer.')
 
             if self.num_vertices <= 0:
                 raise ValueError(
@@ -726,7 +729,7 @@ class StripeFitnessModel(GraphEnsemble):
         the density parameter (or vector of)
     """
 
-    def __init__(self, *args, scale_invariant=False,
+    def __init__(self, *args, per_label=True, scale_invariant=False,
                  min_degree=False, **kwargs):
         """ Return a StripeFitnessModel for the given graph data.
 
@@ -759,12 +762,15 @@ class StripeFitnessModel(GraphEnsemble):
             if isinstance(args[0], graphs.WeightedLabelGraph):
                 g = args[0]
                 self.num_vertices = g.num_vertices
-                self.num_edges = g.num_edges_label
                 self.num_labels = g.num_labels
                 self.id_dtype = g.id_dtype
                 self.label_dtype = g.label_dtype
                 self.out_strength = g.out_strength_by_label(get=True)
                 self.in_strength = g.in_strength_by_label(get=True)
+                if per_label:
+                    self.num_edges = g.num_edges_label
+                else:
+                    self.num_edges = g.num_edges
             else:
                 raise ValueError('First argument passed must be a '
                                  'WeightedLabelGraph.')
@@ -787,9 +793,29 @@ class StripeFitnessModel(GraphEnsemble):
         # Ensure that all necessary fields have been set
         if not hasattr(self, 'num_vertices'):
             raise ValueError('Number of vertices not set.')
+        else:
+            try: 
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError('Number of vertices must be an integer.')
+
+            if self.num_vertices <= 0:
+                raise ValueError(
+                    'Number of vertices must be a positive number.')
 
         if not hasattr(self, 'num_labels'):
             raise ValueError('Number of labels not set.')
+        else:
+            try: 
+                assert self.num_labels / int(self.num_labels) == 1
+                self.num_labels = int(self.num_labels)
+            except Exception:
+                raise ValueError('Number of labels must be an integer.')
+
+            if self.num_labels <= 0:
+                raise ValueError(
+                    'Number of labels must be a positive number.')
 
         if not hasattr(self, 'out_strength'):
             raise ValueError('out_strength not set.')
@@ -822,6 +848,49 @@ class StripeFitnessModel(GraphEnsemble):
         for clm in self.in_strength.dtype.names:
             assert clm in ('label', 'id', 'value'), msg
 
+        # Ensure that num_vertices and num_labels are coherent with info
+        # in strengths
+        if self.num_vertices < max(np.max(self.out_strength.id),
+                                   np.max(self.in_strength.id)):
+            raise ValueError(
+                'Number of vertices smaller than max id value in strengths.')
+
+        if self.num_labels < max(np.max(self.out_strength.label),
+                                 np.max(self.in_strength.label)):
+            raise ValueError(
+                'Number of labels smaller than max label value in strengths.')
+
+        # Ensure that all labels, ids and values of the strength are positive
+        if np.any(self.out_strength.label < 0):
+            raise ValueError(
+                "Out strength labels must contain positive values only.")
+
+        if np.any(self.in_strength.label < 0):
+            raise ValueError(
+                "In strength labels must contain positive values only.")
+
+        if np.any(self.out_strength.id < 0):
+            raise ValueError(
+                "Out strength ids must contain positive values only.")
+
+        if np.any(self.in_strength.id < 0):
+            raise ValueError(
+                "In strength ids must contain positive values only.")
+
+        if np.any(self.out_strength.value < 0):
+            raise ValueError(
+                "Out strength values must contain positive values only.")
+
+        if np.any(self.in_strength.value < 0):
+            raise ValueError(
+                "In strength values must contain positive values only.")
+
+        msg = "Storing zeros in the strengths leads to inefficient code."
+        if np.any(self.out_strength.value == 0) or np.any(
+                self.in_strength.value == 0):
+            msg = "Storing zeros in the strengths leads to inefficient code."
+            warnings.warn(msg, UserWarning)
+
         # Ensure that strengths are sorted
         self.out_strength = self.out_strength[['label', 'id', 'value']]
         self.in_strength = self.in_strength[['label', 'id', 'value']]
@@ -835,14 +904,28 @@ class StripeFitnessModel(GraphEnsemble):
                        ' elements equal to the number of labels.')
                 assert len(self.num_edges) == self.num_labels, msg
             else:
-                raise ValueError('Single number of edges not yet supported.')
+                if not isinstance(self.num_edges, (int, float)):
+                    msg = ('Number of edges must be a number or a numpy array '
+                           'of length equal to the number of labels.')
+                    raise ValueError(msg)
+
+            if np.any(self.num_edges < 0):
+                msg = 'Number of edges must contain only positive values.'
+                raise ValueError(msg)
         else:
             if isinstance(self.z, np.ndarray):
                 msg = ('The z array does not have the number of'
                        ' elements equal to the number of labels.')
                 assert len(self.z) == self.num_labels, msg
             else:
-                raise ValueError('Single z not yet supported.')
+                if not isinstance(self.z, (int, float)):
+                    msg = ('z must be a number or an array of length equal to '
+                           'the number of labels.')
+                    raise ValueError(msg)
+
+            if np.any(self.z < 0):
+                msg = 'z must contain only positive values.'
+                raise ValueError(msg)
 
         # Check that sum of in and out strengths are equal per label
         tot_out = np.zeros((self.num_labels))
@@ -852,7 +935,7 @@ class StripeFitnessModel(GraphEnsemble):
         for row in self.in_strength:
             tot_in[row.label] += row.value
 
-        msg = 'Sum of strengths per label do not match.'
+        msg = 'Sums of strengths per label do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
@@ -983,7 +1066,7 @@ class StripeFitnessModel(GraphEnsemble):
                 elif method == "newton":
                     sol = mt.newton_solver(
                         x0=x0,
-                        fun=lambda x: mt.fit_f_jac(
+                        fun=lambda x: mt.layer_f_jac(
                             self.prob_fun, self.jac_fun, x,
                             s_out, s_in, num_e),
                         tol=tol,
@@ -995,7 +1078,7 @@ class StripeFitnessModel(GraphEnsemble):
                 elif method == "fixed-point":
                     sol = mt.fixed_point_solver(
                         x0=x0,
-                        fun=lambda x: mt.fit_iterative(
+                        fun=lambda x: mt.layer_iterative(
                             x, s_out, s_in, num_e),
                         xtol=xtol,
                         max_iter=max_iter,

@@ -128,7 +128,7 @@ class TestFitnessModelInit():
                             in_strength=in_strength,
                             num_edges=num_edges)
 
-        msg = 'Number of vertices must be a number.'
+        msg = 'Number of vertices must be an integer.'
         with pytest.raises(ValueError, match=msg):
             ge.FitnessModel(num_vertices=np.array([1, 2]),
                             out_strength=out_strength,
