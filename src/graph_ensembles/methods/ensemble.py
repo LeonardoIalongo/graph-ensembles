@@ -561,7 +561,7 @@ def layer_iterative(z, out_strength, in_strength, n_edges):
 
 
 @jit(nopython=True)
-def layer_exp_degree(p_f, z, fit_out, fit_in):
+def layer_exp_degree(p_f, z, fit_out, fit_in, label):
     """ Compute the expected in and out degree sequences.
     """
     exp_d_out = np.zeros(len(fit_out.id), dtype=np.float64)
@@ -579,11 +579,11 @@ def layer_exp_degree(p_f, z, fit_out, fit_in):
 
     d_out = []
     for i in range(len(exp_d_out)):
-        d_out.append((fit_out[i].id, exp_d_out[i]))
+        d_out.append((label, fit_out[i].id, exp_d_out[i]))
 
     d_in = []
     for j in range(len(exp_d_in)):
-        d_in.append((fit_in[j].id, exp_d_in[j]))
+        d_in.append((label, fit_in[j].id, exp_d_in[j]))
 
     return d_out, d_in
 
@@ -603,6 +603,7 @@ def stripe_exp_edges(p_f, z, out_strength, in_strength, num_labels):
     return exp_edges
 
 
+@jit(nopython=True)
 def stripe_exp_edges_alpha(
         p_f, alpha, z, out_strength, in_strength, num_labels):
     """ Compute the expected number of edges with one parameter controlling
@@ -708,7 +709,7 @@ def stripe_exp_degree(p_f, z, s_out_i, s_out_j, s_out_w,
     return out_degree, in_degree
 
 
-@jit(nopython=True)  # TODO: manca la label
+@jit(nopython=True)
 def stripe_exp_degree_label(p_f, z, out_strength, in_strength, num_labels):
     """ Compute the expected degree by label for the stripe fitness model
     with one parameter controlling for the density for each label.
@@ -720,7 +721,8 @@ def stripe_exp_degree_label(p_f, z, out_strength, in_strength, num_labels):
             p_f,
             z[i],
             out_strength[out_strength.label == i],
-            in_strength[in_strength.label == i])
+            in_strength[in_strength.label == i],
+            i)
         exp_d_out.extend(res[0])
         exp_d_in.extend(res[1])
 
