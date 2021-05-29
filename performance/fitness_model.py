@@ -143,12 +143,13 @@ with open("logs/fitness.log", 'w') as f:
         test_times.append(times_tmp)
         test_succ.append(succ_tmp)
 
-time_format = time.strftime('%H:%M:%S', time.gmtime(time.time() - test_start))
-print('Total test time: ', time_format)
+    time_format = time.strftime(
+        '%H:%M:%S', time.gmtime(time.time() - test_start))
+    print('Total test time: ', time_format)
 
-for i in range(len(graph_names)):
-    print('\n--------------------------')
-    print('Graph:', graph_names[i])
-    print('Tests:', *test_names, sep='\t')
-    print('Time:', *test_times[i], sep='\t')
-    print('Status:', *test_succ[i], sep='\t')
+    for i in range(len(graph_names)):
+        print('\n--------------------------')
+        print('Graph:', graph_names[i])
+        print('Tests:', *test_names, sep='\t')
+        print('Time:', *test_times[i], sep='\t')
+        print('Status:', *test_succ[i], sep='\t')
