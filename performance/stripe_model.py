@@ -9,7 +9,7 @@ from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
 
-log = True
+log = False
 tol = 1e-5
 xtol = 1e-6
 
@@ -61,7 +61,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for newton fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
         if not np.allclose(model.expected_num_edges(), g.num_edges_label,
                            atol=tol, rtol=0):
@@ -74,7 +74,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for fixed-point fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
         if not np.allclose(model.expected_num_edges(), g.num_edges_label,
                            atol=tol, rtol=0):
@@ -103,7 +103,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for invariant fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
         if not np.allclose(inv.expected_num_edges(), g.num_edges_label,
                            atol=tol, rtol=0):
@@ -125,7 +125,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for min_degree fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
         if not np.allclose(a_model.expected_num_edges(), g.num_edges_label,
                            atol=tol, rtol=0):

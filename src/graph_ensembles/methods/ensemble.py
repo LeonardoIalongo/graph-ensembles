@@ -589,17 +589,67 @@ def layer_exp_degree(p_f, z, fit_out, fit_in, label):
 
 
 @jit(nopython=True)
-def stripe_exp_edges(p_f, z, out_strength, in_strength, num_labels):
-    """ Compute the expected number of edges with one parameter controlling
-    for the density for each label.
+def stripe_exp_edges(p_f, z, s_out_i, s_out_j, s_out_w,
+                     s_in_i, s_in_j, s_in_w, per_label):
+    """ Compute the expected number of edges.
+
+    It is assumed that the arguments passed are the three arrays of two sparse
+    matrices where the first index represents the vertex id, and the second a
+    label. s_out and s_in must be csr matrices.
+
+    Arguments
+    ----------
+    z: float
+        value of the density parameter z
+    s_out_i: array
+        indptr of the out_strength by label sparse csr matrix
+    s_out_j: array
+        indices of the out_strength by label sparse csr matrix
+    s_out_w: array
+        data of the out_strength by label sparse csr matrix
+    s_in_i: array
+        indices of the in_strength by label sparse csr matrix
+    s_in_j: array
+        indptr of the in_strength by label sparse csr matrix
+    s_in_w: array
+        data of the in_strength by label sparse csr matrix
+    group_arr: array
+        an array containing the label id for each vertex in order
     """
-    exp_edges = np.zeros(len(z), dtype=np.float64)
-    for i in range(num_labels):
-        exp_edges[i] = layer_exp_edges(
-            p_f,
-            z[i],
-            out_strength[out_strength.label == i],
-            in_strength[in_strength.label == i])
+    exp_edges = np.float64(0)
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        # Get non-zero out strengths for vertex out_row of label out_label
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+
+        if n == m:
+            continue
+
+        out_label = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        for in_row in range(len(s_in_i)-1):
+            # No self-loops
+            if out_row == in_row:
+                continue
+
+            # Get non-zero in strengths for vertex out_row of label out_label
+            r = s_in_i[in_row]
+            s = s_in_i[in_row + 1]
+            in_label = s_in_j[r:s]
+            in_vals = s_in_w[r:s]
+
+            if r == s:
+                continue
+
+            # Get pij
+            pij = stripe_pij(
+                p_f, z, out_label, out_vals, in_label, in_vals, per_label)
+            exp_edges += pij
+
     return exp_edges
 
 
@@ -621,18 +671,53 @@ def stripe_exp_edges_alpha(
 
 
 @jit(nopython=True)
-def stripe_pij(p_f, z, out_label, out_vals, in_label, in_vals):
+def stripe_exp_edges_label(p_f, z, out_strength, in_strength, num_labels):
+    """ Compute the expected number of edges with one parameter controlling
+    for the density for each label.
+    """
+    exp_edges = np.zeros(len(z), dtype=np.float64)
+    for i in range(num_labels):
+        exp_edges[i] = layer_exp_edges(
+            p_f,
+            z[i],
+            out_strength[out_strength.label == i],
+            in_strength[in_strength.label == i])
+    return exp_edges
+
+
+@jit(nopython=True)
+def stripe_exp_edges_label_alpha(
+        p_f, alpha, z, out_strength, in_strength, num_labels):
+    """ Compute the expected number of edges with one parameter controlling
+    for the density for each label.
+    """
+    exp_edges = np.zeros(len(z), dtype=np.float64)
+    for i in range(num_labels):
+        exp_edges[i] = layer_exp_edges_alpha(
+            p_f,
+            alpha[i],
+            z[i],
+            out_strength[out_strength.label == i],
+            in_strength[in_strength.label == i])
+    return exp_edges
+
+
+@jit(nopython=True)
+def stripe_pij(p_f, z, out_label, out_vals, in_label, in_vals, per_label):
     """ Computes the probability of observing a link between two nodes (i,j)
     over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
     """
-    p = 0
+    p = 1
     i = 0
     j = 0
     while (i < len(out_label) and (j < len(in_label))):
         out_l = out_label[i]
         in_l = in_label[j]
         if out_l == in_l:
-            p *= 1 - p_f(z[out_l], out_vals[i], in_vals[j])
+            if per_label:
+                p *= 1 - p_f(z[out_l], out_vals[i], in_vals[j])
+            else:
+                p *= 1 - p_f(z[0], out_vals[i], in_vals[j])
             i += 1
             j += 1
         elif out_l < in_l:
@@ -645,7 +730,7 @@ def stripe_pij(p_f, z, out_label, out_vals, in_label, in_vals):
 
 @jit(nopython=True)
 def stripe_exp_degree(p_f, z, s_out_i, s_out_j, s_out_w,
-                      s_in_i, s_in_j, s_in_w, N):
+                      s_in_i, s_in_j, s_in_w, N, per_label):
     """ Calculate the expected degree for the stripe model.
 
     It is assumed that the arguments passed are the three arrays of two sparse
@@ -702,7 +787,8 @@ def stripe_exp_degree(p_f, z, s_out_i, s_out_j, s_out_w,
                 continue
 
             # Get pij
-            pij = stripe_pij(p_f, z, out_label, out_vals, in_label, in_vals)
+            pij = stripe_pij(p_f, z, out_label, out_vals, in_label, in_vals,
+                             per_label)
             out_degree[out_row] += pij
             in_degree[in_row] += pij
 

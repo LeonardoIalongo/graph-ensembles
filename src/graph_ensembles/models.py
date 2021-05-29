@@ -604,9 +604,6 @@ class FitnessModel(GraphEnsemble):
             self.z = sol.x
             self.solver_output = sol
 
-        if verbose:
-            print('Converged: ', sol.converged)
-
         if not sol.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
@@ -899,29 +896,37 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Ensure that number of constraint matches number of labels
         if hasattr(self, 'num_edges'):
-            if isinstance(self.num_edges, np.ndarray):
-                msg = ('Number of edges array does not have the number of'
-                       ' elements equal to the number of labels.')
+            if not isinstance(self.num_edges, np.ndarray):
+                self.num_edges = np.array([self.num_edges])
+
+            msg = ('Number of edges must be a number or a numpy array of '
+                   'length equal to the number of labels.')
+            if len(self.num_edges) > 1:
+                self.per_label = True
                 assert len(self.num_edges) == self.num_labels, msg
             else:
-                if not isinstance(self.num_edges, (int, float)):
-                    msg = ('Number of edges must be a number or a numpy array '
-                           'of length equal to the number of labels.')
-                    raise ValueError(msg)
+                self.per_label = False
+
+            if not np.issubdtype(self.num_edges.dtype, np.number):
+                raise ValueError(msg)
 
             if np.any(self.num_edges < 0):
                 msg = 'Number of edges must contain only positive values.'
                 raise ValueError(msg)
         else:
-            if isinstance(self.z, np.ndarray):
-                msg = ('The z array does not have the number of'
-                       ' elements equal to the number of labels.')
+            if not isinstance(self.z, np.ndarray):
+                self.z = np.array([self.z])
+
+            msg = ('z must be a number or an array of length equal to '
+                   'the number of labels.')
+            if len(self.z) > 1:
+                self.per_label = True
                 assert len(self.z) == self.num_labels, msg
             else:
-                if not isinstance(self.z, (int, float)):
-                    msg = ('z must be a number or an array of length equal to '
-                           'the number of labels.')
-                    raise ValueError(msg)
+                self.per_label = False
+                
+            if not np.issubdtype(self.z.dtype, np.number):
+                raise ValueError(msg)
 
             if np.any(self.z < 0):
                 msg = 'z must contain only positive values.'
@@ -958,22 +963,10 @@ class StripeFitnessModel(GraphEnsemble):
 
         # If z is set computed expected number of edges per label
         if hasattr(self, 'z'):
-            if min_degree:
-                if hasattr(self, 'alpha'):
-                    self.num_edges = mt.stripe_exp_edges_alpha(
-                        self.prob_fun,
-                        self.alpha,
-                        self.z,
-                        self.out_strength,
-                        self.in_strength,
-                        self.num_labels)
+            if self.per_label:
+                self.num_edges = self.expected_num_edges_label()
             else:
-                self.num_edges = mt.stripe_exp_edges(
-                    self.prob_fun,
-                    self.z,
-                    self.out_strength,
-                    self.in_strength,
-                    self.num_labels)
+                self.num_edges = self.expected_num_edges()
 
     def fit(self, z0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
             verbose=False):
@@ -1107,9 +1100,58 @@ class StripeFitnessModel(GraphEnsemble):
     def expected_num_edges(self):
         """ Compute the expected number of edges (per label).
         """
+        if not hasattr(self, 'exp_num_edges'):
+            if not hasattr(self, 'z'):
+                raise Exception('Model must be fitted before hand.')
+            else:
+                # Convert to sparse matrices
+                s_out = lib.to_sparse(self.out_strength,
+                                      (self.num_vertices, self.num_labels),
+                                      i_col='id', j_col='label',
+                                      data_col='value', kind='csr')
+                s_in = lib.to_sparse(self.in_strength,
+                                     (self.num_vertices, self.num_labels),
+                                     i_col='id', j_col='label',
+                                     data_col='value', kind='csr')
+
+                if not s_out.has_sorted_indices:
+                    s_out.sort_indices()
+                if not s_in.has_sorted_indices:
+                    s_in.sort_indices()
+
+                # Extract arrays from sparse matrices
+                s_out_i = s_out.indptr
+                s_out_j = s_out.indices
+                s_out_w = s_out.data
+                s_in_i = s_in.indptr
+                s_in_j = s_in.indices
+                s_in_w = s_in.data
+
+                # Compute expected value
+                if self.min_degree:
+                    self.exp_num_edges = mt.stripe_exp_edges_alpha(
+                        self.prob_fun,
+                        self.alpha,
+                        self.z,
+                        s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w,
+                        self.per_label)
+                else:
+                    self.exp_num_edges = mt.stripe_exp_edges(
+                        self.prob_fun,
+                        self.z,
+                        s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w,
+                        self.per_label)
+
+        return self.exp_num_edges
+        
+    def expected_num_edges_label(self):
+        """ Compute the expected number of edges (per label).
+        """
         if hasattr(self, 'z'):
             if self.min_degree:
-                return mt.stripe_exp_edges_alpha(
+                return mt.stripe_exp_edges_label_alpha(
                     self.prob_fun,
                     self.alpha,
                     self.z,
@@ -1117,7 +1159,7 @@ class StripeFitnessModel(GraphEnsemble):
                     self.in_strength,
                     self.num_labels)
             else:
-                return mt.stripe_exp_edges(
+                return mt.stripe_exp_edges_label(
                     self.prob_fun,
                     self.z,
                     self.out_strength,
@@ -1159,11 +1201,11 @@ class StripeFitnessModel(GraphEnsemble):
                 self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
                     lambda d, x_i, x_j: self.prob_fun(d, x_i, x_j, self.alpha),
                     self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                    self.num_vertices)
+                    self.num_vertices, self.per_label)
             else:
                 self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
                     self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
-                    s_in_i, s_in_j, s_in_w, self.num_vertices)
+                    s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
 
         return self.exp_out_degree
 
@@ -1200,7 +1242,7 @@ class StripeFitnessModel(GraphEnsemble):
                 [('label', self.label_dtype),
                  ('id', self.id_dtype),
                  ('value', 'f8')]
-                )
+                ).reshape((d_out.shape[0],))
 
             d_in = np.array(res[1])
             self.exp_in_degree_label = d_in.view(
@@ -1212,7 +1254,7 @@ class StripeFitnessModel(GraphEnsemble):
                 [('label', self.label_dtype),
                  ('id', self.id_dtype),
                  ('value', 'f8')]
-                )
+                ).reshape((d_in.shape[0],))
 
         return self.exp_out_degree_label
 
