@@ -88,7 +88,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     norm = np.abs(f)
     diff = 1
 
-    if verbose:
+    if verbose > 1:
         print("x0 = {}".format(x))
         print("|f(x0)| = {}".format(norm))
 
@@ -126,7 +126,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
 
         # step update
         n_iter += 1
-        if verbose:
+        if verbose > 1:
             print("    Iteration {}".format(n_iter))
             print("    fun = {}".format(f))
             print("    fun_prime = {}".format(f_p))
@@ -136,8 +136,14 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             print("    diff = {}".format(diff))
             print(' ')
 
-    if verbose:
+    if verbose > 1:
         print(' ')
+
+    if verbose:
+        print('Converged: ', norm <= tol)
+        print('Final distance from root: ', norm)
+        print('Last relative change in x: ', diff)
+        print('Iterations: ', n_iter)
 
     if full_return:
         return Solution(x, n_iter, max_iter, 'newton',
@@ -179,7 +185,7 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     f = fun(x)
     diff = 1
 
-    if verbose:
+    if verbose > 1:
         print("x0 = {}".format(x))
 
     if full_return:
@@ -208,15 +214,20 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
 
         # step update
         n_iter += 1
-        if verbose:
+        if verbose > 1:
             print("    Iteration {}".format(n_iter))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
             print("    diff = {}".format(diff))
             print(' ')
 
-    if verbose:
+    if verbose > 1:
         print(' ')
+
+    if verbose:
+        print('Converged: ', diff <= xtol)
+        print('Last relative change in x: ', diff)
+        print('Iterations: ', n_iter)
 
     if full_return:
         return Solution(x, n_iter, max_iter, 'fixed-point',
