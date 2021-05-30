@@ -92,10 +92,10 @@ class TestFitnessModelInit():
         model = ge.FitnessModel(num_vertices=num_vertices,
                                 out_strength=out_strength,
                                 in_strength=in_strength,
-                                z=z)
+                                param=z)
         assert np.all(model.out_strength == out_strength)
         assert np.all(model.in_strength == in_strength)
-        assert np.all(model.z == z)
+        assert np.all(model.param == z)
         assert np.all(model.num_vertices == num_vertices)
         np.testing.assert_allclose(model.num_edges,
                                    num_edges,
@@ -237,19 +237,35 @@ class TestFitnessModelInit():
     def test_wrong_z(self):
         """ Check that the passed z adheres to format.
         """
-        msg = 'z must be a number.'
+        msg = 'The FitnessModel requires one parameter.'
         with pytest.raises(ValueError, match=msg):
             ge.FitnessModel(num_vertices=num_vertices,
                             out_strength=out_strength,
                             in_strength=in_strength,
-                            z=np.array([0, 1]))
+                            param=np.array([0, 1]))
 
-        msg = 'z must be a positive number.'
+        msg = ('The FitnessModel with min degree correction requires two '
+               'parameters.')
         with pytest.raises(ValueError, match=msg):
             ge.FitnessModel(num_vertices=num_vertices,
                             out_strength=out_strength,
                             in_strength=in_strength,
-                            z=-1)
+                            min_degree=True,
+                            param=np.array([0]))
+
+        msg = 'Parameters must be numeric.'
+        with pytest.raises(ValueError, match=msg):
+            ge.FitnessModel(num_vertices=num_vertices,
+                            out_strength=out_strength,
+                            in_strength=in_strength,
+                            param='0')
+
+        msg = 'Parameters must be positive.'
+        with pytest.raises(ValueError, match=msg):
+            ge.FitnessModel(num_vertices=num_vertices,
+                            out_strength=out_strength,
+                            in_strength=in_strength,
+                            param=-1)
 
 
 class TestFitnessModelFit():
@@ -261,7 +277,7 @@ class TestFitnessModelFit():
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-5, rtol=0)
-        np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-6)
+        np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
 
     def test_solver_invariant(self):
         """ Check that the newton solver is fitting the z parameters
@@ -271,7 +287,7 @@ class TestFitnessModelFit():
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-5, rtol=0)
-        np.testing.assert_allclose(z_inv, model.z, atol=0, rtol=1e-6)
+        np.testing.assert_allclose(z_inv, model.param, atol=0, rtol=1e-6)
 
     def test_solver_fixed_point(self):
         """ Check that the fixed-point solver is fitting the z parameters
@@ -282,7 +298,7 @@ class TestFitnessModelFit():
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-4, rtol=0)
-        np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-4)
+        np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-4)
 
     # def test_solver_min_degree(self):
     #     """ Check that the min_degree solver converges.
@@ -301,23 +317,33 @@ class TestFitnessModelFit():
         """ Check that it works with a given initial condition.
         """
         model = ge.FitnessModel(g)
-        model.fit(z0=1e-14)
+        model.fit(x0=1e-14)
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-5, rtol=0)
-        np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-6)
+        np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
 
     def test_solver_with_wrong_init(self):
         """ Check that it raises an error with a negative initial condition.
         """
         model = ge.FitnessModel(g)
-        msg = "z0 must be positive."
+        msg = "x0 must be positive."
         with pytest.raises(ValueError, match=msg):
-            model.fit(z0=-1)
+            model.fit(x0=-1)
 
-        msg = 'z0 must be a number.'
+        msg = 'The FitnessModel requires one parameter.'
         with pytest.raises(ValueError, match=msg):
-            model.fit(z0=np.array([0, 1]))
+            model.fit(x0=np.array([0, 1]))
+
+        msg = ('The FitnessModel with min degree correction requires two '
+               'parameters.')
+        model = ge.FitnessModel(g, min_degree=True)
+        with pytest.raises(ValueError, match=msg):
+            model.fit(x0=np.array([0]))
+
+        msg = 'x0 must be numeric.'
+        with pytest.raises(ValueError, match=msg):
+            model.fit(x0='hi')
 
     def test_wrong_method(self):
         """ Check that wrong methods names return an error.
@@ -336,11 +362,11 @@ class TestFitnessModelFit():
         with pytest.raises(Exception, match=msg):
             model.fit(method="fixed-point", max_iter=100, xtol=1e-5)
 
-        model = ge.FitnessModel(g, min_degree=True)
-        msg = ('Method not recognised for solver with min degree '
-               'constraint, using default SLSQP.')
-        with pytest.warns(UserWarning, match=msg):
-            model.fit(method="newton")
+        # model = ge.FitnessModel(g, min_degree=True)
+        # msg = ('Method not recognised for solver with min degree '
+        #        'constraint, using default SLSQP.')
+        # with pytest.warns(UserWarning, match=msg):
+        #     model.fit(method="newton")
 
         msg = 'Cannot constrain min degree in scale invariant model.'
         with pytest.raises(Exception, match=msg):
@@ -353,7 +379,7 @@ class TestFitnessModelMeasures():
         model = ge.FitnessModel(num_vertices=num_vertices,
                                 out_strength=out_strength,
                                 in_strength=in_strength,
-                                z=z)
+                                param=z)
         n_e = model.expected_num_edges()
         np.testing.assert_allclose(n_e,
                                    num_edges,
@@ -364,7 +390,7 @@ class TestFitnessModelMeasures():
         model = ge.FitnessModel(num_vertices=num_vertices,
                                 out_strength=out_strength,
                                 in_strength=in_strength,
-                                z=z)
+                                param=z)
         d_out = model.expected_out_degree()
         np.testing.assert_allclose(
             d_out, np.array([1.031808, 0.430388, 1.974889, 1.562915]),
@@ -376,7 +402,7 @@ class TestFitnessModelMeasures():
         model = ge.FitnessModel(num_vertices=num_vertices,
                                 out_strength=out_strength,
                                 in_strength=in_strength,
-                                z=z)
+                                param=z)
         d_in = model.expected_in_degree()
         np.testing.assert_allclose(
             d_in, np.array([1.935262, 2.977007, 0.087732, 0]), rtol=1e-5)
@@ -390,7 +416,7 @@ class TestFitnessModelSample():
         model = ge.FitnessModel(num_vertices=num_vertices,
                                 out_strength=out_strength,
                                 in_strength=in_strength,
-                                z=z)
+                                param=z)
 
         samples = 10000
         s_n_e = np.empty(samples)

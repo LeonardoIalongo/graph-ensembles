@@ -51,7 +51,7 @@ num_vertices = 4
 num_edges = 5
 num_edges_label = np.array([3, 1, 1, 1])
 num_labels = 4
-z = 1e-7
+z = 8.99e-10
 z_label = np.array([1.826524e-09, 2.477713e-10, 2.674918e-07, 8.191937e-07])
 z_inv = 1e-1
 z_inv_lbl = np.array([7.749510e-10, 2.268431e-14, 2.448980e-11, 7.500000e-11])
@@ -601,17 +601,17 @@ class TestStripeFitnessModelFit():
 
 
 class TestFitnessModelMeasures():
-    # def test_exp_n_edges_single_z(self):
-    #     """ Check expected edges is correct. """
-    #     model = ge.StripeFitnessModel(num_vertices=num_vertices,
-    #                                   num_labels=num_labels,
-    #                                   out_strength=out_strength,
-    #                                   in_strength=in_strength,
-    #                                   z=z)
-    #     n_e = model.expected_num_edges()
-    #     np.testing.assert_allclose(n_e,
-    #                                num_edges,
-    #                                rtol=1e-5)
+    def test_exp_n_edges_single_z(self):
+        """ Check expected edges is correct. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      z=z)
+        n_e = model.expected_num_edges()
+        np.testing.assert_allclose(n_e,
+                                   num_edges,
+                                   rtol=1e-5)
 
     def test_exp_n_edges_multi_z(self):
         """ Check expected edges is correct. """
@@ -625,17 +625,17 @@ class TestFitnessModelMeasures():
                                    5.153923,
                                    rtol=1e-5)
 
-    # def test_exp_n_edges_label_single_z(self):
-    #     """ Check expected edges is correct. """
-    #     model = ge.StripeFitnessModel(num_vertices=num_vertices,
-    #                                   num_labels=num_labels,
-    #                                   out_strength=out_strength,
-    #                                   in_strength=in_strength,
-    #                                   z=z)
-    #     n_e = model.expected_num_edges_label()
-    #     np.testing.assert_allclose(n_e,
-    #                                num_edges_label,
-    #                                rtol=1e-5)
+    def test_exp_n_edges_label_single_z(self):
+        """ Check expected edges is correct. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      z=z)
+        n_e = model.expected_num_edges_label()
+        np.testing.assert_allclose(n_e,
+                                   num_edges_label,
+                                   rtol=1e-5)
 
     def test_exp_n_edges_label_multi_z(self):
         """ Check expected edges is correct. """

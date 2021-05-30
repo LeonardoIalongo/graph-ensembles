@@ -86,7 +86,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     x = x0
     f, f_p = fun(x)
     norm = np.abs(f)
-    diff = 1
+    diff = np.array([1])
 
     if verbose > 1:
         print("x0 = {}".format(x))
@@ -96,7 +96,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
         f_seq = [f]
         x_seq = [x]
         norm_seq = [norm]
-        diff_seq = [diff]
+        diff_seq = diff
 
     while (norm > tol and n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -122,7 +122,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             f_seq.append(f)
             x_seq.append(x)
             norm_seq.append(norm)
-            diff_seq.append(diff)
+            diff_seq = np.append(diff_seq, diff)
 
         # step update
         n_iter += 1
@@ -183,14 +183,14 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     n_iter = 0
     x = x0
     f = fun(x)
-    diff = 1
+    diff = np.array([1])
 
     if verbose > 1:
         print("x0 = {}".format(x))
 
     if full_return:
         x_seq = [x]
-        diff_seq = [diff]
+        diff_seq = diff
 
     while (n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -210,7 +210,7 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
 
         if full_return:
             x_seq.append(x)
-            diff_seq.append(diff)
+            diff_seq = np.append(diff_seq, diff)
 
         # step update
         n_iter += 1

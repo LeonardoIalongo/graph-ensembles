@@ -370,8 +370,11 @@ class FitnessModel(GraphEnsemble):
                 warnings.warn(msg, UserWarning)
 
         # Get options from keyword arguments
+        self.scale_invariant = scale_invariant
+        self.min_degree = min_degree
+
         allowed_arguments = ['num_vertices', 'num_edges', 'out_strength',
-                             'in_strength', 'z', 'alpha', 'discrete_weights']
+                             'in_strength', 'param', 'discrete_weights']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -399,7 +402,7 @@ class FitnessModel(GraphEnsemble):
             raise ValueError('in_strength not set.')
 
         if not (hasattr(self, 'num_edges') or
-                hasattr(self, 'z')):
+                hasattr(self, 'param')):
             raise ValueError('Either num_edges or z must be set.')
 
         if not hasattr(self, 'id_dtype'):
@@ -433,14 +436,23 @@ class FitnessModel(GraphEnsemble):
                 raise ValueError(
                     'Number of edges must be a positive number.')
         else:
-            try:
-                self.z = float(self.z)
-            except Exception:
-                raise ValueError('z must be a number.')
+            if not isinstance(self.param, np.ndarray):
+                self.param = np.array([self.param])
 
-            if self.z < 0:
-                raise ValueError(
-                    'z must be a positive number.')
+            if self.min_degree:
+                if not (len(self.param) == 2):
+                    raise ValueError('The FitnessModel with min degree '
+                                     'correction requires two parameters.')
+            else:
+                if not (len(self.param) == 1):
+                    raise ValueError(
+                        'The FitnessModel requires one parameter.')
+            
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError('Parameters must be numeric.')
+
+            if np.any(self.param < 0):
+                raise ValueError('Parameters must be positive.')
 
         # Check that sum of in and out strengths are equal
         msg = 'Sums of strengths do not match.'
@@ -449,8 +461,6 @@ class FitnessModel(GraphEnsemble):
                            atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
-        self.scale_invariant = scale_invariant
-        self.min_degree = min_degree
         if scale_invariant:
             if min_degree:
                 msg = 'Cannot constrain min degree in scale invariant model.'
@@ -467,30 +477,21 @@ class FitnessModel(GraphEnsemble):
                 self.jac_fun = mt.jac_fitness
 
         # If z is set computed expected number of edges per label
-        if hasattr(self, 'z'):
-            if min_degree:
-                if hasattr(self, 'alpha'):
-                    self.num_edges = mt.fit_exp_edges_alpha(
-                        self.prob_fun,
-                        self.alpha,
-                        self.z,
-                        self.out_strength,
-                        self.in_strength)
-            else:
-                self.num_edges = mt.fit_exp_edges(
-                    self.prob_fun,
-                    self.z,
-                    self.out_strength,
-                    self.in_strength)
+        if hasattr(self, 'param'):
+            self.num_edges = mt.fit_exp_edges(
+                self.prob_fun,
+                self.param,
+                self.out_strength,
+                self.in_strength)
 
-    def fit(self, z0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
+    def fit(self, x0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
             verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
         ----------
-        z0: float
-            optional initial conditions for z parameters
+        x0: float
+            optional initial conditions for parameters
         method: 'newton' or 'fixed-point'
             selects which method to use for the solver
         tol : float
@@ -515,16 +516,32 @@ class FitnessModel(GraphEnsemble):
             raise Exception('Fixed point solver not supported for scale '
                             'invariant functional.')
 
-        if z0 is None:
-            z0 = np.float64(0.0)
+        if x0 is None:
+            if self.min_degree:
+                x0 = np.array([0, 1], dtype=np.float64)
+            else:
+                x0 = np.array([0], dtype=np.float64)
         else:
-            try:
-                z0 = float(z0)
-            except Exception:
-                raise ValueError('z0 must be a number.')
+            if not isinstance(x0, np.ndarray):
+                try:
+                    x0 = np.array([x for x in x0])
+                except Exception:
+                    x0 = np.array([x0])
 
-            if z0 < 0:
-                raise ValueError('z0 must be positive.')
+            if self.min_degree:
+                if not (len(x0) == 2):
+                    raise ValueError('The FitnessModel with min degree '
+                                     'correction requires two parameters.')
+            else:
+                if not (len(x0) == 1):
+                    raise ValueError(
+                        'The FitnessModel requires one parameter.')
+
+            if not np.issubdtype(x0.dtype, np.number):
+                raise ValueError('x0 must be numeric.')
+
+            if np.any(x0 < 0):
+                raise ValueError('x0 must be positive.')
 
         if self.min_degree:
             # Find min degree node
@@ -556,7 +573,7 @@ class FitnessModel(GraphEnsemble):
 
             # Solve
             sol = mt.alpha_solver(
-                x0=np.array([z0, 1.0], dtype=np.float64),
+                x0=x0,
                 fun=lambda x: mt.fit_eq_constr_alpha(
                     x, self.prob_fun, self.out_strength,
                     self.in_strength, self.num_edges),
@@ -572,7 +589,7 @@ class FitnessModel(GraphEnsemble):
 
         elif method == "newton":
             sol = mt.newton_solver(
-                x0=z0,
+                x0=x0,
                 fun=lambda x: mt.fit_f_jac(
                     self.prob_fun, self.jac_fun, x,
                     self.out_strength, self.in_strength, self.num_edges),
@@ -584,7 +601,7 @@ class FitnessModel(GraphEnsemble):
 
         elif method == "fixed-point":
             sol = mt.fixed_point_solver(
-                x0=z0,
+                x0=x0,
                 fun=lambda x: mt.fit_iterative(
                     x, self.out_strength, self.in_strength, self.num_edges),
                 xtol=xtol,
@@ -596,13 +613,8 @@ class FitnessModel(GraphEnsemble):
             raise ValueError("The selected method is not valid.")
 
         # Update results and check convergence
-        if self.min_degree:
-            self.z = sol.x[0]
-            self.alpha = sol.x[1]
-            self.solver_output = sol
-        else:
-            self.z = sol.x
-            self.solver_output = sol
+        self.param = sol.x
+        self.solver_output = sol
 
         if not sol.converged:
             warnings.warn('Fit did not converge', UserWarning)
@@ -610,18 +622,10 @@ class FitnessModel(GraphEnsemble):
     def expected_num_edges(self):
         """ Compute the expected number of edges (per label).
         """
-        if hasattr(self, 'z'):
-            if self.min_degree:
-                return mt.fit_exp_edges_alpha(
+        if hasattr(self, 'param'):
+            return mt.fit_exp_edges(
                     self.prob_fun,
-                    self.alpha,
-                    self.z,
-                    self.out_strength,
-                    self.in_strength)
-            else:
-                return mt.fit_exp_edges(
-                    self.prob_fun,
-                    self.z,
+                    self.param,
                     self.out_strength,
                     self.in_strength)
         else:
@@ -630,20 +634,12 @@ class FitnessModel(GraphEnsemble):
     def expected_out_degree(self):
         """ Compute the expected out degree for a given z.
         """
-        if not hasattr(self, 'z'):
+        if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
-        if self.min_degree and not hasattr(self, 'alpha'):
-            raise Exception('Ensemble has to be fitted before sampling.')
-
-        if self.min_degree:
-            self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree_alpha(
-                self.prob_fun, self.z, self.alpha, self.out_strength,
-                self.in_strength)
-        else:
-            self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
-                self.prob_fun, self.z, self.out_strength,
-                self.in_strength)
+        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
+            self.prob_fun, self.param, self.out_strength,
+            self.in_strength)
 
         return self.exp_out_degree
 
@@ -658,10 +654,7 @@ class FitnessModel(GraphEnsemble):
     def sample(self):
         """ Return a Graph sampled from the ensemble.
         """
-        if not hasattr(self, 'z'):
-            raise Exception('Ensemble has to be fitted before sampling.')
-
-        if self.min_degree and not hasattr(self, 'alpha'):
+        if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
         # Generate uninitialised graph object
@@ -677,13 +670,8 @@ class FitnessModel(GraphEnsemble):
             g.id_dict[x] = x
 
         # Sample edges and extract properties
-        if self.min_degree:
-            e = mt.fit_sample_alpha(
-                self.prob_fun, self.z, self.alpha, self.out_strength,
-                self.in_strength)
-        else:
-            e = mt.fit_sample(
-                self.prob_fun, self.z, self.out_strength, self.in_strength)
+        e = mt.fit_sample(
+                self.prob_fun, self.param, self.out_strength, self.in_strength)
 
         e = np.array(e,
                      dtype=[('src', 'f8'),
