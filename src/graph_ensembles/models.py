@@ -476,7 +476,7 @@ class FitnessModel(GraphEnsemble):
                 self.prob_fun = mt.p_fitness
                 self.jac_fun = mt.jac_fitness
 
-        # If z is set computed expected number of edges per label
+        # If param are set computed expected number of edges per label
         if hasattr(self, 'param'):
             self.num_edges = mt.fit_exp_edges(
                 self.prob_fun,
@@ -622,24 +622,28 @@ class FitnessModel(GraphEnsemble):
     def expected_num_edges(self):
         """ Compute the expected number of edges (per label).
         """
-        if hasattr(self, 'param'):
-            return mt.fit_exp_edges(
+        if not hasattr(self, 'exp_num_edges'):
+            if not hasattr(self, 'param'):
+                raise Exception('Model must be fitted before hand.')
+            
+            self.exp_num_edges = mt.fit_exp_edges(
                     self.prob_fun,
                     self.param,
                     self.out_strength,
                     self.in_strength)
-        else:
-            raise Exception('Model must be fitted before hand.')
+
+        return self.exp_num_edges
 
     def expected_out_degree(self):
         """ Compute the expected out degree for a given z.
         """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted before sampling.')
+        if not hasattr(self, 'exp_out_degree'):
+            if not hasattr(self, 'param'):
+                raise Exception('Ensemble has to be fitted before sampling.')
 
-        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
-            self.prob_fun, self.param, self.out_strength,
-            self.in_strength)
+            self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
+                self.prob_fun, self.param, self.out_strength,
+                self.in_strength)
 
         return self.exp_out_degree
 
@@ -710,8 +714,8 @@ class StripeFitnessModel(GraphEnsemble):
         the total number of nodes
     num_labels: int
         the total number of labels by which the vector strengths are computed
-    z: float or np.ndarray
-        the density parameter (or vector of)
+    param: np.ndarray
+        the parameters vector
     """
 
     def __init__(self, *args, per_label=True, scale_invariant=False,
@@ -733,12 +737,11 @@ class StripeFitnessModel(GraphEnsemble):
         scale_invariant flag to True. This changes the functional used for
         the computation of the link probability but nothing else.
 
-        TO DO: add functionality for single z
-        (Note that the number of edges given implicitly determines if the
+        Note that the number of edges given implicitly determines if the
         quantity preserved is the total number of edges or the number of edges
         per label. Pass only one integer for the first and a numpy array for
         the second. Note that if an array is passed then the index must be the
-        same as the one in the strength sequence.)
+        same as the one in the strength sequence.
 
         """
 
@@ -766,8 +769,11 @@ class StripeFitnessModel(GraphEnsemble):
                 warnings.warn(msg, UserWarning)
 
         # Get options from keyword arguments
+        self.scale_invariant = scale_invariant
+        self.min_degree = min_degree
+
         allowed_arguments = ['num_vertices', 'num_edges', 'num_labels',
-                             'out_strength', 'in_strength', 'z', 'alpha',
+                             'out_strength', 'in_strength', 'param',
                              'discrete_weights']
         for name in kwargs:
             if name not in allowed_arguments:
@@ -809,7 +815,7 @@ class StripeFitnessModel(GraphEnsemble):
             raise ValueError('in_strength not set.')
 
         if not (hasattr(self, 'num_edges') or
-                hasattr(self, 'z')):
+                hasattr(self, 'param')):
             raise ValueError('Either num_edges or z must be set.')
 
         if not hasattr(self, 'id_dtype'):
@@ -902,23 +908,47 @@ class StripeFitnessModel(GraphEnsemble):
                 msg = 'Number of edges must contain only positive values.'
                 raise ValueError(msg)
         else:
-            if not isinstance(self.z, np.ndarray):
-                self.z = np.array([self.z])
+            if not isinstance(self.param, np.ndarray):
+                try:
+                    self.param = np.array([p for p in self.param])
+                except Exception:
+                    self.param = np.array([self.param])
 
-            msg = ('z must be a number or an array of length equal to '
-                   'the number of labels.')
-            if len(self.z) > 1:
-                self.per_label = True
-                assert len(self.z) == self.num_labels, msg
+            if self.min_degree:
+                p_shape = self.param.shape
+                msg = ('StripeFitnessModel with min degree correction requires'
+                       ' two element or two rows with number of columns '
+                       'equal to the number of labels.')
+                if p_shape[0] != 2:
+                    raise ValueError(msg)
+
+                if (len(p_shape) == 2):
+                    if p_shape[1] == self.num_labels:
+                        self.per_label = True
+                    elif p_shape[1] == 1:
+                        self.per_label = False
+                        self.param = self.param.reshape((p_shape[0],))
+                    else:
+                        raise ValueError(msg)
             else:
-                self.per_label = False
-                
-            if not np.issubdtype(self.z.dtype, np.number):
-                raise ValueError(msg)
+                msg = ('StripeFitnessModel requires an array of parameters '
+                       'with number of elements equal to the number of labels '
+                       'or to one.')
+                if self.param.ndim != 1:
+                    raise ValueError(msg)
 
-            if np.any(self.z < 0):
-                msg = 'z must contain only positive values.'
-                raise ValueError(msg)
+                if len(self.param) == 1:
+                    self.per_label = False
+                elif len(self.param) == self.num_labels:
+                    self.per_label = True
+                else:
+                    raise ValueError(msg)
+
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError('Parameters must be numeric.')
+
+            if np.any(self.param < 0):
+                raise ValueError('Parameters must be positive.')
 
         # Check that sum of in and out strengths are equal per label
         tot_out = np.zeros((self.num_labels))
@@ -932,8 +962,6 @@ class StripeFitnessModel(GraphEnsemble):
         assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
-        self.scale_invariant = scale_invariant
-        self.min_degree = min_degree
         if scale_invariant:
             if min_degree:
                 msg = 'Cannot constrain min degree in scale invariant model.'
@@ -949,21 +977,21 @@ class StripeFitnessModel(GraphEnsemble):
                 self.prob_fun = mt.p_fitness
                 self.jac_fun = mt.jac_fitness
 
-        # If z is set computed expected number of edges per label
-        if hasattr(self, 'z'):
+        # If param are set computed expected number of edges per label
+        if hasattr(self, 'param'):
             if self.per_label:
                 self.num_edges = self.expected_num_edges_label()
             else:
                 self.num_edges = self.expected_num_edges()
 
-    def fit(self, z0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
+    def fit(self, x0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
             verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
         ----------
-        z0: float or np.ndarray
-            optional initial conditions for z parameters
+        x0: np.ndarray
+            optional initial conditions for parameters
         method: 'newton' or 'fixed-point'
             selects which method to use for the solver
         tol : float
@@ -1089,78 +1117,66 @@ class StripeFitnessModel(GraphEnsemble):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'exp_num_edges'):
-            if not hasattr(self, 'z'):
+            if not hasattr(self, 'param'):
                 raise Exception('Model must be fitted before hand.')
-            else:
-                # Convert to sparse matrices
-                s_out = lib.to_sparse(self.out_strength,
-                                      (self.num_vertices, self.num_labels),
-                                      i_col='id', j_col='label',
-                                      data_col='value', kind='csr')
-                s_in = lib.to_sparse(self.in_strength,
-                                     (self.num_vertices, self.num_labels),
-                                     i_col='id', j_col='label',
-                                     data_col='value', kind='csr')
+            
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_labels),
+                                  i_col='id', j_col='label',
+                                  data_col='value', kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_labels),
+                                 i_col='id', j_col='label',
+                                 data_col='value', kind='csr')
 
-                if not s_out.has_sorted_indices:
-                    s_out.sort_indices()
-                if not s_in.has_sorted_indices:
-                    s_in.sort_indices()
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
 
-                # Extract arrays from sparse matrices
-                s_out_i = s_out.indptr
-                s_out_j = s_out.indices
-                s_out_w = s_out.data
-                s_in_i = s_in.indptr
-                s_in_j = s_in.indices
-                s_in_w = s_in.data
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indptr
+            s_in_j = s_in.indices
+            s_in_w = s_in.data
 
-                # Compute expected value
-                if self.min_degree:
-                    self.exp_num_edges = mt.stripe_exp_edges_alpha(
-                        self.prob_fun,
-                        self.alpha,
-                        self.z,
-                        s_out_i, s_out_j, s_out_w,
-                        s_in_i, s_in_j, s_in_w,
-                        self.per_label)
-                else:
-                    self.exp_num_edges = mt.stripe_exp_edges(
-                        self.prob_fun,
-                        self.z,
-                        s_out_i, s_out_j, s_out_w,
-                        s_in_i, s_in_j, s_in_w,
-                        self.per_label)
+            # Compute expected value
+            self.exp_num_edges = mt.stripe_exp_edges(
+                    self.prob_fun,
+                    self.param,
+                    s_out_i, s_out_j, s_out_w,
+                    s_in_i, s_in_j, s_in_w,
+                    self.per_label)
 
         return self.exp_num_edges
         
     def expected_num_edges_label(self):
         """ Compute the expected number of edges (per label).
         """
-        if hasattr(self, 'z'):
-            if self.min_degree:
-                return mt.stripe_exp_edges_label_alpha(
-                    self.prob_fun,
-                    self.alpha,
-                    self.z,
-                    self.out_strength,
-                    self.in_strength,
-                    self.num_labels)
-            else:
-                return mt.stripe_exp_edges_label(
-                    self.prob_fun,
-                    self.z,
-                    self.out_strength,
-                    self.in_strength,
-                    self.num_labels)
-        else:
-            raise Exception('Model must be fitted before hand.')
+        if not hasattr(self, 'exp_num_edges_label'):
+            if not hasattr(self, 'param'):
+                raise Exception('Model must be fitted before hand.')
 
+            self.exp_num_edges_label = mt.stripe_exp_edges_label(
+                        self.prob_fun,
+                        self.param,
+                        self.out_strength,
+                        self.in_strength,
+                        self.num_labels)
+
+        return self.exp_num_edges_label
+                
     def expected_out_degree(self):
         """ Compute the expected out degree for a given z.
         """
 
         if not hasattr(self, 'exp_out_degree'):
+            if not hasattr(self, 'param'):
+                raise Exception('Model must be fitted before hand.')
+
             # Convert to sparse matrices
             s_out = lib.to_sparse(self.out_strength,
                                   (self.num_vertices, self.num_labels),
@@ -1185,14 +1201,8 @@ class StripeFitnessModel(GraphEnsemble):
             s_in_w = s_in.data
 
             # Get out_degree
-            if self.min_degree:
-                self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
-                    lambda d, x_i, x_j: self.prob_fun(d, x_i, x_j, self.alpha),
-                    self.z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                    self.num_vertices, self.per_label)
-            else:
-                self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
-                    self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
+            self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
+                    self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
                     s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
 
         return self.exp_out_degree
@@ -1210,15 +1220,12 @@ class StripeFitnessModel(GraphEnsemble):
         """
 
         if not hasattr(self, 'exp_out_degree_label'):
-            if self.min_degree:
-                res = mt.stripe_exp_degree_label(
-                    lambda d, x_i, x_j: self.prob_fun(d, x_i, x_j, self.alpha),
-                    self.z, self.out_strength, self.in_strength,
-                    self.num_labels)
-            else:
-                res = mt.stripe_exp_degree_label(
-                    self.prob_fun, self.z, self.out_strength, self.in_strength,
-                    self.num_labels)
+            if not hasattr(self, 'param'):
+                raise Exception('Model must be fitted before hand.')
+
+            res = mt.stripe_exp_degree_label(
+                    self.prob_fun, self.param, self.out_strength,
+                    self.in_strength, self.num_labels)
 
             d_out = np.array(res[0])
             self.exp_out_degree_label = d_out.view(
@@ -1277,13 +1284,8 @@ class StripeFitnessModel(GraphEnsemble):
             g.id_dict[x] = x
 
         # Sample edges and extract properties
-        if self.min_degree:
-            e = mt.stripe_sample_alpha(
-                self.prob_fun, self.alpha, self.z, self.out_strength,
-                self.in_strength, self.num_labels)
-        else:
-            e = mt.stripe_sample(self.prob_fun, self.z, self.out_strength,
-                                 self.in_strength, self.num_labels)
+        e = mt.stripe_sample(self.prob_fun, self.param, self.out_strength,
+                             self.in_strength, self.num_labels)
 
         e = e.view(type=np.recarray,
                    dtype=[('label', 'f8'),
