@@ -1020,23 +1020,69 @@ class StripeFitnessModel(GraphEnsemble):
             raise Exception('Fixed point solver not supported for scale '
                             'invariant functional.')
 
-        if isinstance(self.num_edges, np.ndarray):
-            self.z = np.empty(self.num_labels, dtype=np.float64)
-            self.solver_output = [None]*self.num_labels
+        # Ensure initial conditions x0 are of correct format
+        if x0 is None:
             if self.min_degree:
-                self.alpha = np.empty(self.num_labels, dtype=np.float64)
+                x0 = np.zeros((2, self.num_labels), dtype=np.float64)
+                x0[1, :] = 1
+            else:
+                x0 = np.zeros((1, self.num_labels), dtype=np.float64)
+        else:
+            if not isinstance(x0, np.ndarray):
+                try:
+                    x0 = np.array([x for x in x0])
+                except Exception:
+                    x0 = np.array([x0])
+
+        # Ensure that x0 has two dimensions (row 1: z, row 2: alpha,
+        # each column is a layer, if single z then single column)
+        if x0.ndim < 2:
+            x0 = np.array([x0])
+        elif x0.ndim > 2:
+            raise ValueError('StripeFitnessModel x0 must have '
+                             'two dimensions max.')
+        p_shape = x0.shape
+        if self.min_degree:
+            msg = ('StripeFitnessModel with min degree correction requires'
+                   ' two element or two rows with number of columns '
+                   'equal to the number of labels.')
+            if p_shape[0] != 2:
+                raise ValueError(msg)
+            elif self.per_label:
+                assert p_shape[1] == self.num_labels, msg
+            else:
+                assert p_shape[1] == 1, msg
+        else:
+            msg = ('StripeFitnessModel requires an array of parameters '
+                   'with number of elements equal to the number of labels '
+                   'or to one.')
+            if p_shape[0] != 1:
+                raise ValueError(msg)
+            elif self.per_label:
+                assert p_shape[1] == self.num_labels, msg
+            else:
+                assert p_shape[1] == 1, msg
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('Parameters must be numeric.')
+
+        if np.any(x0 < 0):
+            raise ValueError('Parameters must be positive.')
+
+        # Fit by layer
+        if self.per_label:
+            if self.min_degree:
+                self.param = np.empty((2, self.num_labels), dtype=np.float64)
+            else:
+                self.param = np.empty((1, self.num_labels), dtype=np.float64)
+            
+            self.solver_output = [None]*self.num_labels
+
             for i in range(self.num_labels):
                 s_out = self.out_strength[self.out_strength.label == i]
                 s_in = self.in_strength[self.in_strength.label == i]
                 num_e = self.num_edges[i]
-                if z0 is None:
-                    x0 = np.float64(0.0)
-                else:
-                    if isinstance(z0, np.ndarray):
-                        x0 = z0[i]
-                    else:
-                        raise ValueError('Single z not yet supported.')
-
+                
                 if self.min_degree:
                     # Find min degree node
                     min_out_i = np.argmin(s_out.value)
@@ -1064,7 +1110,7 @@ class StripeFitnessModel(GraphEnsemble):
 
                     # Solve
                     sol = mt.alpha_solver(
-                        x0=np.array([x0, 1.0], dtype=np.float64),
+                        x0=x0[:, i],
                         fun=lambda x: mt.fit_eq_constr_alpha(
                             x, self.prob_fun, s_out, s_in, num_e),
                         jac=lambda x: mt.fit_eq_jac_alpha(
@@ -1078,7 +1124,7 @@ class StripeFitnessModel(GraphEnsemble):
 
                 elif method == "newton":
                     sol = mt.newton_solver(
-                        x0=x0,
+                        x0=x0[:, i],
                         fun=lambda x: mt.layer_f_jac(
                             self.prob_fun, self.jac_fun, x,
                             s_out, s_in, num_e),
@@ -1090,7 +1136,7 @@ class StripeFitnessModel(GraphEnsemble):
 
                 elif method == "fixed-point":
                     sol = mt.fixed_point_solver(
-                        x0=x0,
+                        x0=x0[:, i],
                         fun=lambda x: mt.layer_iterative(
                             x, s_out, s_in, num_e),
                         xtol=xtol,
@@ -1102,18 +1148,14 @@ class StripeFitnessModel(GraphEnsemble):
                     raise ValueError("The selected method is not valid.")
 
                 # Update results and check convergence
-                if self.min_degree:
-                    self.z[i] = sol.x[0]
-                    self.alpha[i] = sol.x[1]
-                    self.solver_output[i] = sol
-                else:
-                    self.z[i] = sol.x
-                    self.solver_output[i] = sol
+                self.param[:, i] = sol.x
+                self.solver_output[i] = sol
 
                 if not sol.converged:
                     msg = 'Fit of layer {} '.format(i) + 'did not converge'
                     warnings.warn(msg, UserWarning)
 
+        # Fit with single parameter
         else:
             raise ValueError('Single z not yet supported.')
 
