@@ -686,7 +686,7 @@ def stripe_pij_f_jac(p_f, jac_f, param, out_label, out_vals,
             j += 1
 
     if np.any(p == 1):
-        return 1, np.inf
+        return 1, 0
     else:
         tmp = np.prod(1 - p)
         pij_jac = tmp*np.sum(p_jac / (1 - p))
