@@ -786,8 +786,11 @@ class LabelGraph(DirectedGraph):
                 i += 1
 
         elif isinstance(edge_label, str):
-            lbl_array = e[edge_label].replace(
-                self.label_dict, inplace=False).to_numpy()
+            lbl_array = np.empty(len(self.e), dtype=self.label_dtype)
+            i = 0
+            for row in e[edge_label]:
+                lbl_array[i] = self.label_dict[row]
+                i += 1
 
         else:
             raise ValueError('edge_label can be either a list or a str.')
