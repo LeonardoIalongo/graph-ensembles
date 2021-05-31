@@ -914,33 +914,37 @@ class StripeFitnessModel(GraphEnsemble):
                 except Exception:
                     self.param = np.array([self.param])
 
+            # Ensure that param has two dimensions (row 1: z, row 2: alpha,
+            # each column is a layer, if single z then single column)
+            if self.param.ndim < 2:
+                self.param = np.array([self.param])
+            elif self.param.ndim > 2:
+                raise ValueError('StripeFitnessModel parameters must have '
+                                 'two dimensions max.')
+
+            p_shape = self.param.shape
             if self.min_degree:
-                p_shape = self.param.shape
                 msg = ('StripeFitnessModel with min degree correction requires'
                        ' two element or two rows with number of columns '
                        'equal to the number of labels.')
                 if p_shape[0] != 2:
                     raise ValueError(msg)
-
-                if (len(p_shape) == 2):
-                    if p_shape[1] == self.num_labels:
-                        self.per_label = True
-                    elif p_shape[1] == 1:
-                        self.per_label = False
-                        self.param = self.param.reshape((p_shape[0],))
-                    else:
-                        raise ValueError(msg)
+                elif p_shape[1] == self.num_labels:
+                    self.per_label = True
+                elif p_shape[1] == 1:
+                    self.per_label = False
+                else:
+                    raise ValueError(msg)
             else:
                 msg = ('StripeFitnessModel requires an array of parameters '
                        'with number of elements equal to the number of labels '
                        'or to one.')
-                if self.param.ndim != 1:
+                if p_shape[0] != 1:
                     raise ValueError(msg)
-
-                if len(self.param) == 1:
-                    self.per_label = False
-                elif len(self.param) == self.num_labels:
+                elif p_shape[1] == self.num_labels:
                     self.per_label = True
+                elif p_shape[1] == 1:
+                    self.per_label = False
                 else:
                     raise ValueError(msg)
 
@@ -1165,7 +1169,8 @@ class StripeFitnessModel(GraphEnsemble):
                         self.param,
                         self.out_strength,
                         self.in_strength,
-                        self.num_labels)
+                        self.num_labels,
+                        self.per_label)
 
         return self.exp_num_edges_label
                 
@@ -1225,7 +1230,7 @@ class StripeFitnessModel(GraphEnsemble):
 
             res = mt.stripe_exp_degree_label(
                     self.prob_fun, self.param, self.out_strength,
-                    self.in_strength, self.num_labels)
+                    self.in_strength, self.num_labels, self.per_label)
 
             d_out = np.array(res[0])
             self.exp_out_degree_label = d_out.view(
@@ -1264,7 +1269,7 @@ class StripeFitnessModel(GraphEnsemble):
     def sample(self):
         """ Return a Graph sampled from the ensemble.
         """
-        if not hasattr(self, 'z'):
+        if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
         if self.min_degree and not hasattr(self, 'alpha'):
@@ -1285,7 +1290,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Sample edges and extract properties
         e = mt.stripe_sample(self.prob_fun, self.param, self.out_strength,
-                             self.in_strength, self.num_labels)
+                             self.in_strength, self.num_labels, self.per_label)
 
         e = e.view(type=np.recarray,
                    dtype=[('label', 'f8'),
