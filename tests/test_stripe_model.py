@@ -51,9 +51,9 @@ num_vertices = 4
 num_edges = 5
 num_edges_label = np.array([3, 1, 1, 1])
 num_labels = 4
-z = 8.99e-10
+z = np.array([8.989062e-10])
 z_label = np.array([1.826524e-09, 2.477713e-10, 2.674918e-07, 8.191937e-07])
-z_inv = 1e-1
+z_inv = np.array([8.989062e-10])
 z_inv_lbl = np.array([7.749510e-10, 2.268431e-14, 2.448980e-11, 7.500000e-11])
 
 
@@ -448,15 +448,15 @@ class TestStripeFitnessModelInit():
 
 
 class TestStripeFitnessModelFit():
-    # def test_solver_newton_single_z(self):
-    #     """ Check that the newton solver is fitting the z parameters
-    #     correctly. """
-    #     model = ge.StripeFitnessModel(g, per_label=False)
-    #     model.fit(method="newton")
-    #     exp_num_edges = model.expected_num_edges()
-    #     np.testing.assert_allclose(num_edges_label, exp_num_edges,
-    #                                atol=1e-5, rtol=0)
-    #     np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-6)
+    def test_solver_newton_single_z(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly. """
+        model = ge.StripeFitnessModel(g, per_label=False)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-5, rtol=0)
+        np.testing.assert_allclose(z, model.param[0], atol=0, rtol=1e-6)
 
     def test_solver_newton_multi_z(self):
         """ Check that the newton solver is fitting the z parameters
@@ -637,8 +637,8 @@ class TestFitnessModelMeasures():
                                       param=z)
         n_e = model.expected_num_edges_label()
         np.testing.assert_allclose(n_e,
-                                   np.array([2.73764, 0.999998,
-                                             0.997735, 0.993096]),
+                                   np.array([2.737599, 0.999998,
+                                             0.997735, 0.993095]),
                                    rtol=1e-5)
 
     def test_exp_n_edges_label_multi_z(self):
@@ -686,7 +686,7 @@ class TestFitnessModelMeasures():
                                       param=z)
         d_in = model.expected_in_degree()
         np.testing.assert_allclose(
-            d_in, np.array([0.993096, 2.998279, 1.008646, 0.0]), rtol=1e-5)
+            d_in, np.array([0.993095, 2.998279, 1.008626, 0.0]), rtol=1e-5)
 
     def test_exp_in_degree_multi_z(self):
         """ Check expected d_in is correct. """
@@ -706,12 +706,12 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z)
-        d_ref = np.array([(0, 0, 1.898792),
-                          (0, 1, 0.082485),
-                          (0, 3, 0.756363),
+        d_ref = np.array([(0, 0, 1.898783),
+                          (0, 1, 0.082477),
+                          (0, 3, 0.756340),
                           (1, 2, 0.999998),
                           (2, 3, 0.997735),
-                          (3, 1, 0.993096)],
+                          (3, 1, 0.993095)],
                          dtype=[('label', 'u1'),
                                 ('id', 'u1'),
                                 ('value', '<f8')]).view(type=np.recarray)
@@ -748,11 +748,11 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z)
-        d_ref = np.array([(0, 1, 1.728993),
-                          (0, 2, 1.008646),
+        d_ref = np.array([(0, 1, 1.728973),
+                          (0, 2, 1.008626),
                           (1, 1, 0.999998),
                           (2, 1, 0.997735),
-                          (3, 0, 0.993096)],
+                          (3, 0, 0.993095)],
                          dtype=[('label', 'u1'),
                                 ('id', 'u1'),
                                 ('value', '<f8')]).view(type=np.recarray)

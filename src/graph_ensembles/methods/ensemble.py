@@ -502,6 +502,51 @@ def layer_exp_degree(p_f, param, fit_out, fit_in, label):
 
 
 @jit(nopython=True)
+def stripe_f_jac(p_f, jac_f, param, s_out_i, s_out_j, s_out_w,
+                 s_in_i, s_in_j, s_in_w, n_edges):
+    """ Compute the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
+    """
+    f = np.float64(0)
+    jac = np.float64(0)
+
+    # Iterate over vertex ids of the out strength and compute for each id the
+    # expected degree
+    for out_row in range(len(s_out_i)-1):
+        # Get non-zero out strengths for vertex out_row of label out_label
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+
+        if n == m:
+            continue
+
+        out_label = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        for in_row in range(len(s_in_i)-1):
+            # No self-loops
+            if out_row == in_row:
+                continue
+
+            # Get non-zero in strengths for vertex out_row of label out_label
+            r = s_in_i[in_row]
+            s = s_in_i[in_row + 1]
+            in_label = s_in_j[r:s]
+            in_vals = s_in_w[r:s]
+
+            if r == s:
+                continue
+
+            # Get pij
+            res = stripe_pij_f_jac(
+                p_f, jac_f, param, out_label, out_vals, in_label, in_vals)
+            f += res[0]
+            jac += res[1]
+
+    return f - n_edges, jac
+
+
+@jit(nopython=True)
 def stripe_exp_edges(p_f, param, s_out_i, s_out_j, s_out_w,
                      s_in_i, s_in_j, s_in_w, per_label):
     """ Compute the expected number of edges.
@@ -612,6 +657,40 @@ def stripe_pij(p_f, param, out_label, out_vals, in_label, in_vals, per_label):
             j += 1
 
     return 1 - p
+
+
+@jit(nopython=True)
+def stripe_pij_f_jac(p_f, jac_f, param, out_label, out_vals,
+                     in_label, in_vals):
+    """ Computes the probability of observing a link between two nodes (i,j)
+    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
+    """
+    max_a = max(len(out_label), len(in_label))
+    p = np.zeros(max_a, dtype=np.float64)
+    p_jac = np.zeros(max_a, dtype=np.float64)
+    i = 0
+    j = 0
+    a = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            p[a] = p_f(param, out_vals[i], in_vals[j])
+            p_jac[a] = jac_f(param, out_vals[i], in_vals[j])
+            i += 1
+            j += 1
+            a += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    if np.any(p == 1):
+        return 1, np.inf
+    else:
+        tmp = np.prod(1 - p)
+        pij_jac = tmp*np.sum(p_jac / (1 - p))
+        return 1 - tmp, pij_jac
 
 
 @jit(nopython=True)

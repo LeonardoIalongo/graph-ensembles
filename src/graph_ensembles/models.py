@@ -1022,11 +1022,16 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Ensure initial conditions x0 are of correct format
         if x0 is None:
+            if self.per_label:
+                num_clm = self.num_labels
+            else:
+                num_clm = 1
+
             if self.min_degree:
-                x0 = np.zeros((2, self.num_labels), dtype=np.float64)
+                x0 = np.zeros((2, num_clm), dtype=np.float64)
                 x0[1, :] = 1
             else:
-                x0 = np.zeros((1, self.num_labels), dtype=np.float64)
+                x0 = np.zeros((1, num_clm), dtype=np.float64)
         else:
             if not isinstance(x0, np.ndarray):
                 try:
@@ -1157,7 +1162,107 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Fit with single parameter
         else:
-            raise ValueError('Single z not yet supported.')
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_labels),
+                                  i_col='id', j_col='label',
+                                  data_col='value', kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_labels),
+                                 i_col='id', j_col='label',
+                                 data_col='value', kind='csr')
+
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
+
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indptr
+            s_in_j = s_in.indices
+            s_in_w = s_in.data
+
+            # Init results
+            if self.min_degree:
+                self.param = np.empty((2, 1), dtype=np.float64)
+            else:
+                self.param = np.empty((1, 1), dtype=np.float64)
+                
+            if self.min_degree:
+                # Find min degree node
+                min_out_i = np.argmin(s_out.value)
+                min_in_i = np.argmin(s_in.value)
+                if s_out.value[min_out_i] <= s_in.value[min_in_i]:
+                    def min_d(x):
+                        return mt.fit_ineq_constr_alpha(
+                            x, self.prob_fun, min_out_i,
+                            s_out.value[min_out_i], s_in)
+
+                    def jac_min_d(x):
+                        return mt.fit_ineq_jac_alpha(
+                            x, self.jac_fun, min_out_i,
+                            s_out.value[min_out_i], s_in)
+                else:
+                    def min_d(x):
+                        return mt.fit_ineq_constr_alpha(
+                            x, self.prob_fun, min_in_i,
+                            s_in.value[min_in_i], s_out)
+
+                    def jac_min_d(x):
+                        return mt.fit_ineq_jac_alpha(
+                            x, self.jac_fun, min_in_i,
+                            s_in.value[min_in_i], s_out)
+
+                # Solve
+                sol = mt.alpha_solver(
+                    x0=x0[:, 0],
+                    fun=lambda x: mt.fit_eq_constr_alpha(
+                        x, self.prob_fun, s_out, s_in, num_e),
+                    jac=lambda x: mt.fit_eq_jac_alpha(
+                        x, self.jac_fun, s_out, s_in),
+                    min_d=min_d,
+                    jac_min_d=jac_min_d,
+                    tol=tol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+
+            elif method == "newton":
+                sol = mt.newton_solver(
+                    x0=x0[:, 0],
+                    fun=lambda x: mt.stripe_f_jac(
+                        self.prob_fun, self.jac_fun, x,
+                        s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w, self.num_edges),
+                    tol=tol,
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+
+            elif method == "fixed-point":
+                sol = mt.fixed_point_solver(
+                    x0=x0[:, i],
+                    fun=lambda x: mt.layer_iterative(
+                        x, s_out, s_in, num_e),
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+
+            else:
+                raise ValueError("The selected method is not valid.")
+
+            # Update results and check convergence
+            self.param = np.array([sol.x])
+            self.solver_output = sol
+
+            if not sol.converged:
+                msg = 'Fit did not converge.'
+                warnings.warn(msg, UserWarning)
 
     def expected_num_edges(self):
         """ Compute the expected number of edges (per label).
