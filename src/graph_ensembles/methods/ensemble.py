@@ -832,30 +832,30 @@ def stripe_sample(p_f, param, out_strength, in_strength, num_labels,
 
 # --------------- BLOCK METHODS ---------------
 @jit(nopython=True)
-def block_exp_vertex_degree(p_f, z, out_g, out_vals, in_gj, in_vals):
+def block_exp_vertex_degree(p_f, param, out_g, out_vals, in_gj, in_vals):
     d = 0
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                d += p_f(z, out_vals[i], in_vals[j])
+                d += p_f(param, out_vals[i], in_vals[j])
 
     return d
 
 
 @jit(nopython=True)
-def f_jac_block_i(p_f, jac_f, z, out_g, out_vals, in_gj, in_vals):
+def block_f_jac_i(p_f, jac_f, param, out_g, out_vals, in_gj, in_vals):
     f = 0
     jac = 0
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                f += p_f(z, out_vals[i], in_vals[j])
-                jac += jac_f(z, out_vals[i], in_vals[j])
+                f += p_f(param, out_vals[i], in_vals[j])
+                jac += jac_f(param, out_vals[i], in_vals[j])
     return f, jac
 
 
 @jit(nopython=True)
-def block_exp_num_edges(p_f, z, s_out_i, s_out_j, s_out_w,
+def block_exp_num_edges(p_f, param, s_out_i, s_out_j, s_out_w,
                         s_in_i, s_in_j, s_in_w, group_arr):
     """ Calculate the expected number of edges for the block model.
 
@@ -865,8 +865,8 @@ def block_exp_num_edges(p_f, z, s_out_i, s_out_j, s_out_w,
 
     Arguments
     ----------
-    z: float
-        value of the density parameter z
+    param: np.ndarray
+        parameters vector
     s_out_i: array
         indptr of the out_strength by group sparse csr matrix
     s_out_j: array
@@ -913,13 +913,14 @@ def block_exp_num_edges(p_f, z, s_out_i, s_out_j, s_out_w,
         # Get groups corresponding to the in_j values
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
-        num += block_exp_vertex_degree(p_f, z, out_g, out_vals, in_gj, in_vals)
+        num += block_exp_vertex_degree(
+            p_f, param, out_g, out_vals, in_gj, in_vals)
 
     return num
 
 
 @jit(nopython=True)
-def block_exp_out_degree(p_f, z, s_out_i, s_out_j, s_out_w,
+def block_exp_out_degree(p_f, param, s_out_i, s_out_j, s_out_w,
                          s_in_i, s_in_j, s_in_w, group_arr):
     """ Calculate the expected out degree for the block model.
 
@@ -929,8 +930,8 @@ def block_exp_out_degree(p_f, z, s_out_i, s_out_j, s_out_w,
 
     Arguments
     ----------
-    z: float
-        value of the density parameter z
+    param: np.ndarray
+        value of the density parameter
     s_out_i: array
         indptr of the out_strength by group sparse csr matrix
     s_out_j: array
@@ -978,13 +979,13 @@ def block_exp_out_degree(p_f, z, s_out_i, s_out_j, s_out_w,
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
         out_degree[out_row] = block_exp_vertex_degree(
-            p_f, z, out_g, out_vals, in_gj, in_vals)
+            p_f, param, out_g, out_vals, in_gj, in_vals)
 
     return out_degree
 
 
 @jit(nopython=True)
-def f_jac_block(p_f, jac_f, z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
+def block_f_jac(p_f, jac_f, param, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
                 s_in_w, group_arr, num_e):
     """ Calculate the objective function and its Jacobian for the block model.
 
@@ -994,8 +995,8 @@ def f_jac_block(p_f, jac_f, z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
 
     Arguments
     ----------
-    z: float
-        value of the density parameter z
+    param: np.ndarray
+        value of the density parameter
     s_out_i: array
         indptr of the out_strength by group sparse csr matrix
     s_out_j: array
@@ -1011,8 +1012,8 @@ def f_jac_block(p_f, jac_f, z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
     group_arr: array
         an array containing the group id for each vertex in order
     """
-    f = -num_e
-    jac = 0
+    f = np.float64(0.0)
+    jac = np.float64(0.0)
 
     # Iterate over vertex ids of the out strength and compute for each id the
     # expected degree
@@ -1043,15 +1044,15 @@ def f_jac_block(p_f, jac_f, z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j,
         # Get groups corresponding to the in_j values
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
-        res = f_jac_block_i(p_f, jac_f, z, out_g, out_vals, in_gj, in_vals)
+        res = block_f_jac_i(p_f, jac_f, param, out_g, out_vals, in_gj, in_vals)
         f += res[0]
         jac += res[1]
 
-    return f, jac
+    return f - num_e, jac
 
 
 @jit(nopython=True)
-def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+def block_iterative(param, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
                     group_arr, num_e):
     """ Compute the next iteration of the fixed point method of the block model.
     """
@@ -1080,13 +1081,13 @@ def iterative_block(z, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
             for j in range(len(in_gj)):
                 if out_g[i] == in_gj[j]:
                     tmp = out_vals[i]*in_vals[j]
-                    aux += tmp / (1 + z*tmp)
+                    aux += tmp / (1 + param[0]*tmp)
 
     return num_e/aux
 
 
 @jit(nopython=True)
-def sample_block_vertex(p_f, z, out_i, out_g, out_vals,
+def block_sample_vertex(p_f, param, out_i, out_g, out_vals,
                         in_j, in_gj, in_vals, s_tot):
     """ Sample edges going out from a single vertex.
     """
@@ -1094,7 +1095,7 @@ def sample_block_vertex(p_f, z, out_i, out_g, out_vals,
     for i in range(len(out_g)):
         for j in range(len(in_gj)):
             if out_g[i] == in_gj[j]:
-                p = p_f(z, out_vals[i], in_vals[j])
+                p = p_f(param, out_vals[i], in_vals[j])
                 if rng.random() < p:
                     w = np.float64(
                         rng.exponential(out_vals[i]*in_vals[j]/(s_tot*p)))
@@ -1104,7 +1105,7 @@ def sample_block_vertex(p_f, z, out_i, out_g, out_vals,
 
 
 @jit(nopython=True)
-def block_sample(p_f, z, s_out_i, s_out_j, s_out_w,
+def block_sample(p_f, param, s_out_i, s_out_j, s_out_w,
                  s_in_i, s_in_j, s_in_w, group_arr):
     """ Sample from block model.
     """
@@ -1138,7 +1139,7 @@ def block_sample(p_f, z, s_out_i, s_out_j, s_out_w,
         in_gj = group_arr[in_j][notself]
         in_vals = s_in_w[r:s][notself]
         sample.extend(
-            sample_block_vertex(p_f, z, out_row, out_g, out_vals,
+            block_sample_vertex(p_f, param, out_row, out_g, out_vals,
                                 in_j[notself], in_gj, in_vals, s_tot))
 
     return np.array(sample, dtype=np.float64)

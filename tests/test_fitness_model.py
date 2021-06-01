@@ -300,18 +300,18 @@ class TestFitnessModelFit():
                                    atol=1e-4, rtol=0)
         np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-4)
 
-    # def test_solver_min_degree(self):
-    #     """ Check that the min_degree solver converges.
-    #     """
-    #     model = ge.FitnessModel(g, min_degree=True)
-    #     model.fit(tol=1e-6, max_iter=500)
-    #     exp_num_edges = model.expected_num_edges()
-    #     np.testing.assert_allclose(num_edges, exp_num_edges,
-    #                                atol=1e-5, rtol=0)
-    #     assert np.all(model.expected_out_degree() >= 1 - 1e-5)
-    #     assert np.all(model.expected_in_degree() >= 1 - 1e-5)
-    #     np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-6)
-    #     np.testing.assert_allclose(1.0, model.alpha, atol=0, rtol=1e-6)
+    def test_solver_min_degree(self):
+        """ Check that the min_degree solver converges.
+        """
+        model = ge.FitnessModel(g, min_degree=True)
+        model.fit(tol=1e-6, max_iter=500)
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-5, rtol=0)
+        assert np.all(model.expected_out_degree() >= 1 - 1e-5)
+        assert np.all(model.expected_in_degree() >= 1 - 1e-5)
+        np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-6)
+        np.testing.assert_allclose(1.0, model.alpha, atol=0, rtol=1e-6)
 
     def test_solver_with_init(self):
         """ Check that it works with a given initial condition.

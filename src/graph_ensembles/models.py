@@ -403,7 +403,7 @@ class FitnessModel(GraphEnsemble):
 
         if not (hasattr(self, 'num_edges') or
                 hasattr(self, 'param')):
-            raise ValueError('Either num_edges or z must be set.')
+            raise ValueError('Either num_edges or param must be set.')
 
         if not hasattr(self, 'id_dtype'):
             num_bytes = mt.get_num_bytes(self.num_vertices)
@@ -816,7 +816,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         if not (hasattr(self, 'num_edges') or
                 hasattr(self, 'param')):
-            raise ValueError('Either num_edges or z must be set.')
+            raise ValueError('Either num_edges or param must be set.')
 
         if not hasattr(self, 'id_dtype'):
             num_bytes = mt.get_num_bytes(self.num_vertices)
@@ -1475,16 +1475,16 @@ class BlockFitnessModel(GraphEnsemble):
         the total number of nodes
     num_groups: int
         the total number of groups by which the vector strengths are computed
-    z: float
-        the density parameter
+    param: np.ndarray
+        the parameter vector
     """
 
     def __init__(self, *args, scale_invariant=False, **kwargs):
         """ Return a BlockFitnessModel for the given graph data.
 
         The model accepts as arguments either: a DirectedGraph object, the
-        strength sequences (in and out) and the number of edges (per label),
-        or the strength sequences and the z parameter (per label).
+        strength sequences (in and out) and the number of edges,
+        or the strength sequences and the parameter.
 
         The model accepts the strength sequences as numpy recarrays. The first
         column must contain the node index, the second column the group index
@@ -1514,7 +1514,7 @@ class BlockFitnessModel(GraphEnsemble):
 
         # Get options from keyword arguments
         allowed_arguments = ['num_vertices', 'num_edges', 'num_groups',
-                             'out_strength', 'in_strength', 'z',
+                             'out_strength', 'in_strength', 'param',
                              'discrete_weights', 'group_dict']
         for name in kwargs:
             if name not in allowed_arguments:
@@ -1525,9 +1525,29 @@ class BlockFitnessModel(GraphEnsemble):
         # Ensure that all necessary fields have been set
         if not hasattr(self, 'num_vertices'):
             raise ValueError('Number of vertices not set.')
+        else:
+            try: 
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError('Number of vertices must be an integer.')
+
+            if self.num_vertices <= 0:
+                raise ValueError(
+                    'Number of vertices must be a positive number.')
 
         if not hasattr(self, 'num_groups'):
             raise ValueError('Number of groups not set.')
+        else:
+            try: 
+                assert self.num_groups / int(self.num_groups) == 1
+                self.num_groups = int(self.num_groups)
+            except Exception:
+                raise ValueError('Number of groups must be an integer.')
+
+            if self.num_groups <= 0:
+                raise ValueError(
+                    'Number of groups must be a positive number.')
 
         if not hasattr(self, 'group_dict'):
             raise ValueError('Group dictionary not set.')
@@ -1547,8 +1567,8 @@ class BlockFitnessModel(GraphEnsemble):
             raise ValueError('in_strength not set.')
 
         if not (hasattr(self, 'num_edges') or
-                hasattr(self, 'z')):
-            raise ValueError('Either num_edges or z must be set.')
+                hasattr(self, 'param')):
+            raise ValueError('Either num_edges or param must be set.')
 
         # Ensure that strengths passed adhere to format
         msg = ("Out strength must be a rec array with columns: "
@@ -1563,6 +1583,49 @@ class BlockFitnessModel(GraphEnsemble):
         for clm in self.in_strength.dtype.names:
             assert clm in ('id', 'group', 'value'), msg
 
+        # Ensure that num_vertices and num_groups are coherent with info
+        # in strengths
+        if self.num_vertices < max(np.max(self.out_strength.id),
+                                   np.max(self.in_strength.id)):
+            raise ValueError(
+                'Number of vertices smaller than max id value in strengths.')
+
+        if self.num_groups < max(np.max(self.out_strength.group),
+                                 np.max(self.in_strength.group)):
+            raise ValueError(
+                'Number of labels smaller than max group value in strengths.')
+
+        # Ensure that all groups, ids and values of the strength are positive
+        if np.any(self.out_strength.group < 0):
+            raise ValueError(
+                "Out strength groups must contain positive values only.")
+
+        if np.any(self.in_strength.group < 0):
+            raise ValueError(
+                "In strength groups must contain positive values only.")
+
+        if np.any(self.out_strength.id < 0):
+            raise ValueError(
+                "Out strength ids must contain positive values only.")
+
+        if np.any(self.in_strength.id < 0):
+            raise ValueError(
+                "In strength ids must contain positive values only.")
+
+        if np.any(self.out_strength.value < 0):
+            raise ValueError(
+                "Out strength values must contain positive values only.")
+
+        if np.any(self.in_strength.value < 0):
+            raise ValueError(
+                "In strength values must contain positive values only.")
+
+        msg = "Storing zeros in the strengths leads to inefficient code."
+        if np.any(self.out_strength.value == 0) or np.any(
+                self.in_strength.value == 0):
+            msg = "Storing zeros in the strengths leads to inefficient code."
+            warnings.warn(msg, UserWarning)
+
         # Ensure that strengths are sorted
         self.out_strength = self.out_strength[['id', 'group', 'value']]
         self.in_strength = self.in_strength[['id', 'group', 'value']]
@@ -1571,13 +1634,33 @@ class BlockFitnessModel(GraphEnsemble):
 
         # Ensure that the parameters or number of edges are set correctly
         if hasattr(self, 'num_edges'):
-            if not isinstance(self.num_edges, int):
-                raise ValueError('Number of edges must be an integer.')
+            if not isinstance(self.num_edges, np.ndarray):
+                self.num_edges = np.array([self.num_edges], dtype=np.float64)
+
+            msg = ('Number of edges must be a number.')
+            if len(self.num_edges) > 1:
+                raise ValueError(msg)
+
+            if not np.issubdtype(self.num_edges.dtype, np.number):
+                raise ValueError(msg)
+
+            if np.any(self.num_edges < 0):
+                msg = 'Parameter must be positive.'
+                raise ValueError(msg)
         else:
-            try:
-                self.z = float(self.z)
-            except TypeError:
-                raise TypeError('z must be a float.')
+            if not isinstance(self.param, np.ndarray):
+                self.param = np.array([self.param])
+
+            msg = ('Parameter must be a number.')
+            if len(self.param) > 1:
+                raise ValueError(msg)
+
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError(msg)
+
+            if np.any(self.param < 0):
+                msg = 'Parameter must be positive.'
+                raise ValueError(msg)
 
         # Check that sum of in and out strengths are equal
         tot_out = np.sum(self.out_strength.value)
@@ -1595,39 +1678,164 @@ class BlockFitnessModel(GraphEnsemble):
             self.prob_fun = mt.p_fitness
             self.jac_fun = mt.jac_fitness
 
-        # If z is set computed expected number of edges per label
-        if hasattr(self, 'z'):
+        # If param is set computed expected number of edges per label
+        if hasattr(self, 'param'):
             self.num_edges = self.expected_num_edges()
 
+    def fit(self, x0=None, method=None, tol=1e-5,
+            xtol=1e-12, max_iter=100, verbose=False):
+        """ Compute the optimal z to match the given number of edges.
+
+        Parameters
+        ----------
+        x0: np.ndarray
+            initial conditions for parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol: float
+            tolerance for the exit condition on the norm
+        xtol: float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter: int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+
+        """
+        if method is None:
+            method = 'newton'
+
+        if (method == 'fixed-point') and self.scale_invariant:
+            raise Exception('Fixed point solver not supported for scale '
+                            'invariant functional.')
+
+        if x0 is None:
+            x0 = np.zeros(1, dtype=np.float64)
+        else:
+            if not isinstance(x0, np.ndarray):
+                x0 = np.array([x0])
+
+            try:
+                x0 = np.float64(self.z)
+            except TypeError:
+                raise TypeError('x0 must be a float.')
+
+            if len(x0) > 1:
+                raise ValueError('x0 must be a single number.')
+
+        if len(self.num_edges) == 1:
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_groups),
+                                  kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_groups),
+                                 kind='csc')
+
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
+
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indices
+            s_in_j = s_in.indptr
+            s_in_w = s_in.data
+
+            if method == "newton":
+                sol = mt.newton_solver(
+                    x0=x0,
+                    fun=lambda x: mt.block_f_jac(
+                        self.prob_fun, self.jac_fun, x, s_out_i, s_out_j,
+                        s_out_w, s_in_i, s_in_j, s_in_w, self.group_dict,
+                        self.num_edges),
+                    tol=tol,
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+            elif method == "fixed-point":
+                sol = mt.fixed_point_solver(
+                    x0=x0,
+                    fun=lambda x: mt.block_iterative(
+                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
+                        self.group_dict, self.num_edges),
+                    xtol=xtol,
+                    max_iter=max_iter,
+                    verbose=verbose,
+                    full_return=True)
+
+            else:
+                raise ValueError("The selected method is not valid.")
+
+            # Update results and check convergence
+            self.param = sol.x
+            self.solver_output = sol
+
+            if not sol.converged:
+                if method == 'newton':
+                    mod = sol.norm_seq[-1]
+                else:
+                    mod = self.expected_num_edges() - self.num_edges
+                if sol.max_iter_reached:
+                    msg = ('Fit did not converge: \n solver stopped because'
+                           ' it reached the max number of iterations. \n'
+                           'Final distance from root = {}'.format(mod))
+                    warnings.warn(msg, UserWarning)
+
+                if method == 'newton':
+                    if sol.no_change_stop:
+                        msg = ('Fit did not converge: \n solver stopped '
+                               'because the update of x was smaller than the '
+                               ' tolerance. \n Final distance from'
+                               ' root = {}'.format(mod))
+                        warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError('Number of edges must be a single value.')
+
     def expected_num_edges(self):
-        # Convert to sparse matrices
-        s_out = lib.to_sparse(self.out_strength,
-                              (self.num_vertices, self.num_groups),
-                              kind='csr')
-        s_in = lib.to_sparse(self.in_strength,
-                             (self.num_vertices, self.num_groups),
-                             kind='csc')
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before hand.')
 
-        if not s_out.has_sorted_indices:
-            s_out.sort_indices()
-        if not s_in.has_sorted_indices:
-            s_in.sort_indices()
+        if not hasattr(self, 'exp_num_edges'):
+            # Convert to sparse matrices
+            s_out = lib.to_sparse(self.out_strength,
+                                  (self.num_vertices, self.num_groups),
+                                  kind='csr')
+            s_in = lib.to_sparse(self.in_strength,
+                                 (self.num_vertices, self.num_groups),
+                                 kind='csc')
 
-        # Extract arrays from sparse matrices
-        s_out_i = s_out.indptr
-        s_out_j = s_out.indices
-        s_out_w = s_out.data
-        s_in_i = s_in.indices
-        s_in_j = s_in.indptr
-        s_in_w = s_in.data
+            if not s_out.has_sorted_indices:
+                s_out.sort_indices()
+            if not s_in.has_sorted_indices:
+                s_in.sort_indices()
 
-        return mt.block_exp_num_edges(
-            self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
-            s_in_i, s_in_j, s_in_w, self.group_dict)
+            # Extract arrays from sparse matrices
+            s_out_i = s_out.indptr
+            s_out_j = s_out.indices
+            s_out_w = s_out.data
+            s_in_i = s_in.indices
+            s_in_j = s_in.indptr
+            s_in_w = s_in.data
+
+            self.exp_num_edges = mt.block_exp_num_edges(
+                self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
+                s_in_i, s_in_j, s_in_w, self.group_dict)
+
+        return self.exp_num_edges
 
     def expected_out_degree(self):
         """ Compute the expected out degree for a given z.
         """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before hand.')
+
         if not hasattr(self, 'exp_out_degree'):
             # Convert to sparse matrices
             s_out = lib.to_sparse(self.out_strength,
@@ -1652,7 +1860,7 @@ class BlockFitnessModel(GraphEnsemble):
 
             # Get out_degree
             self.exp_out_degree = mt.block_exp_out_degree(
-                self.prob_fun, self.z, s_out_i, s_out_j, s_out_w, s_in_i,
+                self.prob_fun, self.param, s_out_i, s_out_j, s_out_w, s_in_i,
                 s_in_j, s_in_w, self.group_dict)
 
         return self.exp_out_degree
@@ -1660,6 +1868,9 @@ class BlockFitnessModel(GraphEnsemble):
     def expected_in_degree(self):
         """ Compute the expected in degree for a given z.
         """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before hand.')
+
         if not hasattr(self, 'exp_in_degree'):
             # Convert to sparse matrices
             s_out = lib.to_sparse(self.out_strength,
@@ -1684,123 +1895,16 @@ class BlockFitnessModel(GraphEnsemble):
 
             # Get in_degree (note switched positions of args)
             self.exp_in_degree = mt.block_exp_out_degree(
-                self.prob_fun, self.z, s_in_i, s_in_j, s_in_w, s_out_i,
+                self.prob_fun, self.param, s_in_i, s_in_j, s_in_w, s_out_i,
                 s_out_j, s_out_w, self.group_dict)
 
         return self.exp_in_degree
 
-    def fit(self, z0=None, method="newton", tol=1e-5,
-            xtol=1e-12, max_iter=100, verbose=False):
-        """ Compute the optimal z to match the given number of edges.
-
-        Parameters
-        ----------
-        z0: float or np.ndarray
-            optional initial conditions for z parameters
-        method: 'newton' or 'fixed-point'
-            selects which method to use for the solver
-        tol : float
-            tolerance for the exit condition on the norm
-        eps : float
-            tolerance for the exit condition on difference between two
-            iterations
-        max_iter : int or float
-            maximum number of iteration
-        verbose: boolean
-            if true print debug info while iterating
-
-        """
-        if (method == 'fixed-point') and self.scale_invariant:
-            raise Exception('Fixed point solver not supported for scale '
-                            'invariant functional.')
-
-        if isinstance(self.num_edges, int):
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_groups),
-                                  kind='csr')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_groups),
-                                 kind='csc')
-
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
-
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indptr
-            s_out_j = s_out.indices
-            s_out_w = s_out.data
-            s_in_i = s_in.indices
-            s_in_j = s_in.indptr
-            s_in_w = s_in.data
-
-            if z0 is None:
-                x0 = np.float64(0.0)
-            else:
-                try:
-                    x0 = np.float64(self.z)
-                except TypeError:
-                    raise TypeError('z must be a float.')
-
-            if method == "newton":
-                sol = mt.newton_solver(
-                    x0=x0,
-                    fun=lambda x: mt.f_jac_block(
-                        self.prob_fun, self.jac_fun, x, s_out_i, s_out_j,
-                        s_out_w, s_in_i, s_in_j, s_in_w, self.group_dict,
-                        self.num_edges),
-                    tol=tol,
-                    xtol=xtol,
-                    max_iter=max_iter,
-                    verbose=verbose,
-                    full_return=True)
-            elif method == "fixed-point":
-                sol = mt.fixed_point_solver(
-                    x0=x0,
-                    fun=lambda x: mt.iterative_block(
-                        x, s_out_i, s_out_j, s_out_w, s_in_i, s_in_j, s_in_w,
-                        self.group_dict, self.num_edges),
-                    xtol=xtol,
-                    max_iter=max_iter,
-                    verbose=verbose,
-                    full_return=True)
-
-            else:
-                raise ValueError("The selected method is not valid.")
-
-            # Update results and check convergence
-            self.z = sol.x
-            self.solver_output = sol
-
-            if not sol.converged:
-                if method == 'newton':
-                    mod = sol.norm_seq[-1]
-                else:
-                    mod = self.expected_num_edges() - self.num_edges
-                if sol.max_iter_reached:
-                    msg = ('Fit did not converge: \n solver stopped because'
-                           ' it reached the max number of iterations. \n'
-                           'Final distance from root = {}'.format(mod))
-                    warnings.warn(msg, UserWarning)
-
-                if method == 'newton':
-                    if sol.no_change_stop:
-                        msg = ('Fit did not converge: \n solver stopped '
-                               'because the update of x was smaller than the '
-                               ' tolerance. \n Final distance from'
-                               ' root = {}'.format(mod))
-                        warnings.warn(msg, UserWarning)
-
-        else:
-            raise ValueError('Number of edges must be an integer.')
-
     def sample(self):
         """ Return a Graph sampled from the ensemble.
         """
-        if not hasattr(self, 'z'):
-            raise Exception('Ensemble has to be fitted before sampling.')
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before hand.')
 
         # Generate uninitialised graph object
         g = graphs.WeightedGraph.__new__(graphs.WeightedGraph)
@@ -1839,8 +1943,9 @@ class BlockFitnessModel(GraphEnsemble):
         s_in_w = s_in.data
 
         # Sample edges and extract properties
-        e = mt.block_sample(self.prob_fun, self.z, s_out_i, s_out_j, s_out_w,
-                            s_in_i, s_in_j, s_in_w, self.group_dict)
+        e = mt.block_sample(
+            self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
+            s_in_i, s_in_j, s_in_w, self.group_dict)
         e = e.view(type=np.recarray,
                    dtype=[('src', 'f8'),
                           ('dst', 'f8'),

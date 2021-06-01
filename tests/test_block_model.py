@@ -101,10 +101,10 @@ class TestBlockFitnessModel():
                                      group_dict=group_dict,
                                      out_strength=out_strength,
                                      in_strength=in_strength,
-                                     z=z)
+                                     param=z)
         assert np.all(model.out_strength == out_strength)
         assert np.all(model.in_strength == in_strength)
-        assert np.all(model.z == z)
+        assert np.all(model.param == z)
         assert np.all(model.num_groups == num_groups)
         assert np.all(model.num_vertices == num_vertices)
         np.testing.assert_allclose(model.num_edges,
@@ -119,7 +119,7 @@ class TestBlockFitnessModel():
         exp_num_edges = model.expected_num_edges()
         np.testing.assert_allclose(num_edges, exp_num_edges,
                                    atol=1e-5, rtol=0)
-        assert np.isclose(z, model.z, atol=1e-12, rtol=1e-6), model.z
+        assert np.isclose(z, model.param[0], atol=1e-12, rtol=1e-6), model.z
 
     def test_solver_newton_var(self):
         """ Check that the newton solver is fitting the z parameters
@@ -176,7 +176,7 @@ class TestBlockFitnessModel():
                                      group_dict=group_dict,
                                      out_strength=out_strength,
                                      in_strength=in_strength,
-                                     z=z)
+                                     param=z)
 
         samples = 10000
         avg = 0
