@@ -1016,9 +1016,10 @@ class StripeFitnessModel(GraphEnsemble):
             warnings.warn('Method not recognised for solver with min degree '
                           'constraint, using default SLSQP.', UserWarning)
 
-        if (method == 'fixed-point') and self.scale_invariant:
+        if (method == 'fixed-point') and (self.scale_invariant or not
+                                          self.per_label):
             raise Exception('Fixed point solver not supported for scale '
-                            'invariant functional.')
+                            'invariant functional or for fit not per label.')
 
         # Ensure initial conditions x0 are of correct format
         if x0 is None:
@@ -1238,16 +1239,6 @@ class StripeFitnessModel(GraphEnsemble):
                         s_out_i, s_out_j, s_out_w,
                         s_in_i, s_in_j, s_in_w, self.num_edges),
                     tol=tol,
-                    xtol=xtol,
-                    max_iter=max_iter,
-                    verbose=verbose,
-                    full_return=True)
-
-            elif method == "fixed-point":
-                sol = mt.fixed_point_solver(
-                    x0=x0[:, i],
-                    fun=lambda x: mt.layer_iterative(
-                        x, s_out, s_in, num_e),
                     xtol=xtol,
                     max_iter=max_iter,
                     verbose=verbose,

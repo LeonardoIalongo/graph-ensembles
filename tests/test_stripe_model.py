@@ -53,7 +53,7 @@ num_edges_label = np.array([3, 1, 1, 1])
 num_labels = 4
 z = np.array([8.989062e-10])
 z_label = np.array([1.826524e-09, 2.477713e-10, 2.674918e-07, 8.191937e-07])
-z_inv = np.array([8.989062e-10])
+z_inv = np.array([3.19467e-10])
 z_inv_lbl = np.array([7.749510e-10, 2.268431e-14, 2.448980e-11, 7.500000e-11])
 
 
@@ -468,15 +468,15 @@ class TestStripeFitnessModelFit():
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z_label, model.param[0], atol=0, rtol=1e-5)
 
-    # def test_solver_invariant_single_z(self):
-    #     """ Check that the newton solver is fitting the z parameters
-    #     correctly for the invariant case. """
-    #     model = ge.StripeFitnessModel(g, per_label=False, scale_invariant=True)
-    #     model.fit(method="newton")
-    #     exp_num_edges = model.expected_num_edges()
-    #     np.testing.assert_allclose(num_edges, exp_num_edges,
-    #                                atol=1e-5, rtol=0)
-    #     np.testing.assert_allclose(z_inv, model.z, atol=0, rtol=1e-6)
+    def test_solver_invariant_single_z(self):
+        """ Check that the newton solver is fitting the z parameters
+        correctly for the invariant case. """
+        model = ge.StripeFitnessModel(g, per_label=False, scale_invariant=True)
+        model.fit(method="newton")
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-5, rtol=0)
+        np.testing.assert_allclose(z_inv, model.param[0], atol=0, rtol=1e-6)
 
     def test_solver_invariant_multi_z(self):
         """ Check that the newton solver is fitting the z parameters
@@ -488,17 +488,6 @@ class TestStripeFitnessModelFit():
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z_inv_lbl, model.param[0],
                                    atol=0, rtol=1e-6)
-
-    # def test_solver_fixed_point_single_z(self):
-    #     """ Check that the fixed-point solver is fitting the z parameters
-    #     correctly.
-    #     """
-    #     model = ge.StripeFitnessModel(g, per_label=False)
-    #     model.fit(method="fixed-point", max_iter=100, xtol=1e-5)
-    #     exp_num_edges = model.expected_num_edges()
-    #     np.testing.assert_allclose(num_edges, exp_num_edges,
-    #                                atol=1e-4, rtol=0)
-    #     np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-4)
 
     def test_solver_fixed_point_multi_z(self):
         """ Check that the fixed-point solver is fitting the z parameters
@@ -540,12 +529,12 @@ class TestStripeFitnessModelFit():
     def test_solver_with_init(self):
         """ Check that it works with a given initial condition.
         """
-        # model = ge.StripeFitnessModel(g, per_label=False)
-        # model.fit(z0=1e-14)
-        # exp_num_edges = model.expected_num_edges()
-        # np.testing.assert_allclose(num_edges, exp_num_edges,
-        #                            atol=1e-5, rtol=0)
-        # np.testing.assert_allclose(z, model.z, atol=0, rtol=1e-6)
+        model = ge.StripeFitnessModel(g, per_label=False)
+        model.fit(x0=1e-14)
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-5, rtol=0)
+        np.testing.assert_allclose(z, model.param[0], atol=0, rtol=1e-6)
 
         model = ge.StripeFitnessModel(g, per_label=True)
         model.fit(x0=1e-14*np.ones(num_labels))
@@ -553,26 +542,27 @@ class TestStripeFitnessModelFit():
         np.testing.assert_allclose(num_edges_label, exp_num_edges_label,
                                    atol=1e-5, rtol=0)
 
-    # def test_solver_with_wrong_init(self):
-    #     """ Check that it raises an error with a negative initial condition.
-    #     """
-    #     msg = "z0 must contain only positive values."
-    #     with pytest.raises(ValueError, match=msg):
-    #         model = ge.StripeFitnessModel(g, per_label=False)
-    #         model.fit(z0=-1)
-    #     with pytest.raises(ValueError, match=msg):
-    #         model = ge.StripeFitnessModel(g, per_label=True)
-    #         model.fit(z0=-np.ones(num_labels))
+    def test_solver_with_wrong_init(self):
+        """ Check that it raises an error with a negative initial condition.
+        """
+        msg = 'Parameters must be positive.'
+        with pytest.raises(ValueError, match=msg):
+            model = ge.StripeFitnessModel(g, per_label=False)
+            model.fit(x0=-1)
+        with pytest.raises(ValueError, match=msg):
+            model = ge.StripeFitnessModel(g, per_label=True)
+            model.fit(x0=-np.ones(num_labels))
 
-    #     msg = 'z0 must be a number.'
-    #     with pytest.raises(ValueError, match=msg):
-    #         model = ge.StripeFitnessModel(g, per_label=False)
-    #         model.fit(z0=np.array([0, 1]))
+        msg = 'Parameters must be numeric.'
+        with pytest.raises(ValueError, match=msg):
+            model = ge.StripeFitnessModel(g, per_label=False)
+            model.fit(x0='0')
 
-    #     msg = 'z0 must be an array with length equal to num_labels.'
-    #     with pytest.raises(ValueError, match=msg):
-    #         model = ge.StripeFitnessModel(g, per_label=True)
-    #         model.fit(z0=np.array([0, 1]))
+        msg = ('StripeFitnessModel requires an array of parameters with number'
+               ' of elements equal to the number of labels or to one.')
+        with pytest.raises(AssertionError, match=msg):
+            model = ge.StripeFitnessModel(g, per_label=True)
+            model.fit(x0=np.array([0, 1]))
 
     def test_wrong_method(self):
         """ Check that wrong methods names return an error.
