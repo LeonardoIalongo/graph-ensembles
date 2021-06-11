@@ -1093,24 +1093,26 @@ class StripeFitnessModel(GraphEnsemble):
                     # Find min degree node
                     min_out_i = np.argmin(s_out.value[s_out.value > 0])
                     min_in_i = np.argmin(s_in.value[s_in.value > 0])
+                    min_out_id = s_out[min_out_i].id
+                    min_in_id = s_in[min_in_i].id
 
                     def min_d(x):
                         return np.array([
                             mt.layer_ineq_constr_alpha(
-                                x, self.prob_fun, min_out_i,
+                                x, self.prob_fun, min_out_id,
                                 s_out.value[min_out_i], s_in),
                             mt.layer_ineq_constr_alpha(
-                                x, self.prob_fun, min_in_i,
+                                x, self.prob_fun, min_in_id,
                                 s_in.value[min_in_i], s_out)],
                             dtype=np.float64)
 
                     def jac_min_d(x):
                         return np.stack([
                             mt.layer_ineq_jac_alpha(
-                                x, self.jac_fun, min_out_i,
+                                x, self.jac_fun, min_out_id,
                                 s_out.value[min_out_i], s_in),
                             mt.layer_ineq_jac_alpha(
-                                x, self.jac_fun, min_in_i,
+                                x, self.jac_fun, min_in_id,
                                 s_in.value[min_in_i], s_out)],
                             axis=0)
 
