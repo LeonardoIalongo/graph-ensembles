@@ -274,8 +274,8 @@ class TestFitnessModelFit():
         correctly. """
         model = ge.FitnessModel(g)
         model.fit(method="newton", tol=1e-6)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
 
@@ -284,8 +284,8 @@ class TestFitnessModelFit():
         correctly for the invariant case. """
         model = ge.FitnessModel(g, scale_invariant=True)
         model.fit(method="newton", tol=1e-6)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z_inv, model.param, atol=0, rtol=1e-6)
 
@@ -295,8 +295,8 @@ class TestFitnessModelFit():
         """
         model = ge.FitnessModel(g)
         model.fit(method="fixed-point", max_iter=100, xtol=1e-5)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-4, rtol=0)
         np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-4)
 
@@ -304,22 +304,23 @@ class TestFitnessModelFit():
         """ Check that the min_degree solver converges.
         """
         model = ge.FitnessModel(g, min_degree=True)
-        model.fit(x0=np.array([1e-14, 1]), tol=1e-6, max_iter=500)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.fit(x0=np.array([1e-2, 0.07]), tol=1e-6, max_iter=500)
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
-        # assert np.all(model.expected_out_degree() >= 1 - 1e-5)
-        # assert np.all(model.expected_in_degree() >= 1 - 1e-5)
-        np.testing.assert_allclose(np.array([0.363831, 0.045377]),
-                                   model.param, atol=0, rtol=1e-4)
+        model.expected_degrees()
+        exp_d_out = model.exp_out_degree
+        exp_d_in = model.exp_in_degree
+        assert np.all(exp_d_out[exp_d_out != 0] >= 1 - 1e-5)
+        assert np.all(exp_d_in[exp_d_in != 0] >= 1 - 1e-5)
 
     def test_solver_with_init(self):
         """ Check that it works with a given initial condition.
         """
         model = ge.FitnessModel(g)
         model.fit(x0=1e-14)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
 
@@ -380,8 +381,8 @@ class TestFitnessModelMeasures():
                                 out_strength=out_strength,
                                 in_strength=in_strength,
                                 param=z)
-        n_e = model.expected_num_edges()
-        np.testing.assert_allclose(n_e,
+        model.expected_num_edges()
+        np.testing.assert_allclose(model.exp_num_edges,
                                    num_edges,
                                    rtol=1e-5)
 
@@ -391,7 +392,8 @@ class TestFitnessModelMeasures():
                                 out_strength=out_strength,
                                 in_strength=in_strength,
                                 param=z)
-        d_out = model.expected_out_degree()
+        model.expected_degrees()
+        d_out = model.exp_out_degree
         np.testing.assert_allclose(
             d_out, np.array([1.031808, 0.430388, 1.974889, 1.562915]),
             rtol=1e-5)
@@ -403,7 +405,8 @@ class TestFitnessModelMeasures():
                                 out_strength=out_strength,
                                 in_strength=in_strength,
                                 param=z)
-        d_in = model.expected_in_degree()
+        model.expected_degrees()
+        d_in = model.exp_in_degree
         np.testing.assert_allclose(
             d_in, np.array([1.935262, 2.977007, 0.087732, 0]), rtol=1e-5)
         np.testing.assert_allclose(num_edges, np.sum(d_in))

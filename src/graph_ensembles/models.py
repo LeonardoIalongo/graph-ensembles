@@ -545,8 +545,12 @@ class FitnessModel(GraphEnsemble):
 
         if self.min_degree:
             # Find min degree node
-            min_out_i = np.argmin(self.out_strength[self.out_strength > 0])
-            min_in_i = np.argmin(self.in_strength[self.in_strength > 0])
+            self.param = x0
+            self.expected_degrees()
+            d_out = self.exp_out_degree
+            d_in = self.exp_in_degree
+            min_out_i = np.argmin(d_out[d_out > 0])
+            min_in_i = np.argmin(d_in[d_in > 0])
 
             def min_d(x):
                 return np.array([mt.fit_ineq_constr_alpha(
@@ -622,38 +626,24 @@ class FitnessModel(GraphEnsemble):
     def expected_num_edges(self):
         """ Compute the expected number of edges (per label).
         """
-        if not hasattr(self, 'exp_num_edges'):
-            if not hasattr(self, 'param'):
-                raise Exception('Model must be fitted before hand.')
-            
-            self.exp_num_edges = mt.fit_exp_edges(
-                    self.prob_fun,
-                    self.param,
-                    self.out_strength,
-                    self.in_strength)
-
-        return self.exp_num_edges
-
-    def expected_out_degree(self):
-        """ Compute the expected out degree for a given z.
-        """
-        if not hasattr(self, 'exp_out_degree'):
-            if not hasattr(self, 'param'):
-                raise Exception('Ensemble has to be fitted before sampling.')
-
-            self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
-                self.prob_fun, self.param, self.out_strength,
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+        
+        self.exp_num_edges = mt.fit_exp_edges(
+                self.prob_fun,
+                self.param,
+                self.out_strength,
                 self.in_strength)
 
-        return self.exp_out_degree
-
-    def expected_in_degree(self):
-        """ Compute the expected in degree for a given z.
+    def expected_degrees(self):
+        """ Compute the expected out degree for a given z.
         """
-        if not hasattr(self, 'exp_in_degree'):
-            _ = self.expected_out_degree()
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
 
-        return self.exp_in_degree
+        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
+            self.prob_fun, self.param, self.out_strength,
+            self.in_strength)
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -984,9 +974,11 @@ class StripeFitnessModel(GraphEnsemble):
         # If param are set computed expected number of edges per label
         if hasattr(self, 'param'):
             if self.per_label:
-                self.num_edges = self.expected_num_edges_label()
+                self.expected_num_edges_label()
+                self.num_edges = self.exp_num_edges_label
             else:
-                self.num_edges = self.expected_num_edges()
+                self.expected_num_edges()
+                self.num_edges = self.exp_num_edges
 
     def fit(self, x0=None, method=None, tol=1e-5, xtol=1e-12, max_iter=100,
             verbose=False):
@@ -1075,6 +1067,19 @@ class StripeFitnessModel(GraphEnsemble):
         if np.any(x0 < 0):
             raise ValueError('Parameters must be positive.')
 
+        if self.min_degree:
+            # Initialize param to compute min degree
+            self.param = x0
+
+            if self.per_label:
+                self.expected_degrees_by_label()
+                d_out = self.exp_out_degree_label
+                d_in = self.exp_in_degree_label
+            else:
+                self.exp_degrees()
+                d_out = self.exp_out_degree
+                d_in = self.exp_in_degree
+
         # Fit by layer
         if self.per_label:
             if self.min_degree:
@@ -1091,29 +1096,33 @@ class StripeFitnessModel(GraphEnsemble):
                 
                 if self.min_degree:
                     # Find min degree node
-                    min_out_i = np.argmin(s_out.value[s_out.value > 0])
-                    min_in_i = np.argmin(s_in.value[s_in.value > 0])
-                    min_out_id = s_out[min_out_i].id
-                    min_in_id = s_in[min_in_i].id
+                    d_out_l = d_out[d_out.label == i]
+                    d_in_l = d_in[d_in.label == i]
+                    min_d_out = np.argmin(d_out_l.value[d_out_l.value > 0])
+                    min_d_in = np.argmin(d_in_l.value[d_in_l.value > 0])
+                    min_out_id = d_out_l[min_d_out].id
+                    min_in_id = d_in_l[min_d_in].id
+                    min_s_out = s_out[s_out.id == min_out_id].value[0]
+                    min_s_in = s_in[s_in.id == min_in_id].value[0]
 
                     def min_d(x):
                         return np.array([
                             mt.layer_ineq_constr_alpha(
                                 x, self.prob_fun, min_out_id,
-                                s_out.value[min_out_i], s_in),
+                                min_s_out, s_in),
                             mt.layer_ineq_constr_alpha(
                                 x, self.prob_fun, min_in_id,
-                                s_in.value[min_in_i], s_out)],
+                                min_s_in, s_out)],
                             dtype=np.float64)
 
                     def jac_min_d(x):
                         return np.stack([
                             mt.layer_ineq_jac_alpha(
                                 x, self.jac_fun, min_out_id,
-                                s_out.value[min_out_i], s_in),
+                                min_s_out, s_in),
                             mt.layer_ineq_jac_alpha(
                                 x, self.jac_fun, min_in_id,
-                                s_in.value[min_in_i], s_out)],
+                                min_s_in, s_out)],
                             axis=0)
 
                     # Solve
@@ -1260,151 +1269,121 @@ class StripeFitnessModel(GraphEnsemble):
     def expected_num_edges(self):
         """ Compute the expected number of edges (per label).
         """
-        if not hasattr(self, 'exp_num_edges'):
-            if not hasattr(self, 'param'):
-                raise Exception('Model must be fitted before hand.')
-            
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_labels),
-                                  i_col='id', j_col='label',
-                                  data_col='value', kind='csr')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_labels),
-                                 i_col='id', j_col='label',
-                                 data_col='value', kind='csr')
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+        
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_labels),
+                              i_col='id', j_col='label',
+                              data_col='value', kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_labels),
+                             i_col='id', j_col='label',
+                             data_col='value', kind='csr')
 
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
 
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indptr
-            s_out_j = s_out.indices
-            s_out_w = s_out.data
-            s_in_i = s_in.indptr
-            s_in_j = s_in.indices
-            s_in_w = s_in.data
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indptr
+        s_in_j = s_in.indices
+        s_in_w = s_in.data
 
-            # Compute expected value
-            self.exp_num_edges = mt.stripe_exp_edges(
-                    self.prob_fun,
-                    self.param,
-                    s_out_i, s_out_j, s_out_w,
-                    s_in_i, s_in_j, s_in_w,
-                    self.per_label)
-
-        return self.exp_num_edges
+        # Compute expected value
+        self.exp_num_edges = mt.stripe_exp_edges(
+                self.prob_fun,
+                self.param,
+                s_out_i, s_out_j, s_out_w,
+                s_in_i, s_in_j, s_in_w,
+                self.per_label)
         
     def expected_num_edges_label(self):
         """ Compute the expected number of edges (per label).
         """
-        if not hasattr(self, 'exp_num_edges_label'):
-            if not hasattr(self, 'param'):
-                raise Exception('Model must be fitted before hand.')
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
 
-            self.exp_num_edges_label = mt.stripe_exp_edges_label(
-                        self.prob_fun,
-                        self.param,
-                        self.out_strength,
-                        self.in_strength,
-                        self.num_labels,
-                        self.per_label)
-
-        return self.exp_num_edges_label
+        self.exp_num_edges_label = mt.stripe_exp_edges_label(
+                    self.prob_fun,
+                    self.param,
+                    self.out_strength,
+                    self.in_strength,
+                    self.num_labels,
+                    self.per_label)
                 
-    def expected_out_degree(self):
+    def expected_degrees(self):
         """ Compute the expected out degree for a given z.
         """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
 
-        if not hasattr(self, 'exp_out_degree'):
-            if not hasattr(self, 'param'):
-                raise Exception('Model must be fitted before hand.')
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_labels),
+                              i_col='id', j_col='label', data_col='value',
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_labels),
+                             i_col='id', j_col='label', data_col='value',
+                             kind='csr')
 
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_labels),
-                                  i_col='id', j_col='label', data_col='value',
-                                  kind='csr')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_labels),
-                                 i_col='id', j_col='label', data_col='value',
-                                 kind='csr')
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
 
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indptr
+        s_in_j = s_in.indices
+        s_in_w = s_in.data
 
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indptr
-            s_out_j = s_out.indices
-            s_out_w = s_out.data
-            s_in_i = s_in.indptr
-            s_in_j = s_in.indices
-            s_in_w = s_in.data
+        # Get out_degree
+        self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
+                self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
+                s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
 
-            # Get out_degree
-            self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
-                    self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
-                    s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
-
-        return self.exp_out_degree
-
-    def expected_in_degree(self):
-        """ Compute the expected in degree for a given z.
-        """
-        if not hasattr(self, 'exp_in_degree'):
-            _ = self.expected_out_degree()
-
-        return self.exp_in_degree
-
-    def expected_out_degree_by_label(self):
+    def expected_degrees_by_label(self):
         """ Compute the expected out degree by label for a given z.
         """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
 
-        if not hasattr(self, 'exp_out_degree_label'):
-            if not hasattr(self, 'param'):
-                raise Exception('Model must be fitted before hand.')
+        res = mt.stripe_exp_degree_label(
+                self.prob_fun, self.param, self.out_strength,
+                self.in_strength, self.num_labels, self.per_label)
 
-            res = mt.stripe_exp_degree_label(
-                    self.prob_fun, self.param, self.out_strength,
-                    self.in_strength, self.num_labels, self.per_label)
+        d_out = np.array(res[0])
+        self.exp_out_degree_label = d_out.view(
+            type=np.recarray,
+            dtype=[('label', 'f8'),
+                   ('id', 'f8'),
+                   ('value', 'f8')]
+            ).astype(
+            [('label', self.label_dtype),
+             ('id', self.id_dtype),
+             ('value', 'f8')]
+            ).reshape((d_out.shape[0],))
 
-            d_out = np.array(res[0])
-            self.exp_out_degree_label = d_out.view(
-                type=np.recarray,
-                dtype=[('label', 'f8'),
-                       ('id', 'f8'),
-                       ('value', 'f8')]
-                ).astype(
-                [('label', self.label_dtype),
-                 ('id', self.id_dtype),
-                 ('value', 'f8')]
-                ).reshape((d_out.shape[0],))
-
-            d_in = np.array(res[1])
-            self.exp_in_degree_label = d_in.view(
-                type=np.recarray,
-                dtype=[('label', 'f8'),
-                       ('id', 'f8'),
-                       ('value', 'f8')]
-                ).astype(
-                [('label', self.label_dtype),
-                 ('id', self.id_dtype),
-                 ('value', 'f8')]
-                ).reshape((d_in.shape[0],))
-
-        return self.exp_out_degree_label
-
-    def expected_in_degree_by_label(self):
-        """ Compute the expected in degree by label for a given z.
-        """
-        if not hasattr(self, 'exp_in_degree_label'):
-            _ = self.expected_out_degree_by_label()
-
-        return self.exp_in_degree_label
+        d_in = np.array(res[1])
+        self.exp_in_degree_label = d_in.view(
+            type=np.recarray,
+            dtype=[('label', 'f8'),
+                   ('id', 'f8'),
+                   ('value', 'f8')]
+            ).astype(
+            [('label', self.label_dtype),
+             ('id', self.id_dtype),
+             ('value', 'f8')]
+            ).reshape((d_in.shape[0],))
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -1682,7 +1661,8 @@ class BlockFitnessModel(GraphEnsemble):
 
         # If param is set computed expected number of edges per label
         if hasattr(self, 'param'):
-            self.num_edges = self.expected_num_edges()
+            self.expected_num_edges()
+            self.num_edges = self.exp_num_edges
 
     def fit(self, x0=None, method=None, tol=1e-5,
             xtol=1e-12, max_iter=100, verbose=False):
@@ -1804,103 +1784,88 @@ class BlockFitnessModel(GraphEnsemble):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before hand.')
 
-        if not hasattr(self, 'exp_num_edges'):
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_groups),
-                                  kind='csr')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_groups),
-                                 kind='csc')
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csc')
 
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
 
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indptr
-            s_out_j = s_out.indices
-            s_out_w = s_out.data
-            s_in_i = s_in.indices
-            s_in_j = s_in.indptr
-            s_in_w = s_in.data
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indices
+        s_in_j = s_in.indptr
+        s_in_w = s_in.data
 
-            self.exp_num_edges = mt.block_exp_num_edges(
-                self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
-                s_in_i, s_in_j, s_in_w, self.group_dict)
+        self.exp_num_edges = mt.block_exp_num_edges(
+            self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
+            s_in_i, s_in_j, s_in_w, self.group_dict)
 
-        return self.exp_num_edges
-
-    def expected_out_degree(self):
+    def expected_degrees(self):
         """ Compute the expected out degree for a given z.
         """
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before hand.')
 
-        if not hasattr(self, 'exp_out_degree'):
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_groups),
-                                  kind='csr')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_groups),
-                                 kind='csc')
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csc')
 
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
 
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indptr
-            s_out_j = s_out.indices
-            s_out_w = s_out.data
-            s_in_i = s_in.indices
-            s_in_j = s_in.indptr
-            s_in_w = s_in.data
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indices
+        s_in_j = s_in.indptr
+        s_in_w = s_in.data
 
-            # Get out_degree
-            self.exp_out_degree = mt.block_exp_out_degree(
-                self.prob_fun, self.param, s_out_i, s_out_j, s_out_w, s_in_i,
-                s_in_j, s_in_w, self.group_dict)
+        # Get out_degree
+        self.exp_out_degree = mt.block_exp_out_degree(
+            self.prob_fun, self.param, s_out_i, s_out_j, s_out_w, s_in_i,
+            s_in_j, s_in_w, self.group_dict)
 
-        return self.exp_out_degree
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_groups),
+                              kind='csc')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_groups),
+                             kind='csr')
 
-    def expected_in_degree(self):
-        """ Compute the expected in degree for a given z.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted before hand.')
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
 
-        if not hasattr(self, 'exp_in_degree'):
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_groups),
-                                  kind='csc')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_groups),
-                                 kind='csr')
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indices
+        s_out_j = s_out.indptr
+        s_out_w = s_out.data
+        s_in_i = s_in.indptr
+        s_in_j = s_in.indices
+        s_in_w = s_in.data
 
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
-
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indices
-            s_out_j = s_out.indptr
-            s_out_w = s_out.data
-            s_in_i = s_in.indptr
-            s_in_j = s_in.indices
-            s_in_w = s_in.data
-
-            # Get in_degree (note switched positions of args)
-            self.exp_in_degree = mt.block_exp_out_degree(
-                self.prob_fun, self.param, s_in_i, s_in_j, s_in_w, s_out_i,
-                s_out_j, s_out_w, self.group_dict)
-
-        return self.exp_in_degree
+        # Get in_degree (note switched positions of args)
+        self.exp_in_degree = mt.block_exp_out_degree(
+            self.prob_fun, self.param, s_in_i, s_in_j, s_in_w, s_out_i,
+            s_out_j, s_out_w, self.group_dict)
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.

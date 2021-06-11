@@ -454,8 +454,8 @@ class TestStripeFitnessModelFit():
         correctly. """
         model = ge.StripeFitnessModel(g, per_label=False)
         model.fit(method="newton")
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z, model.param[0], atol=0, rtol=1e-6)
 
@@ -464,8 +464,8 @@ class TestStripeFitnessModelFit():
         correctly. """
         model = ge.StripeFitnessModel(g)
         model.fit(method="newton")
-        exp_num_edges_label = model.expected_num_edges_label()
-        np.testing.assert_allclose(num_edges_label, exp_num_edges_label,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(num_edges_label, model.exp_num_edges_label,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z_label, model.param[0], atol=0, rtol=1e-5)
 
@@ -474,8 +474,8 @@ class TestStripeFitnessModelFit():
         correctly for the invariant case. """
         model = ge.StripeFitnessModel(g, per_label=False, scale_invariant=True)
         model.fit(method="newton")
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z_inv, model.param[0], atol=0, rtol=1e-6)
 
@@ -484,8 +484,8 @@ class TestStripeFitnessModelFit():
         correctly for the invariant case. """
         model = ge.StripeFitnessModel(g, scale_invariant=True)
         model.fit(method="newton")
-        exp_num_edges_label = model.expected_num_edges_label()
-        np.testing.assert_allclose(num_edges_label, exp_num_edges_label,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(num_edges_label, model.exp_num_edges_label,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z_inv_lbl, model.param[0],
                                    atol=0, rtol=1e-6)
@@ -496,8 +496,8 @@ class TestStripeFitnessModelFit():
         """
         model = ge.StripeFitnessModel(g)
         model.fit(method="fixed-point", max_iter=50000, xtol=1e-4)
-        exp_num_edges_label = model.expected_num_edges_label()
-        np.testing.assert_allclose(num_edges_label, exp_num_edges_label,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(num_edges_label, model.exp_num_edges_label,
                                    atol=1e-3, rtol=0)
 
     # def test_solver_min_degree_single_z(self):
@@ -515,32 +515,52 @@ class TestStripeFitnessModelFit():
     def test_solver_min_degree_multi_z(self):
         """ Check that the min_degree solver converges.
         """
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e4, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['BNP', 'IT', 'ABN', 'NL', 3e3, 'interbank', False],
+                         ['ABN', 'NL', 'BNP', 'FR', 1e6, 'interbank', False],
+                         ['ING', 'NL', 'BNP', 'IT', 3e6, 'interbank', False],
+                         ['ABN', 'NL', 'ING', 'NL', 4e5, 'external', True]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
+
+        g = ge.Graph(v, e, v_id=['name', 'country'],
+                     src=['creditor', 'c_country'],
+                     dst=['debtor', 'd_country'],
+                     edge_label=['type', 'EUR'],
+                     weight='value')
+
         model = ge.StripeFitnessModel(g, min_degree=True)
-        model.fit(x0=np.array([[1e-6, 1e-14, 1e-14, 1e-14],
-                               [0.5, 1, 1, 1]]), 
+        model.fit(x0=np.array([[1e-4, 1e-4, 1e-4, 1e-4],
+                               [1, 1, 1, 1]]), 
                   tol=1e-6,
                   max_iter=500)
-        exp_num_edges_label = model.expected_num_edges_label()
-        np.testing.assert_allclose(num_edges_label, exp_num_edges_label,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(np.array([4., 1., 1., 1.]),
+                                   model.exp_num_edges_label,
                                    atol=1e-5, rtol=0)
-        assert np.all(model.expected_out_degree_by_label() >= 1 - 1e-5)
-        assert np.all(model.expected_in_degree_by_label() >= 1 - 1e-5)
-        # np.testing.assert_allclose(z_label, model.param, atol=0, rtol=1e-6)
+        model.expected_degrees_by_label()
+        exp_d_out = model.exp_out_degree_label.value
+        exp_d_in = model.exp_in_degree_label.value
+        assert np.all(exp_d_out >= 1 - 1e-5)
+        assert np.all(exp_d_in >= 1 - 1e-5)
 
     def test_solver_with_init(self):
         """ Check that it works with a given initial condition.
         """
         model = ge.StripeFitnessModel(g, per_label=False)
         model.fit(x0=1e-14)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
         np.testing.assert_allclose(z, model.param[0], atol=0, rtol=1e-6)
 
         model = ge.StripeFitnessModel(g, per_label=True)
         model.fit(x0=1e-14*np.ones(num_labels))
-        exp_num_edges_label = model.expected_num_edges_label()
-        np.testing.assert_allclose(num_edges_label, exp_num_edges_label,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(num_edges_label, model.exp_num_edges_label,
                                    atol=1e-5, rtol=0)
 
     def test_solver_with_wrong_init(self):
@@ -602,8 +622,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z)
-        n_e = model.expected_num_edges()
-        np.testing.assert_allclose(n_e,
+        model.expected_num_edges()
+        np.testing.assert_allclose(model.exp_num_edges,
                                    num_edges,
                                    rtol=1e-5)
 
@@ -614,8 +634,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z_label)
-        n_e = model.expected_num_edges()
-        np.testing.assert_allclose(n_e,
+        model.expected_num_edges()
+        np.testing.assert_allclose(model.exp_num_edges,
                                    5.153923,
                                    rtol=1e-5)
 
@@ -626,8 +646,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z)
-        n_e = model.expected_num_edges_label()
-        np.testing.assert_allclose(n_e,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(model.exp_num_edges_label,
                                    np.array([2.737599, 0.999998,
                                              0.997735, 0.993095]),
                                    rtol=1e-5)
@@ -639,8 +659,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z_label)
-        n_e = model.expected_num_edges_label()
-        np.testing.assert_allclose(n_e,
+        model.expected_num_edges_label()
+        np.testing.assert_allclose(model.exp_num_edges_label,
                                    num_edges_label,
                                    rtol=1e-5)
 
@@ -651,7 +671,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z)
-        d_out = model.expected_out_degree()
+        model.expected_degrees()
+        d_out = model.exp_out_degree
         np.testing.assert_allclose(
             d_out, np.array([1.898792, 1.07558, 0.999998, 1.02565]),
             rtol=1e-5)
@@ -663,7 +684,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z_label)
-        d_out = model.expected_out_degree()
+        model.expected_degrees()
+        d_out = model.exp_out_degree
         np.testing.assert_allclose(
             d_out, np.array([1.947547, 1.154435, 0.999992, 1.051948]),
             rtol=1e-5)
@@ -675,7 +697,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z)
-        d_in = model.expected_in_degree()
+        model.expected_degrees()
+        d_in = model.exp_in_degree
         np.testing.assert_allclose(
             d_in, np.array([0.993095, 2.998279, 1.008626, 0.0]), rtol=1e-5)
 
@@ -686,7 +709,8 @@ class TestFitnessModelMeasures():
                                       out_strength=out_strength,
                                       in_strength=in_strength,
                                       param=z_label)
-        d_in = model.expected_in_degree()
+        model.expected_degrees()
+        d_in = model.exp_in_degree
         np.testing.assert_allclose(
             d_in, np.array([0.999992, 2.999446, 1.154485, 0.0]), rtol=1e-5)
 
@@ -706,7 +730,8 @@ class TestFitnessModelMeasures():
                          dtype=[('label', 'u1'),
                                 ('id', 'u1'),
                                 ('value', '<f8')]).view(type=np.recarray)
-        d_out = model.expected_out_degree_by_label()
+        model.expected_degrees_by_label()
+        d_out = model.exp_out_degree_label
         np.testing.assert_allclose(d_out.label, d_ref.label, rtol=0)
         np.testing.assert_allclose(d_out.id, d_ref.id, rtol=0)
         np.testing.assert_allclose(d_out.value, d_ref.value, rtol=1e-5)
@@ -727,7 +752,8 @@ class TestFitnessModelMeasures():
                          dtype=[('label', 'u1'),
                                 ('id', 'u1'),
                                 ('value', '<f8')]).view(type=np.recarray)
-        d_out = model.expected_out_degree_by_label()
+        model.expected_degrees_by_label()
+        d_out = model.exp_out_degree_label
         np.testing.assert_allclose(d_out.label, d_ref.label, rtol=0)
         np.testing.assert_allclose(d_out.id, d_ref.id, rtol=0)
         np.testing.assert_allclose(d_out.value, d_ref.value, rtol=1e-5)
@@ -747,7 +773,8 @@ class TestFitnessModelMeasures():
                          dtype=[('label', 'u1'),
                                 ('id', 'u1'),
                                 ('value', '<f8')]).view(type=np.recarray)
-        d_in = model.expected_in_degree_by_label()
+        model.expected_degrees_by_label()
+        d_in = model.exp_in_degree_label
         np.testing.assert_allclose(d_in.label, d_ref.label, rtol=0)
         np.testing.assert_allclose(d_in.id, d_ref.id, rtol=0)
         np.testing.assert_allclose(d_in.value, d_ref.value, rtol=1e-5)
@@ -767,7 +794,8 @@ class TestFitnessModelMeasures():
                          dtype=[('label', 'u1'),
                                 ('id', 'u1'),
                                 ('value', '<f8')]).view(type=np.recarray)
-        d_in = model.expected_in_degree_by_label()
+        model.expected_degrees_by_label()
+        d_in = model.exp_in_degree_label
         np.testing.assert_allclose(d_in.label, d_ref.label, rtol=0)
         np.testing.assert_allclose(d_in.id, d_ref.id, rtol=0)
         np.testing.assert_allclose(d_in.value, d_ref.value, rtol=1e-5)

@@ -116,18 +116,18 @@ class TestBlockFitnessModel():
         correctly. """
         model = ge.BlockFitnessModel(g)
         model.fit(method="newton")
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
-        assert np.isclose(z, model.param[0], atol=1e-12, rtol=1e-6), model.z
+        assert np.isclose(z, model.param[0], atol=1e-12, rtol=1e-6)
 
     def test_solver_newton_var(self):
         """ Check that the newton solver is fitting the z parameters
         correctly. """
         model = ge.BlockFitnessModel(g_var)
         model.fit(method="newton")
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges_var, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges_var, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
 
     def test_solver_invariant(self):
@@ -135,8 +135,8 @@ class TestBlockFitnessModel():
         correctly. """
         model = ge.BlockFitnessModel(g, scale_invariant=True)
         model.fit()
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
 
     def test_solver_invariant_var(self):
@@ -144,8 +144,8 @@ class TestBlockFitnessModel():
         correctly. """
         model = ge.BlockFitnessModel(g_var, scale_invariant=True)
         model.fit()
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges_var, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges_var, model.exp_num_edges,
                                    atol=1e-5, rtol=0)
 
     def test_solver_fixed_point(self):
@@ -154,8 +154,8 @@ class TestBlockFitnessModel():
         """
         model = ge.BlockFitnessModel(g)
         model.fit(method="fixed-point", max_iter=200000, xtol=1e-5)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, model.exp_num_edges,
                                    atol=1e-4, rtol=0)
 
     def test_solver_fixed_point_var(self):
@@ -164,8 +164,8 @@ class TestBlockFitnessModel():
         """
         model = ge.BlockFitnessModel(g_var)
         model.fit(method="fixed-point", max_iter=200000, xtol=1e-5)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges_var, exp_num_edges,
+        model.expected_num_edges()
+        np.testing.assert_allclose(num_edges_var, model.exp_num_edges,
                                    atol=1e-4, rtol=0)
 
     def test_sampling(self):
