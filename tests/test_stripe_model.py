@@ -64,7 +64,7 @@ class TestStripeFitnessModelInit():
         model = ge.StripeFitnessModel(g)
         assert isinstance(model, ge.GraphEnsemble)
 
-    def test_model_init(self):
+    def test_model_init_g(self):
         """ Check that the stripe model can be correctly initialized from
         a graph object.
         """
@@ -84,7 +84,7 @@ class TestStripeFitnessModelInit():
         assert np.all(model.num_vertices == num_vertices)
         assert model.per_label
 
-    def test_model_init_param(self):
+    def test_model_init(self):
         """ Check that the stripe model can be correctly initialized from
         parameters directly.
         """
@@ -112,7 +112,7 @@ class TestStripeFitnessModelInit():
         assert np.all(model.num_vertices == num_vertices)
         assert model.per_label
 
-    def test_model_init_z(self):
+    def test_model_init_param(self):
         """ Check that the stripe model can be correctly initialized with
         the z parameter instead of num_edges.
         """

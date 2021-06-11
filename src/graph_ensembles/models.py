@@ -831,13 +831,13 @@ class StripeFitnessModel(GraphEnsemble):
 
         # Ensure that num_vertices and num_labels are coherent with info
         # in strengths
-        if self.num_vertices < max(np.max(self.out_strength.id),
-                                   np.max(self.in_strength.id)):
+        if self.num_vertices <= max(np.max(self.out_strength.id),
+                                    np.max(self.in_strength.id)):
             raise ValueError(
                 'Number of vertices smaller than max id value in strengths.')
 
-        if self.num_labels < max(np.max(self.out_strength.label),
-                                 np.max(self.in_strength.label)):
+        if self.num_labels <= max(np.max(self.out_strength.label),
+                                  np.max(self.in_strength.label)):
             raise ValueError(
                 'Number of labels smaller than max label value in strengths.')
 
@@ -1476,7 +1476,7 @@ class BlockFitnessModel(GraphEnsemble):
 
         # If an argument is passed then it must be a graph
         if len(args) > 0:
-            if isinstance(args[0], graphs.DirectedGraph):
+            if isinstance(args[0], graphs.WeightedGraph):
                 g = args[0]
                 self.num_vertices = g.num_vertices
                 self.num_edges = g.num_edges
@@ -1486,7 +1486,7 @@ class BlockFitnessModel(GraphEnsemble):
                 self.in_strength = g.in_strength_by_group(get=True)
             else:
                 raise ValueError('First argument passed must be a '
-                                 'DirectedGraph.')
+                                 'WeightedGraph.')
 
             if len(args) > 1:
                 msg = ('Unnamed arguments other than the Graph have been '
@@ -1535,11 +1535,13 @@ class BlockFitnessModel(GraphEnsemble):
         else:
             if isinstance(self.group_dict, dict):
                 self.group_dict = mt.dict_to_array(self.group_dict)
-            elif isinstance(self.group_dict, np.ndarray):
+
+            if isinstance(self.group_dict, np.ndarray):
                 msg = 'Group_dict must have one element for each vertex.'
-                assert len(self.group_dict) == self.num_vertices
+                assert len(self.group_dict) == self.num_vertices, msg
             else:
-                ValueError('Group dictionary must be a dict or an array.')
+                msg = 'Group dictionary must be a dict or an array.'
+                raise ValueError(msg)
 
         if not hasattr(self, 'out_strength'):
             raise ValueError('out_strength not set.')
@@ -1566,15 +1568,15 @@ class BlockFitnessModel(GraphEnsemble):
 
         # Ensure that num_vertices and num_groups are coherent with info
         # in strengths
-        if self.num_vertices < max(np.max(self.out_strength.id),
-                                   np.max(self.in_strength.id)):
+        if self.num_vertices <= max(np.max(self.out_strength.id),
+                                    np.max(self.in_strength.id)):
             raise ValueError(
                 'Number of vertices smaller than max id value in strengths.')
 
-        if self.num_groups < max(np.max(self.out_strength.group),
-                                 np.max(self.in_strength.group)):
+        if self.num_groups <= max(np.max(self.out_strength.group),
+                                  np.max(self.in_strength.group)):
             raise ValueError(
-                'Number of labels smaller than max group value in strengths.')
+                'Number of groups smaller than max group value in strengths.')
 
         # Ensure that all groups, ids and values of the strength are positive
         if np.any(self.out_strength.group < 0):
@@ -1615,10 +1617,14 @@ class BlockFitnessModel(GraphEnsemble):
 
         # Ensure that the parameters or number of edges are set correctly
         if hasattr(self, 'num_edges'):
-            if not isinstance(self.num_edges, np.ndarray):
-                self.num_edges = np.array([self.num_edges], dtype=np.float64)
-
             msg = ('Number of edges must be a number.')
+            try:
+                if not isinstance(self.num_edges, np.ndarray):
+                    self.num_edges = np.array([self.num_edges],
+                                              dtype=np.float64)
+            except Exception:
+                raise ValueError(msg)
+
             if len(self.num_edges) > 1:
                 raise ValueError(msg)
 
@@ -1626,7 +1632,7 @@ class BlockFitnessModel(GraphEnsemble):
                 raise ValueError(msg)
 
             if np.any(self.num_edges < 0):
-                msg = 'Parameter must be positive.'
+                msg = 'Number of edges must be positive.'
                 raise ValueError(msg)
         else:
             if not isinstance(self.param, np.ndarray):
@@ -1647,7 +1653,7 @@ class BlockFitnessModel(GraphEnsemble):
         tot_out = np.sum(self.out_strength.value)
         tot_in = np.sum(self.in_strength.value)
 
-        msg = 'Sum of strengths do not match.'
+        msg = 'Sums of strengths do not match.'
         assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
@@ -1698,13 +1704,17 @@ class BlockFitnessModel(GraphEnsemble):
             if not isinstance(x0, np.ndarray):
                 x0 = np.array([x0])
 
+            msg = 'x0 must be a number.'
             try:
-                x0 = np.float64(self.z)
-            except TypeError:
-                raise TypeError('x0 must be a float.')
+                x0 = x0.astype(np.float64)
+            except Exception:
+                raise ValueError(msg)
 
             if len(x0) > 1:
-                raise ValueError('x0 must be a single number.')
+                raise ValueError(msg)
+
+            if np.any(x0 < 0):
+                raise ValueError('x0 must be positive.')
 
         if len(self.num_edges) == 1:
             # Convert to sparse matrices
