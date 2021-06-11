@@ -1091,35 +1091,35 @@ class StripeFitnessModel(GraphEnsemble):
                 
                 if self.min_degree:
                     # Find min degree node
-                    min_out_i = np.argmin(s_out.value)
-                    min_in_i = np.argmin(s_in.value)
-                    if s_out.value[min_out_i] <= s_in.value[min_in_i]:
-                        def min_d(x):
-                            return mt.fit_ineq_constr_alpha(
+                    min_out_i = np.argmin(s_out.value[s_out.value > 0])
+                    min_in_i = np.argmin(s_in.value[s_in.value > 0])
+
+                    def min_d(x):
+                        return np.array([
+                            mt.layer_ineq_constr_alpha(
                                 x, self.prob_fun, min_out_i,
-                                s_out.value[min_out_i], s_in)
-
-                        def jac_min_d(x):
-                            return mt.fit_ineq_jac_alpha(
-                                x, self.jac_fun, min_out_i,
-                                s_out.value[min_out_i], s_in)
-                    else:
-                        def min_d(x):
-                            return mt.fit_ineq_constr_alpha(
+                                s_out.value[min_out_i], s_in),
+                            mt.layer_ineq_constr_alpha(
                                 x, self.prob_fun, min_in_i,
-                                s_in.value[min_in_i], s_out)
+                                s_in.value[min_in_i], s_out)],
+                            dtype=np.float64)
 
-                        def jac_min_d(x):
-                            return mt.fit_ineq_jac_alpha(
+                    def jac_min_d(x):
+                        return np.stack([
+                            mt.layer_ineq_jac_alpha(
+                                x, self.jac_fun, min_out_i,
+                                s_out.value[min_out_i], s_in),
+                            mt.layer_ineq_jac_alpha(
                                 x, self.jac_fun, min_in_i,
-                                s_in.value[min_in_i], s_out)
+                                s_in.value[min_in_i], s_out)],
+                            axis=0)
 
                     # Solve
                     sol = mt.alpha_solver(
                         x0=x0[:, i],
-                        fun=lambda x: mt.fit_eq_constr_alpha(
+                        fun=lambda x: mt.layer_eq_constr_alpha(
                             x, self.prob_fun, s_out, s_in, num_e),
-                        jac=lambda x: mt.fit_eq_jac_alpha(
+                        jac=lambda x: mt.layer_eq_jac_alpha(
                             x, self.jac_fun, s_out, s_in),
                         min_d=min_d,
                         jac_min_d=jac_min_d,

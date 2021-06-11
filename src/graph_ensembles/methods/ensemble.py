@@ -187,27 +187,27 @@ def fit_exp_edges_jac(jac_f, param, fit_out, fit_in):
         for j in np.arange(len(fit_in)):
             s_in = fit_in[j]
             if i != j:
-                jac += jac_f(param, s_out, s_in)
+                jac = jac_f(param, s_out, s_in)
 
     return jac
 
 
-# @jit(nopython=True)
-# def fit_exp_edges_jac_alpha(jac_f, z, a, fit_out, fit_in):
-#     """ Compute the Jacobian of the objective function of the newton solver and its
-#     derivative for a single label of the stripe model.
-#     """
-#     jac = np.zeros(2, dtype=np.float64)
-#     for i in np.arange(len(fit_out)):
-#         s_out = fit_out[i]
-#         for j in np.arange(len(fit_in)):
-#             s_in = fit_in[j]
-#             if i != j:
-#                 res = jac_f(z, a, s_out, s_in)
-#                 jac[0] += res[0]
-#                 jac[1] += res[1]
+@jit(nopython=True)
+def fit_exp_edges_jac_alpha(jac_f, param, fit_out, fit_in):
+    """ Compute the Jacobian of the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
+    """
+    jac = np.zeros(2, dtype=np.float64)
+    for i in np.arange(len(fit_out)):
+        s_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            s_in = fit_in[j]
+            if i != j:
+                res = jac_f(param, s_out, s_in)
+                jac[0] += res[0]
+                jac[1] += res[1]
 
-#     return jac
+    return jac
 
 
 @jit(nopython=True)
@@ -271,7 +271,7 @@ def fit_eq_constr_alpha(x, p_f, fit_out, fit_in, num_e):
 
 @jit(nopython=True)
 def fit_eq_jac_alpha(x, jac_f, fit_out, fit_in):
-    jac = fit_exp_edges_jac(jac_f, x, fit_out, fit_in)
+    jac = fit_exp_edges_jac_alpha(jac_f, x, fit_out, fit_in)
     return np.array([jac[0], jac[1]], dtype=np.float64)
 
 
@@ -315,108 +315,7 @@ def fit_sample(p_f, param, out_strength, in_strength):
     return sample
 
 
-# --------------- TEMP FITNESS METHODS ---------------
-@jit(nopython=True)
-def fit_exp_degree_vertex_old(p_f, z, i, fit_i, fit_j):
-    """ Compute the expected degree of the i-th vertex.
-    """
-    d = 0
-    for j in np.arange(len(fit_j)):
-        ind = fit_j[j].id
-        val = fit_j[j].value
-        if ind != i:
-            d += p_f(z, fit_i, val)
-
-    return d
-
-
-@jit(nopython=True)
-def fit_exp_edges_jac_old(jac_f, z, fit_out, fit_in):
-    """ Compute the Jacobian of the objective function of the newton solver and its
-    derivative for a single label of the stripe model.
-    """
-    jac = 0
-    for i in np.arange(len(fit_out)):
-        ind_out = fit_out[i].id
-        s_out = fit_out[i].value
-        for j in np.arange(len(fit_in)):
-            ind_in = fit_in[j].id
-            s_in = fit_in[j].value
-            if ind_out != ind_in:
-                jac += jac_f(z, s_out, s_in)
-
-    return jac
-
-
-@jit(nopython=True)
-def fit_exp_edges_jac_alpha_old(jac_f, z, fit_out, fit_in):
-    """ Compute the Jacobian of the objective function of the newton solver and its
-    derivative for a single label of the stripe model.
-    """
-    jac = np.zeros(2, dtype=np.float64)
-    for i in np.arange(len(fit_out)):
-        ind_out = fit_out[i].id
-        s_out = fit_out[i].value
-        for j in np.arange(len(fit_in)):
-            ind_in = fit_in[j].id
-            s_in = fit_in[j].value
-            if ind_out != ind_in:
-                res = jac_f(z, s_out, s_in)
-                jac[0] += res[0]
-                jac[1] += res[1]
-
-    return jac
-
-
-def fit_eq_constr_alpha_old(x, p_f, fit_out, fit_in, num_e):
-    @jit(nopython=True)
-    def f(d, x_i, x_j):
-        return p_f(d, x_i, x_j, x[1])
-
-    exp_e = fit_exp_edges(
-         f,
-         x[0],
-         fit_out,
-         fit_in)
-
-    return np.array([exp_e - num_e], dtype=np.float64)
-
-
-def fit_eq_jac_alpha_old(x, jac_f, fit_out, fit_in):
-    @jit(nopython=True)
-    def f(d, x_i, x_j):
-        return jac_f(d, x_i, x_j, x[1])
-
-    jac = fit_exp_edges_jac(f, x[0], fit_out, fit_in)
-
-    return np.array([jac[0], jac[1]], dtype=np.float64)
-
-
-def fit_ineq_constr_alpha_old(x, p_f, i, fit_i, fit_j):
-    @jit(nopython=True)
-    def f(d, x_i, x_j):
-        return p_f(d, x_i, x_j, x[1])
-
-    deg = fit_exp_degree_vertex(f, x[0], i, fit_i, fit_j)
-
-    return np.array([deg], dtype=np.float64)
-
-
-@jit(nopython=True)
-def fit_ineq_jac_alpha_old(x, jac_f, i, fit_i, fit_j):
-    jac = np.zeros(2, dtype=np.float64)
-    for j in np.arange(len(fit_j)):
-        ind_j = fit_j[j].id
-        j_val = fit_j[j].value
-        if i != ind_j:
-            res = jac_f(x[0], fit_i, j_val, x[1])
-            jac[0] += res[0]
-            jac[1] += res[1]
-
-    return jac
-
-
-# --------------- STRIPE METHODS ---------------
+# --------------- LAYER FITNESS METHODS ---------------
 @jit(nopython=True)
 def layer_exp_edges(p_f, param, fit_out, fit_in):
     """ Compute the expected number of edges.
@@ -501,6 +400,97 @@ def layer_exp_degree(p_f, param, fit_out, fit_in, label):
     return d_out, d_in
 
 
+@jit(nopython=True)
+def layer_eq_constr_alpha(x, p_f, fit_out, fit_in, num_e):
+    exp_e = layer_exp_edges(p_f, x, fit_out, fit_in)
+    return np.array([exp_e - num_e], dtype=np.float64)
+
+
+@jit(nopython=True)
+def layer_exp_edges_jac_alpha(jac_f, param, fit_out, fit_in):
+    """ Compute the Jacobian of the objective function of the newton solver 
+    and its derivative for a single label of the stripe model.
+    """
+    jac = np.zeros(2, dtype=np.float64)
+    for i in np.arange(len(fit_out)):
+        i_out = fit_out[i].id
+        s_out = fit_out[i].value
+        for j in np.arange(len(fit_in)):
+            j_in = fit_in[j].id
+            s_in = fit_in[j].value
+            if i_out != j_in:
+                res = jac_f(param, s_out, s_in)
+                jac[0] += res[0]
+                jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
+def layer_eq_jac_alpha(x, jac_f, fit_out, fit_in):
+    jac = layer_exp_edges_jac_alpha(jac_f, x, fit_out, fit_in)
+    return np.array([jac[0], jac[1]], dtype=np.float64)
+
+
+@jit(nopython=True)
+def layer_exp_degree_vertex(p_f, param, i, fit_i, fit_j):
+    """ Compute the expected degree of the i-th vertex.
+    """
+    d = 0
+    for j in np.arange(len(fit_j)):
+        ind = fit_j[j].id
+        val = fit_j[j].value
+        if ind != i:
+            d += p_f(param, fit_i, val)
+
+    return d
+
+
+@jit(nopython=True)
+def layer_ineq_constr_alpha(x, p_f, i, fit_i, fit_j):
+    deg = layer_exp_degree_vertex(p_f, x, i, fit_i, fit_j)
+    return deg - 1
+
+
+@jit(nopython=True)
+def layer_ineq_jac_alpha(x, jac_f, i, fit_i, fit_j):
+    jac = np.zeros(2, dtype=np.float64)
+    for j in np.arange(len(fit_j)):
+        ind_j = fit_j[j].id
+        j_val = fit_j[j].value
+        if i != ind_j:
+            res = jac_f(x, fit_i, j_val)
+            jac[0] += res[0]
+            jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
+def layer_sample(p_f, param, out_strength, in_strength, label):
+    """ Compute the expected number of edges for a single label of the stripe
+    model.
+    """
+    s_tot = np.sum(out_strength.value)
+    msg = 'Sum of in/out strengths not the same.'
+    assert np.abs(1 - np.sum(in_strength.value)/s_tot) < 1e-6, msg
+    sample = []
+    for i in np.arange(len(out_strength)):
+        ind_out = out_strength[i].id
+        s_out = out_strength[i].value
+        for j in np.arange(len(in_strength)):
+            ind_in = in_strength[j].id
+            s_in = in_strength[j].value
+            if ind_out != ind_in:
+                p = p_f(param, s_out, s_in)
+                if rng.random() < p:
+                    w = np.float64(rng.exponential(s_out*s_in/(s_tot*p)))
+                    sample.append((label, ind_out, ind_in, w))
+
+    return sample
+
+
+# --------------- STRIPE METHODS ---------------
 @jit(nopython=True)
 def stripe_f_jac(p_f, jac_f, param, s_out_i, s_out_j, s_out_w,
                  s_in_i, s_in_j, s_in_w, n_edges):
@@ -787,30 +777,6 @@ def stripe_exp_degree_label(p_f, param, out_strength, in_strength, num_labels,
 
 
 @jit(nopython=True)
-def sample_stripe_layer(p_f, param, out_strength, in_strength, label):
-    """ Compute the expected number of edges for a single label of the stripe
-    model.
-    """
-    s_tot = np.sum(out_strength.value)
-    msg = 'Sum of in/out strengths not the same.'
-    assert np.abs(1 - np.sum(in_strength.value)/s_tot) < 1e-6, msg
-    sample = []
-    for i in np.arange(len(out_strength)):
-        ind_out = out_strength[i].id
-        s_out = out_strength[i].value
-        for j in np.arange(len(in_strength)):
-            ind_in = in_strength[j].id
-            s_in = in_strength[j].value
-            if ind_out != ind_in:
-                p = p_f(param, s_out, s_in)
-                if rng.random() < p:
-                    w = np.float64(rng.exponential(s_out*s_in/(s_tot*p)))
-                    sample.append((label, ind_out, ind_in, w))
-
-    return sample
-
-
-@jit(nopython=True)
 def stripe_sample(p_f, param, out_strength, in_strength, num_labels,
                   per_label):
     """ Sample edges and weights from the stripe ensemble.
@@ -822,10 +788,10 @@ def stripe_sample(p_f, param, out_strength, in_strength, num_labels,
         label = s_out[0].label
         if per_label:
             sample.extend(
-                sample_stripe_layer(p_f, param[:, i], s_out, s_in, label))
+                layer_sample(p_f, param[:, i], s_out, s_in, label))
         else:
             sample.extend(
-                sample_stripe_layer(p_f, param[:, 0], s_out, s_in, label))
+                layer_sample(p_f, param[:, 0], s_out, s_in, label))
         
     return np.array(sample, dtype=np.float64)
 
