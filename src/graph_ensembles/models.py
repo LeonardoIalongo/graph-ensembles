@@ -545,7 +545,7 @@ class FitnessModel(GraphEnsemble):
 
         if self.min_degree:
             # Find min degree node
-            self.param = x0
+            self.param = np.ones(x0.shape, dtype=np.float64)
             self.expected_degrees()
             d_out = self.exp_out_degree
             d_in = self.exp_in_degree
@@ -1069,7 +1069,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         if self.min_degree:
             # Initialize param to compute min degree
-            self.param = x0
+            self.param = np.ones(x0.shape, dtype=np.float64)
 
             if self.per_label:
                 self.expected_degrees_by_label()
