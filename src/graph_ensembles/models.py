@@ -1225,11 +1225,13 @@ class StripeFitnessModel(GraphEnsemble):
                 def jac_min_d(x):
                     return np.stack([
                         mt.stripe_ineq_jac_alpha(
-                            x, self.jac_fun, min_out_id,
-                            min_s_out, s_in),
+                            x, self.prob_fun, self.jac_fun,
+                            min_out_id, min_out_label, min_out_vals,
+                            s_in_i, s_in_j, s_in_w),
                         mt.stripe_ineq_jac_alpha(
-                            x, self.jac_fun, min_in_id,
-                            min_s_in, s_out)],
+                            x, self.prob_fun, self.jac_fun,
+                            min_in_id, min_in_label, min_in_vals,
+                            s_out_i, s_out_j, s_out_w)],
                         axis=0)
 
                 # Solve

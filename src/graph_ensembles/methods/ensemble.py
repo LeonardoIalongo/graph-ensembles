@@ -527,6 +527,33 @@ def stripe_ineq_constr_alpha(x, p_f, i_id, i_label, i_val,
 
 
 @jit(nopython=True)
+def stripe_ineq_jac_alpha(x, p_f, jac_f, i_id, i_label, i_val,
+                          j_ptr, j_labels, j_vals):
+    jac = np.zeros(2, dtype=np.float64)
+    for j_id in range(len(j_ptr)-1):
+        # No self-loops
+        if i_id == j_id:
+            continue
+
+        # Get non-zero in strengths for vertex out_row of label out_label
+        r = j_ptr[j_id]
+        s = j_ptr[j_id + 1]
+        j_label = j_labels[r:s]
+        j_val = j_vals[r:s]
+
+        if r == s:
+            continue
+
+        res = stripe_pij_jac_alpha(p_f, jac_f, x,
+                                   i_label, i_val,
+                                   j_label, j_val)
+        jac[0] += res[0]
+        jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
 def stripe_f_jac(p_f, jac_f, param, s_out_i, s_out_j, s_out_w,
                  s_in_i, s_in_j, s_in_w, n_edges):
     """ Compute the objective function of the newton solver and its
@@ -716,6 +743,42 @@ def stripe_pij_f_jac(p_f, jac_f, param, out_label, out_vals,
         tmp = np.prod(1 - p)
         pij_jac = tmp*np.sum(p_jac / (1 - p))
         return 1 - tmp, pij_jac
+
+
+@jit(nopython=True)
+def stripe_pij_jac_alpha(p_f, jac_f, param, out_label, out_vals,
+                         in_label, in_vals):
+    """ Computes the derivative of the probability of observing a link between
+    two nodes (i,j) over all labels.
+    """
+    max_a = max(len(out_label), len(in_label))
+    p = np.zeros(max_a, dtype=np.float64)
+    p_jac = np.zeros((2, max_a), dtype=np.float64)
+    i = 0
+    j = 0
+    a = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            p[a] = p_f(param, out_vals[i], in_vals[j])
+            tmp = jac_f(param, out_vals[i], in_vals[j])
+            p_jac[0, a] = tmp[0]
+            p_jac[1, a] = tmp[1]
+            i += 1
+            j += 1
+            a += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    if np.any(p == 1):
+        return np.zeros(2, dtype=np.float64)
+    else:
+        tmp = np.prod(1 - p)
+        pij_jac = tmp*np.sum(p_jac / (1 - p), axis=1)
+        return pij_jac
 
 
 @jit(nopython=True)
