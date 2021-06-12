@@ -897,6 +897,9 @@ class StripeFitnessModel(GraphEnsemble):
             if np.any(self.num_edges < 0):
                 msg = 'Number of edges must contain only positive values.'
                 raise ValueError(msg)
+
+            # Ensure num edges is a float64
+            self.num_edges = self.num_edges.astype(np.float64)
         else:
             if not isinstance(self.param, np.ndarray):
                 try:
@@ -943,6 +946,9 @@ class StripeFitnessModel(GraphEnsemble):
 
             if np.any(self.param < 0):
                 raise ValueError('Parameters must be positive.')
+
+            # Ensure param is a float64
+            self.param = self.param.astype(np.float64)
 
         # Check that sum of in and out strengths are equal per label
         tot_out = np.zeros((self.num_labels))
