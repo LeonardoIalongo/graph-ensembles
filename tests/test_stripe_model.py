@@ -500,17 +500,17 @@ class TestStripeFitnessModelFit():
         np.testing.assert_allclose(num_edges_label, model.exp_num_edges_label,
                                    atol=1e-3, rtol=0)
 
-    # def test_solver_min_degree_single_z(self):
-    #     """ Check that the min_degree solver converges.
-    #     """
-    #     model = ge.StripeFitnessModel(g, per_label=False, min_degree=True)
-    #     model.fit(tol=1e-6, max_iter=500)
-    #     exp_num_edges = model.expected_num_edges()
-    #     np.testing.assert_allclose(num_edges, exp_num_edges,
-    #                                atol=1e-5, rtol=0)
-        # assert np.all(model.expected_out_degree() >= 1 - 1e-5)
-        # assert np.all(model.expected_in_degree() >= 1 - 1e-5)
-        # np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
+    def test_solver_min_degree_single_z(self):
+        """ Check that the min_degree solver converges.
+        """
+        model = ge.StripeFitnessModel(g, per_label=False, min_degree=True)
+        model.fit(tol=1e-6, max_iter=500)
+        exp_num_edges = model.expected_num_edges()
+        np.testing.assert_allclose(num_edges, exp_num_edges,
+                                   atol=1e-5, rtol=0)
+        assert np.all(model.expected_out_degree() >= 1 - 1e-5)
+        assert np.all(model.expected_in_degree() >= 1 - 1e-5)
+        np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
 
     def test_solver_min_degree_multi_z(self):
         """ Check that the min_degree solver converges.

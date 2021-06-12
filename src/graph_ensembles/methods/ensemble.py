@@ -492,6 +492,41 @@ def layer_sample(p_f, param, out_strength, in_strength, label):
 
 # --------------- STRIPE METHODS ---------------
 @jit(nopython=True)
+def stripe_exp_degree_vertex(p_f, param, i_id, i_label, i_val, 
+                             j_ptr, j_labels, j_vals, per_label):
+    """ Calculate the expected degree for the i-th vertex.
+    """
+    d = 0
+    for j_id in range(len(j_ptr)-1):
+        # No self-loops
+        if i_id == j_id:
+            continue
+
+        # Get non-zero in strengths for vertex out_row of label out_label
+        r = j_ptr[j_id]
+        s = j_ptr[j_id + 1]
+        j_label = j_labels[r:s]
+        j_val = j_vals[r:s]
+
+        if r == s:
+            continue
+
+        # Get pij
+        d += stripe_pij(p_f, param, i_label, i_val,
+                        j_label, j_val, per_label)
+
+    return d
+
+
+@jit(nopython=True)
+def stripe_ineq_constr_alpha(x, p_f, i_id, i_label, i_val, 
+                             j_ptr, j_labels, j_vals):
+    deg = stripe_exp_degree_vertex(
+        p_f, x, i_id, i_label, i_val, j_ptr, j_labels, j_vals, False)
+    return deg - 1
+
+
+@jit(nopython=True)
 def stripe_f_jac(p_f, jac_f, param, s_out_i, s_out_j, s_out_w,
                  s_in_i, s_in_j, s_in_w, n_edges):
     """ Compute the objective function of the newton solver and its

@@ -1076,7 +1076,7 @@ class StripeFitnessModel(GraphEnsemble):
                 d_out = self.exp_out_degree_label
                 d_in = self.exp_in_degree_label
             else:
-                self.exp_degrees()
+                self.expected_degrees()
                 d_out = self.exp_out_degree
                 d_in = self.exp_in_degree
 
@@ -1205,35 +1205,41 @@ class StripeFitnessModel(GraphEnsemble):
                 
             if self.min_degree:
                 # Find min degree node
-                min_out_i = np.argmin(s_out.value)
-                min_in_i = np.argmin(s_in.value)
-                if s_out.value[min_out_i] <= s_in.value[min_in_i]:
-                    def min_d(x):
-                        return mt.fit_ineq_constr_alpha(
-                            x, self.prob_fun, min_out_i,
-                            s_out.value[min_out_i], s_in)
+                min_d_out = np.argmin(d_out[d_out > 0])
+                min_d_in = np.argmin(d_in[d_in > 0])
+                min_out_id = d_out_l[min_d_out].id
+                min_in_id = d_in_l[min_d_in].id
+                min_out_label = s_out_j[min_out_id: min_out_id + 1]
+                min_in_label = s_out_j[min_out_id: min_out_id + 1]
+                min_out_vals = s_out_w[min_out_id: min_out_id + 1]
+                min_in_vals = s_out_w[min_out_id: min_out_id + 1]
 
-                    def jac_min_d(x):
-                        return mt.fit_ineq_jac_alpha(
-                            x, self.jac_fun, min_out_i,
-                            s_out.value[min_out_i], s_in)
-                else:
-                    def min_d(x):
-                        return mt.fit_ineq_constr_alpha(
-                            x, self.prob_fun, min_in_i,
-                            s_in.value[min_in_i], s_out)
+                def min_d(x):
+                    return np.array([
+                        mt.stripe_ineq_constr_alpha(
+                            x, self.prob_fun, min_out_id, min_out_label,
+                            min_out_vals, s_in_i, s_in_j, s_in_w),
+                        mt.stripe_ineq_constr_alpha(
+                            x, self.prob_fun, min_in_id, min_in_label,
+                            min_in_vals, s_out_i, s_out_j, s_out_w)],
+                        dtype=np.float64)
 
-                    def jac_min_d(x):
-                        return mt.fit_ineq_jac_alpha(
-                            x, self.jac_fun, min_in_i,
-                            s_in.value[min_in_i], s_out)
+                def jac_min_d(x):
+                    return np.stack([
+                        mt.stripe_ineq_jac_alpha(
+                            x, self.jac_fun, min_out_id,
+                            min_s_out, s_in),
+                        mt.stripe_ineq_jac_alpha(
+                            x, self.jac_fun, min_in_id,
+                            min_s_in, s_out)],
+                        axis=0)
 
                 # Solve
                 sol = mt.alpha_solver(
                     x0=x0[:, 0],
-                    fun=lambda x: mt.fit_eq_constr_alpha(
+                    fun=lambda x: mt.stripe_eq_constr_alpha(
                         x, self.prob_fun, s_out, s_in, num_e),
-                    jac=lambda x: mt.fit_eq_jac_alpha(
+                    jac=lambda x: mt.stripe_eq_jac_alpha(
                         x, self.jac_fun, s_out, s_in),
                     min_d=min_d,
                     jac_min_d=jac_min_d,
