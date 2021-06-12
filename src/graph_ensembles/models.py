@@ -1205,10 +1205,8 @@ class StripeFitnessModel(GraphEnsemble):
                 
             if self.min_degree:
                 # Find min degree node
-                min_d_out = np.argmin(d_out[d_out > 0])
-                min_d_in = np.argmin(d_in[d_in > 0])
-                min_out_id = d_out_l[min_d_out].id
-                min_in_id = d_in_l[min_d_in].id
+                min_out_id = np.argmin(d_out[d_out > 0])
+                min_in_id = np.argmin(d_in[d_in > 0])
                 min_out_label = s_out_j[min_out_id: min_out_id + 1]
                 min_in_label = s_out_j[min_out_id: min_out_id + 1]
                 min_out_vals = s_out_w[min_out_id: min_out_id + 1]
