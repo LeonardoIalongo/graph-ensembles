@@ -1238,9 +1238,12 @@ class StripeFitnessModel(GraphEnsemble):
                 sol = mt.alpha_solver(
                     x0=x0[:, 0],
                     fun=lambda x: mt.stripe_eq_constr_alpha(
-                        x, self.prob_fun, s_out, s_in, num_e),
+                        x, self.prob_fun, s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w, self.num_edges),
                     jac=lambda x: mt.stripe_eq_jac_alpha(
-                        x, self.jac_fun, s_out, s_in),
+                        x, self.prob_fun, self.jac_fun,
+                        s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w),
                     min_d=min_d,
                     jac_min_d=jac_min_d,
                     tol=tol,

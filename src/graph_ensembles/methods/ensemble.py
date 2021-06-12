@@ -492,6 +492,56 @@ def layer_sample(p_f, param, out_strength, in_strength, label):
 
 # --------------- STRIPE METHODS ---------------
 @jit(nopython=True)
+def stripe_eq_constr_alpha(x, p_f, s_out_i, s_out_j, s_out_w,
+                           s_in_i, s_in_j, s_in_w, num_e):
+    exp_e = stripe_exp_edges(p_f, x, s_out_i, s_out_j, s_out_w,
+                             s_in_i, s_in_j, s_in_w, False)
+    return np.array([exp_e - num_e], dtype=np.float64)
+
+
+@jit(nopython=True)
+def stripe_eq_jac_alpha(x, p_f, jac_f, s_out_i, s_out_j, s_out_w,
+                        s_in_i, s_in_j, s_in_w):
+    """ Calculate derivative of expected edges in min degree model.
+    """
+    jac = np.zeros(2, dtype=np.float64)
+
+    for out_row in range(len(s_out_i)-1):
+        # Get non-zero out strengths for vertex out_row of label out_label
+        n = s_out_i[out_row]
+        m = s_out_i[out_row + 1]
+
+        if n == m:
+            continue
+
+        out_label = s_out_j[n:m]
+        out_vals = s_out_w[n:m]
+
+        for in_row in range(len(s_in_i)-1):
+            # No self-loops
+            if out_row == in_row:
+                continue
+
+            # Get non-zero in strengths for vertex out_row of label out_label
+            r = s_in_i[in_row]
+            s = s_in_i[in_row + 1]
+            in_label = s_in_j[r:s]
+            in_vals = s_in_w[r:s]
+
+            if r == s:
+                continue
+
+            # Get pij
+            res = stripe_pij_jac_alpha(p_f, jac_f, x, out_label, out_vals,
+                                       in_label, in_vals)
+
+            jac[0] += res[0]
+            jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
 def stripe_exp_degree_vertex(p_f, param, i_id, i_label, i_val, 
                              j_ptr, j_labels, j_vals, per_label):
     """ Calculate the expected degree for the i-th vertex.
