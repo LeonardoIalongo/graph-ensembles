@@ -2,6 +2,8 @@ env/
 venv/
 notes/
 input_data/
+data/
+logs/
 cov_results/
 __pycache__/
 dist/

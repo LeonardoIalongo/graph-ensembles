@@ -1,5 +1,5 @@
-""" Test the performance of the stripe fitness model class on a set of graphs.
-    The graphs can be generated using label_graph_gen.py in this folder.
+""" Test the performance of the fitness model class on a set of graphs.
+    The graphs can be generated using graph_gen.py in this folder.
 """
 import os
 import pickle as pk
@@ -9,7 +9,7 @@ from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
 
-log = False
+log = True
 tol = 1e-5
 xtol = 1e-6
 
@@ -21,7 +21,7 @@ graph_names = []
 
 test_start = time.time()
 
-with open("logs/stripe_fitness.log", 'w') as f:
+with open("logs/fitness.log", 'w') as f:
 
     if log:
         sys.stdout = f
@@ -33,7 +33,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
             continue
 
         # Select single layer files
-        if '_l' not in filename:
+        if '_z' not in filename:
             continue
 
         with open('data/' + filename, 'rb') as fl:
@@ -49,7 +49,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         print('Number of edges: ', g.num_edges)
 
         start = perf_counter()
-        model = ge.StripeFitnessModel(g)
+        model = ge.FitnessModel(g)
         perf = perf_counter() - start
         print('Time for model init: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
@@ -61,12 +61,12 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for newton fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
+        succ_tmp.append(model.solver_output.converged)
 
-        if not np.allclose(model.expected_num_edges(), g.num_edges_label,
+        if not np.allclose(model.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
             print('Distance from root: ',
-                  model.expected_num_edges() - g.num_edges_label)
+                  model.expected_num_edges() - g.num_edges)
 
         print('Attempting fixed-point fit:')
         start = perf_counter()
@@ -74,19 +74,19 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for fixed-point fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
+        succ_tmp.append(model.solver_output.converged)
 
-        if not np.allclose(model.expected_num_edges(), g.num_edges_label,
+        if not np.allclose(model.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
             print('Distance from root: ',
-                  model.expected_num_edges() - g.num_edges_label)
+                  model.expected_num_edges() - g.num_edges)
 
         start = perf_counter()
         g_sample = model.sample()
         perf = perf_counter() - start
         print('Time for model sample: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(isinstance(g_sample, ge.WeightedLabelGraph))
+        succ_tmp.append(isinstance(g_sample, ge.WeightedGraph))
 
         start = perf_counter()
         out_deg = model.expected_out_degree()
@@ -94,21 +94,21 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for model expected degrees: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
+        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
 
         print('Attempting scale_invariant fit:')
-        inv = ge.StripeFitnessModel(g, scale_invariant=True)
+        inv = ge.FitnessModel(g, scale_invariant=True)
         start = perf_counter()
         inv.fit(tol=tol, verbose=True)
         perf = perf_counter() - start
         print('Time for invariant fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
+        succ_tmp.append(model.solver_output.converged)
 
-        if not np.allclose(inv.expected_num_edges(), g.num_edges_label,
+        if not np.allclose(inv.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
             print('Distance from root: ',
-                  inv.expected_num_edges() - g.num_edges_label)
+                  inv.expected_num_edges() - g.num_edges)
 
         start = perf_counter()
         out_deg = inv.expected_out_degree()
@@ -116,21 +116,21 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for model expected degrees: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
+        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
 
         print('Attempting min_degree fit:')
-        a_model = ge.StripeFitnessModel(g, min_degree=True)
+        a_model = ge.FitnessModel(g, min_degree=True)
         start = perf_counter()
         a_model.fit(tol=tol, max_iter=1000, verbose=True)
         perf = perf_counter() - start
         print('Time for min_degree fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
+        succ_tmp.append(model.solver_output.converged)
 
-        if not np.allclose(a_model.expected_num_edges(), g.num_edges_label,
+        if not np.allclose(a_model.expected_num_edges(), g.num_edges,
                            atol=tol, rtol=0):
             print('Distance from root: ',
-                  a_model.expected_num_edges() - g.num_edges_label)
+                  a_model.expected_num_edges() - g.num_edges)
 
         start = perf_counter()
         out_deg = a_model.expected_out_degree()
@@ -138,7 +138,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for model expected degrees: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
+        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
 
         test_times.append(times_tmp)
         test_succ.append(succ_tmp)

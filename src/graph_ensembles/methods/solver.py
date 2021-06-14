@@ -86,9 +86,9 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     x = x0
     f, f_p = fun(x)
     norm = np.abs(f)
-    diff = 1
+    diff = np.array([1])
 
-    if verbose:
+    if verbose > 1:
         print("x0 = {}".format(x))
         print("|f(x0)| = {}".format(norm))
 
@@ -96,7 +96,7 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
         f_seq = [f]
         x_seq = [x]
         norm_seq = [norm]
-        diff_seq = [diff]
+        diff_seq = diff
 
     while (norm > tol and n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -122,11 +122,11 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             f_seq.append(f)
             x_seq.append(x)
             norm_seq.append(norm)
-            diff_seq.append(diff)
+            diff_seq = np.append(diff_seq, diff)
 
         # step update
         n_iter += 1
-        if verbose:
+        if verbose > 1:
             print("    Iteration {}".format(n_iter))
             print("    fun = {}".format(f))
             print("    fun_prime = {}".format(f_p))
@@ -136,8 +136,14 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
             print("    diff = {}".format(diff))
             print(' ')
 
-    if verbose:
+    if verbose > 1:
         print(' ')
+
+    if verbose:
+        print('Converged: ', norm <= tol)
+        print('Final distance from root: ', norm)
+        print('Last relative change in x: ', diff)
+        print('Iterations: ', n_iter)
 
     if full_return:
         return Solution(x, n_iter, max_iter, 'newton',
@@ -177,14 +183,14 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
     n_iter = 0
     x = x0
     f = fun(x)
-    diff = 1
+    diff = np.array([1])
 
-    if verbose:
+    if verbose > 1:
         print("x0 = {}".format(x))
 
     if full_return:
         x_seq = [x]
-        diff_seq = [diff]
+        diff_seq = diff
 
     while (n_iter < max_iter and diff > xtol):
         # Save previous iteration
@@ -204,19 +210,24 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
 
         if full_return:
             x_seq.append(x)
-            diff_seq.append(diff)
+            diff_seq = np.append(diff_seq, diff)
 
         # step update
         n_iter += 1
-        if verbose:
+        if verbose > 1:
             print("    Iteration {}".format(n_iter))
             print("    dx = {}".format(dx))
             print("    x = {}".format(x))
             print("    diff = {}".format(diff))
             print(' ')
 
-    if verbose:
+    if verbose > 1:
         print(' ')
+
+    if verbose:
+        print('Converged: ', diff <= xtol)
+        print('Last relative change in x: ', diff)
+        print('Iterations: ', n_iter)
 
     if full_return:
         return Solution(x, n_iter, max_iter, 'fixed-point',
@@ -278,7 +289,7 @@ def alpha_solver(x0, fun, jac, min_d, jac_min_d, tol=1e-6,
                    bounds=[(0, None), (0, None)],
                    constraints=constraints,
                    tol=tol,
-                   options={'maxiter': max_iter})
+                   options={'maxiter': max_iter, 'disp': verbose})
 
     if full_return:
         sol = Solution(res.x, res.nit, max_iter, 'SLSQP', tol=tol)
