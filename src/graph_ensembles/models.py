@@ -545,7 +545,10 @@ class FitnessModel(GraphEnsemble):
 
         if self.min_degree:
             # Find min degree node
-            self.param = np.ones(x0.shape, dtype=np.float64)
+            if np.any(x0 == 0):
+                self.param = np.ones(x0.shape, dtype=np.float64)
+            else:
+                self.param = x0
             self.expected_degrees()
             d_out = self.exp_out_degree
             d_in = self.exp_in_degree
@@ -1075,7 +1078,10 @@ class StripeFitnessModel(GraphEnsemble):
 
         if self.min_degree:
             # Initialize param to compute min degree
-            self.param = np.ones(x0.shape, dtype=np.float64)
+            if np.any(x0 == 0):
+                self.param = np.ones(x0.shape, dtype=np.float64)
+            else:
+                self.param = x0
 
             if self.per_label:
                 self.expected_degrees_by_label()
@@ -1202,22 +1208,16 @@ class StripeFitnessModel(GraphEnsemble):
             s_in_i = s_in.indptr
             s_in_j = s_in.indices
             s_in_w = s_in.data
-
-            # Init results
-            if self.min_degree:
-                self.param = np.empty((2, 1), dtype=np.float64)
-            else:
-                self.param = np.empty((1, 1), dtype=np.float64)
                 
             if self.min_degree:
                 # Find min degree node
                 min_out_id = np.argmin(d_out[d_out > 0])
                 min_in_id = np.argmin(d_in[d_in > 0])
                 min_out_label = s_out_j[min_out_id: min_out_id + 1]
-                min_in_label = s_out_j[min_out_id: min_out_id + 1]
+                min_in_label = s_in_j[min_in_id: min_in_id + 1]
                 min_out_vals = s_out_w[min_out_id: min_out_id + 1]
-                min_in_vals = s_out_w[min_out_id: min_out_id + 1]
-
+                min_in_vals = s_in_w[min_in_id: min_in_id + 1]
+                
                 def min_d(x):
                     return np.array([
                         mt.stripe_ineq_constr_alpha(
@@ -1274,7 +1274,7 @@ class StripeFitnessModel(GraphEnsemble):
                 raise ValueError("The selected method is not valid.")
 
             # Update results and check convergence
-            self.param = np.array([sol.x])
+            self.param = np.array([sol.x]).T
             self.solver_output = sol
 
             if not sol.converged:

@@ -503,14 +503,41 @@ class TestStripeFitnessModelFit():
     def test_solver_min_degree_single_z(self):
         """ Check that the min_degree solver converges.
         """
-        model = ge.StripeFitnessModel(g, per_label=False, min_degree=True)
-        model.fit(tol=1e-6, max_iter=500)
-        exp_num_edges = model.expected_num_edges()
-        np.testing.assert_allclose(num_edges, exp_num_edges,
-                                   atol=1e-5, rtol=0)
-        assert np.all(model.expected_out_degree() >= 1 - 1e-5)
-        assert np.all(model.expected_in_degree() >= 1 - 1e-5)
-        np.testing.assert_allclose(z, model.param, atol=0, rtol=1e-6)
+        out_strength = np.rec.array([(0, 0, 2e9),
+                                     (0, 1, 5e8)],
+                                    dtype=[('label', np.uint8),
+                                           ('id', np.uint8),
+                                           ('value', np.float64)])
+
+        in_strength = np.rec.array([(0, 2, 1e9),
+                                    (0, 3, 1e9),
+                                    (0, 4, 5e8)],
+                                   dtype=[('label', np.uint8),
+                                          ('id', np.uint8),
+                                          ('value', np.float64)])
+
+        num_vertices = 5
+        num_edges = 3
+        num_labels = 1
+
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      num_edges=num_edges,
+                                      min_degree=True)
+
+        model.fit(x0=np.array([[1e-6, 0.1]], dtype=np.float64).T,
+                  tol=1e-6,
+                  max_iter=500,
+                  verbose=True)
+        model.expected_num_edges()
+        assert np.abs(num_edges - model.exp_num_edges) < 1e-5
+        model.expected_degrees()
+        d_out = model.exp_out_degree
+        d_in = model.exp_in_degree
+        assert np.all(d_out[d_out != 0] >= 1 - 1e-5)
+        assert np.all(d_in[d_in != 0] >= 1 - 1e-5)
 
     def test_solver_min_degree_multi_z(self):
         """ Check that the min_degree solver converges.
