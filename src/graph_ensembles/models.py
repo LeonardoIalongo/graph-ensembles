@@ -184,7 +184,7 @@ class RandomGraph(GraphEnsemble):
                 except Exception:
                     assert False, msg
 
-            self.total_weight = self.exp_total_weight()
+            self.total_weight = self.expected_total_weight()
 
     def fit(self):
         """ Fit the parameter p and q to the number of edges and total weight.
@@ -197,18 +197,24 @@ class RandomGraph(GraphEnsemble):
             else:
                 self.q = self.num_edges/self.total_weight
 
-    def exp_num_edges(self):
+    def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label) given p.
         """
-        return self.p*self.num_vertices*(self.num_vertices - 1)
+        self.exp_num_edges = self.p*self.num_vertices*(self.num_vertices - 1)
 
-    def exp_total_weight(self):
+        if get:
+            return self.exp_num_edges
+
+    def expected_total_weight(self, get=False):
         """ Compute the expected total weight (per label) given q.
         """
         if self.discrete_weights:
-            return self.num_edges/(1 - self.q)
+            self.exp_tot_weight = self.num_edges/(1 - self.q)
         else:
-            return self.num_edges/self.q
+            self.exp_tot_weight = self.num_edges/self.q
+
+        if get:
+            return self.exp_tot_weight
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -626,7 +632,7 @@ class FitnessModel(GraphEnsemble):
         if not sol.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
-    def expected_num_edges(self):
+    def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'param'):
@@ -638,8 +644,11 @@ class FitnessModel(GraphEnsemble):
                 self.out_strength,
                 self.in_strength)
 
-    def expected_degrees(self):
-        """ Compute the expected out degree for a given z.
+        if get:
+            return self.exp_num_edges
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected out/in degree for a given z.
         """
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
@@ -647,6 +656,25 @@ class FitnessModel(GraphEnsemble):
         self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
             self.prob_fun, self.param, self.out_strength,
             self.in_strength)
+
+        if get:
+            return self.exp_out_degree, self.exp_in_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -1281,7 +1309,7 @@ class StripeFitnessModel(GraphEnsemble):
                 msg = 'Fit did not converge.'
                 warnings.warn(msg, UserWarning)
 
-    def expected_num_edges(self):
+    def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'param'):
@@ -1317,8 +1345,11 @@ class StripeFitnessModel(GraphEnsemble):
                 s_out_i, s_out_j, s_out_w,
                 s_in_i, s_in_j, s_in_w,
                 self.per_label)
+
+        if get:
+            return self.exp_num_edges
         
-    def expected_num_edges_label(self):
+    def expected_num_edges_label(self, get=False):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'param'):
@@ -1331,8 +1362,11 @@ class StripeFitnessModel(GraphEnsemble):
                     self.in_strength,
                     self.num_labels,
                     self.per_label)
+
+        if get:
+            return self.exp_num_edges_label
                 
-    def expected_degrees(self):
+    def expected_degrees(self, get=False):
         """ Compute the expected out degree for a given z.
         """
         if not hasattr(self, 'param'):
@@ -1366,7 +1400,26 @@ class StripeFitnessModel(GraphEnsemble):
                 self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
                 s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
 
-    def expected_degrees_by_label(self):
+        if get:
+            return self.exp_out_degree, self.exp_in_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
+    def expected_degrees_by_label(self, get=False):
         """ Compute the expected out degree by label for a given z.
         """
         if not hasattr(self, 'param'):
@@ -1399,6 +1452,25 @@ class StripeFitnessModel(GraphEnsemble):
              ('id', self.id_dtype),
              ('value', 'f8')]
             ).reshape((d_in.shape[0],))
+
+        if get:
+            return self.exp_out_degree_label, self.exp_in_degree_label
+
+    def expected_out_degree_by_label(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees_by_label()
+
+        if get:
+            return self.exp_out_degree_label
+
+    def expected_in_degree_by_label(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees_by_label()
+        
+        if get:
+            return self.exp_in_degree_label
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -1805,7 +1877,7 @@ class BlockFitnessModel(GraphEnsemble):
         else:
             raise ValueError('Number of edges must be a single value.')
 
-    def expected_num_edges(self):
+    def expected_num_edges(self, get=False):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before hand.')
 
@@ -1834,7 +1906,19 @@ class BlockFitnessModel(GraphEnsemble):
             self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
             s_in_i, s_in_j, s_in_w, self.group_dict)
 
-    def expected_degrees(self):
+        if get:
+            return self.exp_num_edges
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_out_degree()
+        self.expected_in_degree()
+        
+        if get:
+            return self.exp_out_degree, self.exp_in_degree
+
+    def expected_out_degree(self, get=False):
         """ Compute the expected out degree for a given z.
         """
         if not hasattr(self, 'param'):
@@ -1866,6 +1950,15 @@ class BlockFitnessModel(GraphEnsemble):
             self.prob_fun, self.param, s_out_i, s_out_j, s_out_w, s_in_i,
             s_in_j, s_in_w, self.group_dict)
 
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before hand.')
+
         # Convert to sparse matrices
         s_out = lib.to_sparse(self.out_strength,
                               (self.num_vertices, self.num_groups),
@@ -1891,6 +1984,9 @@ class BlockFitnessModel(GraphEnsemble):
         self.exp_in_degree = mt.block_exp_out_degree(
             self.prob_fun, self.param, s_in_i, s_in_j, s_in_w, s_out_i,
             s_out_j, s_out_w, self.group_dict)
+        
+        if get:
+            return self.exp_in_degree
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
