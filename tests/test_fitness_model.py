@@ -386,6 +386,21 @@ class TestFitnessModelMeasures():
                                    num_edges,
                                    rtol=1e-5)
 
+    def test_exp_degree(self):
+        """ Check expected d is correct. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+        model.expected_degrees()
+        d = model.exp_degree
+        np.testing.assert_allclose(
+            d,
+            np.array([1.031808, 0.430388, 1.974889, 1.562915]) + 
+            np.array([1.935262, 2.977007, 0.087732, 0]),
+            rtol=1e-5)
+        np.testing.assert_allclose(2*num_edges, np.sum(d))
+
     def test_exp_out_degree(self):
         """ Check expected d_out is correct. """
         model = ge.FitnessModel(num_vertices=num_vertices,
@@ -410,6 +425,125 @@ class TestFitnessModelMeasures():
         np.testing.assert_allclose(
             d_in, np.array([1.935262, 2.977007, 0.087732, 0]), rtol=1e-5)
         np.testing.assert_allclose(num_edges, np.sum(d_in))
+
+    def test_av_nn_prop_ones(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        prop = np.ones(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_zeros(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        prop = np.zeros(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_scale(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        prop = np.arange(num_vertices) + 1
+
+        exp = np.array([2.1, 1.3, 1.9, 2])
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+        exp = np.array([3, 3, 1.5, 0])
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+        
+        exp = np.array([2.5, 2.5, 1.7, 2])
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+    def test_av_nn_deg(self):
+        """ Test average nn degree."""
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        model.expected_av_nn_degree(ddir='out', ndir='out')
+        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
+        np.testing.assert_allclose(model.exp_av_out_nn_d_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='out', ndir='in')
+        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
+        np.testing.assert_allclose(model.exp_av_out_nn_d_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='in', ndir='in')
+        exp = np.array([1.935262, 2.977007, 0.087732, 0])
+        np.testing.assert_allclose(model.exp_av_in_nn_d_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='in', ndir='out')
+        exp = np.array([1.031808, 0.430388, 1.974889, 0])
+        np.testing.assert_allclose(model.exp_av_in_nn_d_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='out-in', ndir='out-in')
+        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
+        np.testing.assert_allclose(model.exp_av_out_in_nn_d_out_in, exp,
+                                   atol=1e-5, rtol=0)
+
+    def test_av_nn_strength(self):
+        """ Test average nn strength."""
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        model.expected_av_nn_strength(sdir='out', ndir='out')
+        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
+        np.testing.assert_allclose(model.exp_av_out_nn_s_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_strength(sdir='out', ndir='in')
+        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
+        np.testing.assert_allclose(model.exp_av_out_nn_s_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_strength(sdir='in', ndir='in')
+        exp = np.array([1.935262, 2.977007, 0.087732, 0])
+        np.testing.assert_allclose(model.exp_av_in_nn_s_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_strength(sdir='in', ndir='out')
+        exp = np.array([1.031808, 0.430388, 1.974889, 0])
+        np.testing.assert_allclose(model.exp_av_in_nn_s_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_strength(sdir='out-in', ndir='out-in')
+        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
+        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp,
+                                   atol=1e-5, rtol=0)
 
 
 class TestFitnessModelSample():

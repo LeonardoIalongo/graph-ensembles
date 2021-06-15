@@ -713,7 +713,7 @@ class FitnessModel(GraphEnsemble):
 
         return av_nn / deg
 
-    def expected_av_nn_degree(self, prop, ddir='out', ndir='out',
+    def expected_av_nn_degree(self, ddir='out', ndir='out',
                               deg_recompute=False, get=False):
         """ Computes the expected value of the nearest neighbour average of
         the degree.
@@ -739,7 +739,7 @@ class FitnessModel(GraphEnsemble):
         if get:
             return getattr(self, name)
 
-    def expected_av_nn_strength(self, prop, sdir='out', ndir='out',
+    def expected_av_nn_strength(self, sdir='out', ndir='out',
                                 deg_recompute=False, get=False):
         """ Computes the expected value of the nearest neighbour average of
         the strength.
