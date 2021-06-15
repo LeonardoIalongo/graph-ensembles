@@ -653,12 +653,20 @@ class FitnessModel(GraphEnsemble):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
-        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
-            self.prob_fun, self.param, self.out_strength,
-            self.in_strength)
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.fit_exp_degree(self.prob_fun, self.param, self.out_strength,
+                              self.in_strength)
 
         if get:
-            return self.exp_out_degree, self.exp_in_degree
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected undirected degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
 
     def expected_out_degree(self, get=False):
         """ Compute the expected out degree for a given z.
@@ -675,6 +683,85 @@ class FitnessModel(GraphEnsemble):
         
         if get:
             return self.exp_in_degree
+
+    def expected_av_nn_property(self, prop, ndir='out', deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        av_nn = mt.fit_av_nn_prop(self.prob_fun, self.param, self.out_strength,
+                                  self.in_strength, prop, ndir=ndir)
+
+        return av_nn / deg
+
+    def expected_av_nn_degree(self, prop, ddir='out', ndir='out',
+                              deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ddir == 'out':
+            deg = self.exp_out_degree
+        elif ddir == 'in':
+            deg = self.exp_in_degree
+        elif ddir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = 'exp_av_' + ndir + '_nn_d_' + ddir
+        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def expected_av_nn_strength(self, prop, sdir='out', ndir='out',
+                                deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the strength.
+        """
+        # Select the correct strength
+        if sdir == 'out':
+            s = self.out_strength
+        elif sdir == 'in':
+            s = self.in_strength
+        elif sdir == 'out-in':
+            s = self.out_strength + self.in_strength
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = 'exp_av_' + ndir + '_nn_s_' + sdir
+        res = self.expected_av_nn_property(s, ndir=ndir,
+                                           deg_recompute=deg_recompute)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
