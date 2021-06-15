@@ -295,6 +295,30 @@ def fit_ineq_jac_alpha(x, jac_f, i, fit_i, fit_j):
 
 
 @jit(nopython=True)
+def fit_av_nn_prop(p_f, param, fit_out, fit_in, prop, ndir='out'):
+    """ Compute the expected number of edges.
+    """
+    av_nn = np.zeros(prop.shape, dtype=np.float64)
+    for i in np.arange(len(fit_out)):
+        v_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            v_in = fit_in[j]
+            if i != j:
+                pij = p_f(param, v_out, v_in)
+                if ndir == 'out':
+                    av_nn[i] += pij*prop[j]
+                elif ndir == 'in':
+                    av_nn[j] += pij*prop[i]
+                elif ndir == 'out-in':
+                    av_nn[i] += pij*prop[j]
+                    av_nn[j] += pij*prop[i]
+                else:
+                    raise ValueError('Direction of neighbourhood not right.')
+
+    return av_nn
+
+
+@jit(nopython=True)
 def fit_sample(p_f, param, out_strength, in_strength):
     """ Sample from the fitness model ensemble.
     """
