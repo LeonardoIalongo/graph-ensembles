@@ -653,9 +653,10 @@ class FitnessModel(GraphEnsemble):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
-        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
-            mt.fit_exp_degree(self.prob_fun, self.param, self.out_strength,
-                              self.in_strength)
+        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
+            self.prob_fun, self.param, self.out_strength, self.in_strength)
+
+        self.exp_degree = self.exp_out_degree + self.exp_in_degree
 
         if get:
             return self.exp_degree, self.exp_out_degree, self.exp_in_degree
@@ -710,8 +711,16 @@ class FitnessModel(GraphEnsemble):
 
         av_nn = mt.fit_av_nn_prop(self.prob_fun, self.param, self.out_strength,
                                   self.in_strength, prop, ndir=ndir)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
 
-        return av_nn / deg
+        return av_nn
 
     def expected_av_nn_degree(self, ddir='out', ndir='out',
                               deg_recompute=False, get=False):

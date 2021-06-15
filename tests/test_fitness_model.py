@@ -438,7 +438,8 @@ class TestFitnessModelMeasures():
         np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
 
         res = model.expected_av_nn_property(prop, ndir='in')
-        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+        np.testing.assert_allclose(res, np.array([1, 1, 1, 0]), 
+                                   atol=1e-6, rtol=0)
 
         res = model.expected_av_nn_property(prop, ndir='out-in')
         np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
