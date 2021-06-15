@@ -329,7 +329,7 @@ def fit_av_nn_prop(p_f, param, fit_out, fit_in, prop, ndir='out'):
             pji = p_f(param, s_out_j, s_in_i)
             if ndir == 'out':
                 av_nn[i] += pij*prop[j]
-                av_nn[j] += pji*prop[j]
+                av_nn[j] += pji*prop[i]
             elif ndir == 'in':
                 av_nn[i] += pji*prop[j]
                 av_nn[j] += pij*prop[i]
