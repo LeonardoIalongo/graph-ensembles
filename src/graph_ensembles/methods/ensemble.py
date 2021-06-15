@@ -149,6 +149,18 @@ def random_labelgraph(n, l, p, q=None, discrete_weights=False):  # noqa: E741
 
 # --------------- FITNESS METHODS ---------------
 @jit(nopython=True)
+def fit_pij_iter(p_f, param, fit_out, fit_in):
+    """ Compute the expected number of edges.
+    """
+    for i in np.arange(len(fit_out)):
+        v_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            v_in = fit_in[j]
+            if i != j:
+                yield (i, j, p_f(param, v_out, v_in))
+
+
+@jit(nopython=True)
 def fit_exp_degree_vertex(p_f, param, i, fit_i, fit_j):
     """ Compute the expected degree of the i-th vertex.
     """
@@ -214,18 +226,26 @@ def fit_exp_edges_jac_alpha(jac_f, param, fit_out, fit_in):
 def fit_exp_degree(p_f, param, fit_out, fit_in):
     """ Compute the expected in and out degree sequences.
     """
+    exp_d = np.zeros(len(fit_out), dtype=np.float64)
     exp_d_out = np.zeros(len(fit_out), dtype=np.float64)
     exp_d_in = np.zeros(len(fit_in), dtype=np.float64)
     for i in np.arange(len(fit_out)):
-        s_out = fit_out[i]
-        for j in np.arange(len(fit_in)):
-            s_in = fit_in[j]
-            if i != j:
-                pij = p_f(param, s_out, s_in)
-                exp_d_out[i] += pij
-                exp_d_in[j] += pij
+        s_out_i = fit_out[i]
+        s_in_i = fit_in[i]
+        for j in np.arange(i + 1, len(fit_in)):
+            s_out_j = fit_out[j]
+            s_in_j = fit_in[j]
+            pij = p_f(param, s_out_i, s_in_j)
+            pji = p_f(param, s_out_j, s_in_i)
+            p = 1 - (1 - pij)*(1 - pji)
+            exp_d[i] += p
+            exp_d[j] += p
+            exp_d_out[i] += pij
+            exp_d_out[j] += pji
+            exp_d_in[j] += pij
+            exp_d_in[i] += pji
 
-    return exp_d_out, exp_d_in
+    return exp_d, exp_d_out, exp_d_in
 
 
 @jit(nopython=True)
@@ -300,20 +320,25 @@ def fit_av_nn_prop(p_f, param, fit_out, fit_in, prop, ndir='out'):
     """
     av_nn = np.zeros(prop.shape, dtype=np.float64)
     for i in np.arange(len(fit_out)):
-        v_out = fit_out[i]
-        for j in np.arange(len(fit_in)):
-            v_in = fit_in[j]
-            if i != j:
-                pij = p_f(param, v_out, v_in)
-                if ndir == 'out':
-                    av_nn[i] += pij*prop[j]
-                elif ndir == 'in':
-                    av_nn[j] += pij*prop[i]
-                elif ndir == 'out-in':
-                    av_nn[i] += pij*prop[j]
-                    av_nn[j] += pij*prop[i]
-                else:
-                    raise ValueError('Direction of neighbourhood not right.')
+        s_out_i = fit_out[i]
+        s_in_i = fit_in[i]
+        for j in np.arange(i + 1, len(fit_in)):
+            s_out_j = fit_out[j]
+            s_in_j = fit_in[j]
+            pij = p_f(param, s_out_i, s_in_j)
+            pji = p_f(param, s_out_j, s_in_i)
+            if ndir == 'out':
+                av_nn[i] += pij*prop[j]
+                av_nn[j] += pji*prop[j]
+            elif ndir == 'in':
+                av_nn[i] += pji*prop[j]
+                av_nn[j] += pij*prop[i]
+            elif ndir == 'out-in':
+                p = 1 - (1 - pij)*(1 - pji)
+                av_nn[i] += p*prop[j]
+                av_nn[j] += p*prop[i]
+            else:
+                raise ValueError('Direction of neighbourhood not right.')
 
     return av_nn
 
