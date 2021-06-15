@@ -52,6 +52,11 @@ num_edges = 5
 z = 4.291803e-12
 z_inv = 2.913604e-12
 
+p_ref = np.array([[0.0, 0.99065599, 0.04115187, 0.0],
+                  [0.41309584, 0.0, 0.01729211, 0.0],
+                  [0.97529924, 0.99959007, 0.0, 0.0],
+                  [0.54686647, 0.98676064, 0.02928772, 0.0]])
+
 
 class TestFitnessModelInit():
     def test_issubclass(self):
@@ -394,11 +399,9 @@ class TestFitnessModelMeasures():
                                 param=z)
         model.expected_degrees()
         d = model.exp_degree
-        np.testing.assert_allclose(
-            d,
-            np.array([1.031808, 0.430388, 1.974889, 1.562915]) + 
-            np.array([1.935262, 2.977007, 0.087732, 0]),
-            rtol=1e-5)
+        np.testing.assert_allclose(d, 
+                                   p_ref.sum(axis=0) + p_ref.sum(axis=1),
+                                   rtol=1e-5)
         np.testing.assert_allclose(2*num_edges, np.sum(d))
 
     def test_exp_out_degree(self):
@@ -409,9 +412,7 @@ class TestFitnessModelMeasures():
                                 param=z)
         model.expected_degrees()
         d_out = model.exp_out_degree
-        np.testing.assert_allclose(
-            d_out, np.array([1.031808, 0.430388, 1.974889, 1.562915]),
-            rtol=1e-5)
+        np.testing.assert_allclose(d_out, p_ref.sum(axis=1), rtol=1e-5)
         np.testing.assert_allclose(num_edges, np.sum(d_out))
 
     def test_exp_in_degree(self):
@@ -422,8 +423,7 @@ class TestFitnessModelMeasures():
                                 param=z)
         model.expected_degrees()
         d_in = model.exp_in_degree
-        np.testing.assert_allclose(
-            d_in, np.array([1.935262, 2.977007, 0.087732, 0]), rtol=1e-5)
+        np.testing.assert_allclose(d_in, p_ref.sum(axis=0), rtol=1e-5)
         np.testing.assert_allclose(num_edges, np.sum(d_in))
 
     def test_av_nn_prop_ones(self):
@@ -522,29 +522,24 @@ class TestFitnessModelMeasures():
                                 param=z)
 
         model.expected_av_nn_strength(sdir='out', ndir='out')
-        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
-        np.testing.assert_allclose(model.exp_av_out_nn_s_out, exp,
-                                   atol=1e-5, rtol=0)
-
-        model.expected_av_nn_strength(sdir='out', ndir='in')
-        exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
-        np.testing.assert_allclose(model.exp_av_out_nn_s_in, exp,
-                                   atol=1e-5, rtol=0)
-
-        model.expected_av_nn_strength(sdir='in', ndir='in')
-        exp = np.array([1.935262, 2.977007, 0.087732, 0])
-        np.testing.assert_allclose(model.exp_av_in_nn_s_in, exp,
-                                   atol=1e-5, rtol=0)
+        exp = np.array([1310963.096, 1883915.307,  701371.546, 1039759.783])
+        np.testing.assert_allclose(model.exp_av_out_nn_s_out, exp)
 
         model.expected_av_nn_strength(sdir='in', ndir='out')
-        exp = np.array([1.031808, 0.430388, 1.974889, 0])
-        np.testing.assert_allclose(model.exp_av_in_nn_s_out, exp,
-                                   atol=1e-5, rtol=0)
+        exp = np.array([23718162.385, 384330.592, 12700961.568, 15736614.066])
+        np.testing.assert_allclose(model.exp_av_out_nn_s_in, exp)
+
+        model.expected_av_nn_strength(sdir='in', ndir='in')
+        exp = np.array([5278076.987,  136465.362, 5056641.740, 0])
+        np.testing.assert_allclose(model.exp_av_in_nn_s_in, exp)
+
+        model.expected_av_nn_strength(sdir='out', ndir='in')
+        exp = np.array([11877308.790, 8288500.130, 784561.352, 0])
+        np.testing.assert_allclose(model.exp_av_in_nn_s_out, exp)
 
         model.expected_av_nn_strength(sdir='out-in', ndir='out-in')
         exp = np.array([1.031808, 0.430388, 1.974889, 1.562915])
-        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp,
-                                   atol=1e-5, rtol=0)
+        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp)
 
 
 class TestFitnessModelSample():
