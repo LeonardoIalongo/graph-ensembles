@@ -653,10 +653,9 @@ class FitnessModel(GraphEnsemble):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
-        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
-            self.prob_fun, self.param, self.out_strength, self.in_strength)
-
-        self.exp_degree = self.exp_out_degree + self.exp_in_degree
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.fit_exp_degree(self.prob_fun, self.param, self.out_strength,
+                              self.in_strength)
 
         if get:
             return self.exp_degree, self.exp_out_degree, self.exp_in_degree
@@ -741,7 +740,8 @@ class FitnessModel(GraphEnsemble):
             raise ValueError('Neighbourhood direction not recognised.')
 
         # Compute property and set attribute
-        name = 'exp_av_' + ndir + '_nn_d_' + ddir
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_d_' + ddir.replace('-', '_'))
         res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
         setattr(self, name, res)
 
@@ -764,7 +764,8 @@ class FitnessModel(GraphEnsemble):
             raise ValueError('Neighbourhood direction not recognised.')
 
         # Compute property and set attribute
-        name = 'exp_av_' + ndir + '_nn_s_' + sdir
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_s_' + sdir.replace('-', '_'))
         res = self.expected_av_nn_property(s, ndir=ndir,
                                            deg_recompute=deg_recompute)
         setattr(self, name, res)

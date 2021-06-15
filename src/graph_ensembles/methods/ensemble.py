@@ -149,18 +149,6 @@ def random_labelgraph(n, l, p, q=None, discrete_weights=False):  # noqa: E741
 
 # --------------- FITNESS METHODS ---------------
 @jit(nopython=True)
-def fit_pij_iter(p_f, param, fit_out, fit_in):
-    """ Compute the expected number of edges.
-    """
-    for i in np.arange(len(fit_out)):
-        v_out = fit_out[i]
-        for j in np.arange(len(fit_in)):
-            v_in = fit_in[j]
-            if i != j:
-                yield (i, j, p_f(param, v_out, v_in))
-
-
-@jit(nopython=True)
 def fit_exp_degree_vertex(p_f, param, i, fit_i, fit_j):
     """ Compute the expected degree of the i-th vertex.
     """
