@@ -332,6 +332,44 @@ def fit_av_nn_prop(p_f, param, fit_out, fit_in, prop, ndir='out'):
 
 
 @jit(nopython=True)
+def fit_likelihood(adj_i, adj_j, p_f, param, out_strength, in_strength, lgs):
+    """ Compute the binary log likelihood of a graph given the fitted model.
+    """
+    if lgs:
+        like = 0
+    else:
+        like = 1
+
+    for i in np.arange(len(out_strength)):
+        s_out = out_strength[i]
+        n = adj_i[i]
+        m = adj_i[i+1]
+        j_list = adj_j[n:m]
+        for j in np.arange(len(in_strength)):
+            s_in = in_strength[j]
+            if i != j:
+                p = p_f(param, s_out, s_in)
+            else:
+                p = 0
+
+            # Check if link exists
+            if j in j_list:
+                if lgs:
+                    like += log(p)
+                else:
+                    like *= p
+            else:
+                if lgs:
+                    like += log(1 - p)
+                else:
+                    like *= 1 - p
+    if lgs:
+        return like
+    else:
+        return log(like)
+
+
+@jit(nopython=True)
 def fit_sample(p_f, param, out_strength, in_strength):
     """ Sample from the fitness model ensemble.
     """

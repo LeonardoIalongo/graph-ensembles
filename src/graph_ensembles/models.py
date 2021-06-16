@@ -773,6 +773,22 @@ class FitnessModel(GraphEnsemble):
         if get:
             return getattr(self, name)
 
+    def log_likelihood(self, g, log_space=True):
+        """ Compute the likelihood a graph given the fitted model.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
+
+        # Extract binary adjacency matrix from graph
+        adj = g.adjacency_matrix(kind='csr')
+
+        # Compute log likelihood of graph
+        like = mt.fit_likelihood(
+            adj.indptr, adj.indices, self.prob_fun, self.param,
+            self.out_strength, self.in_strength, log_space)
+
+        return like
+
     def sample(self):
         """ Return a Graph sampled from the ensemble.
         """
