@@ -565,7 +565,35 @@ class TestFitnessModelMeasures():
         exp = np.dot((1 - (1 - p_ref)*(1 - p_ref.T)),
                      out_strength + in_strength)
         exp[d != 0] = exp[d != 0] / d[d != 0]
-        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp, rtol=1e-6)
+        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp,
+                                   rtol=1e-6)
+
+    def test_likelihood(self):
+        """ Test likelihood code. """
+        # Compute reference from p_ref
+        p_log = p_ref.copy()
+        p_log[p_log != 0] = np.log(p_log[p_log != 0])
+        np_log = np.log(1 - p_ref)
+        adj = np.array([[0, 1, 0, 0],
+                        [1, 0, 1, 0],
+                        [0, 1, 0, 0],
+                        [0, 1, 0, 0]])
+
+        ref = 0
+        for i in range(adj.shape[0]):
+            for j in range(adj.shape[1]):
+                if adj[i, j] != 0:
+                    ref += p_log[i, j]
+                else:
+                    ref += np_log[i, j]
+
+        # Construct model
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        assert np.abs(ref - model.log_likelihood(g)) < 1e-6
 
 
 class TestFitnessModelSample():
