@@ -819,6 +819,7 @@ def stripe_exp_edges_label(p_f, param, out_strength, in_strength, num_labels,
             x,
             out_strength[out_strength.label == i],
             in_strength[in_strength.label == i])
+
     return exp_edges
 
 
@@ -1035,6 +1036,57 @@ def stripe_exp_degree_label(p_f, param, out_strength, in_strength, num_labels,
 
 
 @jit(nopython=True)
+def stripe_likelihood(adj_k, adj_i, adj_j, p_f, param, out_strength,
+                      in_strength, num_labels, per_label, lgs):
+    """ Compute the binary log likelihood of a graph given the fitted model.
+    """
+    if lgs:
+        like = 0
+    else:
+        like = 1
+
+    for k in range(num_labels):
+        s_out = out_strength[out_strength.label == k]
+        s_in = in_strength[in_strength.label == k]
+
+        for i in np.arange(len(s_out)):
+            out_i = s_out[i].id
+            out_v = s_out[i].value
+
+            # Get list of indices for ith vertex in kth layer
+            o = adj_k[k]
+            m = adj_i[k, out_i]
+            n = adj_i[k, out_i+1]
+            j_list = adj_j[o+m:o+n]
+            for j in np.arange(len(s_in)):
+                in_j = s_in[j].id
+                in_v = s_in[j].value
+                if out_i != in_j:
+                    if per_label:
+                        p = p_f(param[:, k], out_v, in_v)
+                    else:
+                        p = p_f(param[:, 0], out_v, in_v)
+                else:
+                    p = 0
+
+                # Check if link exists
+                if in_j in j_list:
+                    if lgs:
+                        like += log(p)
+                    else:
+                        like *= p
+                else:
+                    if lgs:
+                        like += log(1 - p)
+                    else:
+                        like *= 1 - p
+    if lgs:
+        return like
+    else:
+        return log(like)
+
+
+@jit(nopython=True)
 def stripe_sample(p_f, param, out_strength, in_strength, num_labels,
                   per_label):
     """ Sample edges and weights from the stripe ensemble.
@@ -1043,13 +1095,12 @@ def stripe_sample(p_f, param, out_strength, in_strength, num_labels,
     for i in range(num_labels):
         s_out = out_strength[out_strength.label == i]
         s_in = in_strength[in_strength.label == i]
-        label = s_out[0].label
         if per_label:
             sample.extend(
-                layer_sample(p_f, param[:, i], s_out, s_in, label))
+                layer_sample(p_f, param[:, i], s_out, s_in, i))
         else:
             sample.extend(
-                layer_sample(p_f, param[:, 0], s_out, s_in, label))
+                layer_sample(p_f, param[:, 0], s_out, s_in, i))
         
     return np.array(sample, dtype=np.float64)
 

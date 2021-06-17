@@ -57,6 +57,29 @@ z_label = np.array([1.826524e-09, 2.477713e-10, 2.674918e-07, 8.191937e-07])
 z_inv = np.array([3.19467e-10])
 z_inv_lbl = np.array([7.749510e-10, 2.268431e-14, 2.448980e-11, 7.500000e-11])
 
+# Define p_ref for testing purposes (from z)
+p_ref = np.zeros((num_labels, num_vertices, num_vertices), dtype=np.float64)
+p_ref[0, 0, 1] = 0.9988920931016365
+p_ref[0, 0, 2] = 0.8998905002291506
+p_ref[0, 1, 2] = 0.08247673514246777
+p_ref[0, 3, 1] = 0.730080534269288
+p_ref[0, 3, 2] = 0.026259053227431942
+p_ref[1, 2, 1] = 0.9999978970495554
+p_ref[2, 3, 1] = 0.9977348098283829
+p_ref[3, 1, 0] = 0.993095114412297
+
+# Define p_ref for testing purposes (from z_label)
+p_ref_lbl = np.zeros((num_labels, num_vertices, num_vertices),
+                     dtype=np.float64)
+p_ref_lbl[0, 0, 1] = 0.9994544473260852
+p_ref_lbl[0, 0, 2] = 0.9480930421837465
+p_ref_lbl[0, 1, 2] = 0.15444301301041627
+p_ref_lbl[0, 3, 1] = 0.846059367245662
+p_ref_lbl[0, 3, 2] = 0.051949130017326955
+p_ref_lbl[1, 2, 1] = 0.9999923706064989
+p_ref_lbl[2, 3, 1] = 0.999992370604421
+p_ref_lbl[3, 1, 0] = 0.9999923706050031
+
 
 class TestStripeFitnessModelInit():
     def test_issubclass(self):
@@ -826,6 +849,70 @@ class TestFitnessModelMeasures():
         np.testing.assert_allclose(d_in.label, d_ref.label, rtol=0)
         np.testing.assert_allclose(d_in.id, d_ref.id, rtol=0)
         np.testing.assert_allclose(d_in.value, d_ref.value, rtol=1e-5)
+
+    def test_likelihood_single_z(self):
+        """ Test likelihood code. """
+        # Compute reference from p_ref
+        p_log = p_ref.copy()
+        p_log[p_log != 0] = np.log(p_log[p_log != 0])
+        np_log = np.log(1 - p_ref)
+        adj = np.zeros(p_ref.shape)
+        adj[0, 0, 1] = 1
+        adj[0, 1, 2] = 1
+        adj[0, 3, 1] = 1
+        adj[1, 2, 1] = 1
+        adj[2, 3, 1] = 1
+        adj[3, 1, 0] = 1
+
+        ref = 0
+        for i in range(adj.shape[0]):
+            for j in range(adj.shape[1]):
+                for k in range(adj.shape[2]):
+                    if adj[i, j, k] != 0:
+                        ref += p_log[i, j, k]
+                    else:
+                        ref += np_log[i, j, k]
+
+        # Construct model
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z)
+
+        assert np.abs(ref - model.log_likelihood(g)) < 1e-6
+
+    def test_likelihood_multi_z(self):
+        """ Test likelihood code. """
+        # Compute reference from p_ref
+        p_log = p_ref_lbl.copy()
+        p_log[p_log != 0] = np.log(p_log[p_log != 0])
+        np_log = np.log(1 - p_ref_lbl)
+        adj = np.zeros(p_ref_lbl.shape)
+        adj[0, 0, 1] = 1
+        adj[0, 1, 2] = 1
+        adj[0, 3, 1] = 1
+        adj[1, 2, 1] = 1
+        adj[2, 3, 1] = 1
+        adj[3, 1, 0] = 1
+
+        ref = 0
+        for i in range(adj.shape[0]):
+            for j in range(adj.shape[1]):
+                for k in range(adj.shape[2]):
+                    if adj[i, j, k] != 0:
+                        ref += p_log[i, j, k]
+                    else:
+                        ref += np_log[i, j, k]
+
+        # Construct model
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z_label)
+
+        assert np.abs(ref - model.log_likelihood(g)) < 1e-6
 
 
 class TestFitnessModelSample():
