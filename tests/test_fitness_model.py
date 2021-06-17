@@ -3,6 +3,7 @@ import graph_ensembles as ge
 import numpy as np
 import pandas as pd
 import pytest
+import re
 
 v = pd.DataFrame([['ING', 'NL'],
                  ['ABN', 'NL'],
@@ -594,6 +595,29 @@ class TestFitnessModelMeasures():
                                 param=z)
 
         assert np.abs(ref - model.log_likelihood(g)) < 1e-6
+        assert np.abs(ref - model.log_likelihood(g.adjacency_matrix())) < 1e-6
+        assert np.abs(ref - model.log_likelihood(adj)) < 1e-6
+
+    def test_likelihood_error(self):
+        """ Test likelihood code. """
+        adj = np.array([[0, 1, 0, 0],
+                        [1, 0, 1, 0],
+                        [0, 1, 0, 0]])
+
+        # Construct model
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        msg = re.escape('Passed graph adjacency matrix does not have the '
+                        'correct shape: (3, 4) instead of (4, 4)')
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood(adj)
+
+        msg = 'g input not a graph or adjacency matrix.'
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood('dfsg')
 
 
 class TestFitnessModelSample():

@@ -6,6 +6,7 @@ from . import graphs
 from . import methods as mt
 from . import lib
 import numpy as np
+import scipy.sparse as sp
 import warnings
 
 
@@ -775,12 +776,28 @@ class FitnessModel(GraphEnsemble):
 
     def log_likelihood(self, g, log_space=True):
         """ Compute the likelihood a graph given the fitted model.
+
+        Accepts as input either a graph or an adjacency matrix.
         """
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before.')
 
-        # Extract binary adjacency matrix from graph
-        adj = g.adjacency_matrix(kind='csr')
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, sp.spmatrix):
+            adj = g.asformat('csr')
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError('g input not a graph or adjacency matrix.')
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = ('Passed graph adjacency matrix does not have the correct '
+                   'shape: {0} instead of {1}'.format(
+                    adj.shape, (self.num_vertices, self.num_vertices)))
+            raise ValueError(msg)
 
         # Compute log likelihood of graph
         like = mt.fit_likelihood(
