@@ -436,7 +436,18 @@ class FitnessModel(GraphEnsemble):
 
         # Ensure that number of edges is a positive number
         if hasattr(self, 'num_edges'):
-            if not isinstance(self.num_edges, (int, float)):
+            try: 
+                tmp = len(self.num_edges)
+                if tmp == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError('Number of edges must be a number.')
+            except TypeError:
+                pass        
+                
+            try:
+                self.num_edges = self.num_edges * 1.0
+            except TypeError:
                 raise ValueError('Number of edges must be a number.')
 
             if self.num_edges < 0:
