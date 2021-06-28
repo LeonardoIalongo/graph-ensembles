@@ -1713,24 +1713,38 @@ class StripeFitnessModel(GraphEnsemble):
         if get:
             return getattr(self, name)
 
-    def expected_av_nn_strength(self, sdir='out', ndir='out',
+    def expected_av_nn_strength(self, sdir='out', ndir='out', by_label=False,
                                 deg_recompute=False, get=False):
         """ Computes the expected value of the nearest neighbour average of
         the strength.
         """
         # Select the correct strength
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_labels),
+                              i_col='id', j_col='label', data_col='value',
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_labels),
+                             i_col='id', j_col='label', data_col='value',
+                             kind='csr')
+
         if sdir == 'out':
-            s = self.out_strength
+            s = s_out
         elif sdir == 'in':
-            s = self.in_strength
+            s = s_in
         elif sdir == 'out-in':
-            s = self.out_strength + self.in_strength
+            s = s_out + s_in
         else:
             raise ValueError('Neighbourhood direction not recognised.')
+
+        if not by_label:
+            s = s.sum(axis=1).A1
 
         # Compute property and set attribute
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_s_' + sdir.replace('-', '_'))
+        if by_label:
+            name += '_label'
         res = self.expected_av_nn_property(s, ndir=ndir,
                                            deg_recompute=deg_recompute)
         setattr(self, name, res)
