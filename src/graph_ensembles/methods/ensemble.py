@@ -1043,7 +1043,7 @@ def stripe_av_nn_prop(p_f, param, prop, ndir, s_out_i, s_out_j, s_out_w,
     av_nn = np.zeros(prop.shape, dtype=np.float64)
 
     # Iterate over vertex ids
-    for i in np.arange(len(s_out_i)-1):
+    for i in np.arange(len(s_out_i) - 1):
         # Get non-zero out strengths for vertex i
         n = s_out_i[i]
         m = s_out_i[i + 1]
@@ -1055,10 +1055,10 @@ def stripe_av_nn_prop(p_f, param, prop, ndir, s_out_i, s_out_j, s_out_w,
         n = s_in_i[i]
         m = s_in_i[i + 1]
 
-        in_l_i = s_out_j[n:m]
-        in_v_i = s_out_w[n:m]
+        in_l_i = s_in_j[n:m]
+        in_v_i = s_in_w[n:m]
 
-        for j in np.arange(i + 1, len(s_in_i)-1):
+        for j in np.arange(i + 1, len(s_in_i) - 1):
             # Get non-zero out strengths for vertex j
             n = s_out_i[j]
             m = s_out_i[j + 1]
@@ -1070,8 +1070,8 @@ def stripe_av_nn_prop(p_f, param, prop, ndir, s_out_i, s_out_j, s_out_w,
             n = s_in_i[j]
             m = s_in_i[j + 1]
 
-            in_l_j = s_out_j[n:m]
-            in_v_j = s_out_w[n:m]
+            in_l_j = s_in_j[n:m]
+            in_v_j = s_in_w[n:m]
 
             # Get pij
             pij = stripe_pij(p_f, param, out_l_i, out_v_i,
