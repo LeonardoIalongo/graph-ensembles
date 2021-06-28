@@ -888,7 +888,25 @@ class TestFitnessModelMeasures():
         res = model.expected_av_nn_property(prop, ndir='out-in')
         np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
 
-    def test_av_nn_prop_zeros(self):
+    def test_av_nn_prop_zeros_single_z(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z)
+
+        prop = np.zeros(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_zeros_multi_z(self):
         """ Test correct value of av_nn_prop using simple local prop. """
         model = ge.StripeFitnessModel(num_vertices=num_vertices,
                                       num_labels=num_labels,
@@ -906,7 +924,37 @@ class TestFitnessModelMeasures():
         res = model.expected_av_nn_property(prop, ndir='out-in')
         np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
 
-    def test_av_nn_prop_scale(self):
+    def test_av_nn_prop_scale_single_z(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z)
+
+        prop = np.arange(num_vertices) + 1
+        p_c = 1 - np.prod(1 - p_ref, axis=0)
+        p_u = (1 - (1 - p_c)*(1 - p_c.T))  # Only valid if no self loops
+        d = p_u.sum(axis=0)
+        d_out = p_c.sum(axis=1)
+        d_in = p_c.sum(axis=0)
+
+        exp = np.dot(p_c, prop)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+        exp = np.dot(p_c.T, prop)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+        
+        exp = np.dot(p_u, prop)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+    def test_av_nn_prop_scale_multi_z(self):
         """ Test correct value of av_nn_prop using simple local prop. """
         model = ge.StripeFitnessModel(num_vertices=num_vertices,
                                       num_labels=num_labels,
@@ -915,17 +963,18 @@ class TestFitnessModelMeasures():
                                       param=z_label)
 
         prop = np.arange(num_vertices) + 1
-        p_u = (1 - (1 - p_ref)*(1 - p_ref.T))  # Only valid if no self loops
+        p_c = 1 - np.prod(1 - p_ref_lbl, axis=0)
+        p_u = (1 - (1 - p_c)*(1 - p_c.T))  # Only valid if no self loops
         d = p_u.sum(axis=0)
-        d_out = p_ref.sum(axis=1)
-        d_in = p_ref.sum(axis=0)
+        d_out = p_c.sum(axis=1)
+        d_in = p_c.sum(axis=0)
 
-        exp = np.dot(p_ref, prop)
+        exp = np.dot(p_c, prop)
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         res = model.expected_av_nn_property(prop, ndir='out')
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(p_ref.T, prop)
+        exp = np.dot(p_c.T, prop)
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         res = model.expected_av_nn_property(prop, ndir='in')
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
