@@ -850,6 +850,154 @@ class TestFitnessModelMeasures():
         np.testing.assert_allclose(d_in.id, d_ref.id, rtol=0)
         np.testing.assert_allclose(d_in.value, d_ref.value, rtol=1e-5)
 
+    def test_av_nn_prop_ones(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z_label)
+
+        prop = np.ones(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, np.array([1, 1, 1, 0]), 
+                                   atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_zeros(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z_label)
+
+        prop = np.zeros(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_scale(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z_label)
+
+        prop = np.arange(num_vertices) + 1
+        p_u = (1 - (1 - p_ref)*(1 - p_ref.T))  # Only valid if no self loops
+        d = p_u.sum(axis=0)
+        d_out = p_ref.sum(axis=1)
+        d_in = p_ref.sum(axis=0)
+
+        exp = np.dot(p_ref, prop)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+        exp = np.dot(p_ref.T, prop)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+        
+        exp = np.dot(p_u, prop)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+    def test_av_nn_deg(self):
+        """ Test average nn degree."""
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z_label)
+
+        model.expected_degrees()
+        d_out = model.exp_out_degree
+        d_in = model.exp_in_degree
+
+        model.expected_av_nn_degree(ddir='out', ndir='out')
+        exp = np.dot(p_ref, d_out)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_d_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='out', ndir='in')
+        exp = np.dot(p_ref.T, d_out)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_d_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='in', ndir='in')
+        exp = np.dot(p_ref.T, d_in)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_d_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='in', ndir='out')
+        exp = np.dot(p_ref, d_in)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_d_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='out-in', ndir='out-in')
+        d = model.exp_degree
+        exp = np.dot((1 - (1 - p_ref)*(1 - p_ref.T)), d)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        np.testing.assert_allclose(model.exp_av_out_in_nn_d_out_in, exp,
+                                   atol=1e-5, rtol=0)
+
+    def test_av_nn_strength(self):
+        """ Test average nn strength."""
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z_label)
+        model.expected_degrees()
+        d_out = model.exp_out_degree
+        d_in = model.exp_in_degree
+
+        model.expected_av_nn_strength(sdir='out', ndir='out')
+        exp = np.dot(p_ref, out_strength)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_s_out, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='in', ndir='out')
+        exp = np.dot(p_ref, in_strength)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_s_in, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='in', ndir='in')
+        exp = np.dot(p_ref.T, in_strength)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_s_in, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='out', ndir='in')
+        exp = np.dot(p_ref.T, out_strength)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_s_out, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='out-in', ndir='out-in')
+        d = model.exp_degree
+        exp = np.dot((1 - (1 - p_ref)*(1 - p_ref.T)),
+                     out_strength + in_strength)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp,
+                                   rtol=1e-6)
+
     def test_likelihood_single_z(self):
         """ Test likelihood code. """
         # Compute reference from p_ref

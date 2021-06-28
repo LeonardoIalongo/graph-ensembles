@@ -1036,6 +1036,66 @@ def stripe_exp_degree_label(p_f, param, out_strength, in_strength, num_labels,
 
 
 @jit(nopython=True)
+def stripe_av_nn_prop(p_f, param, prop, ndir, s_out_i, s_out_j, s_out_w,
+                      s_in_i, s_in_j, s_in_w, per_label):
+    """ Compute the expected number of edges.
+    """
+    av_nn = np.zeros(prop.shape, dtype=np.float64)
+
+    # Iterate over vertex ids
+    for i in np.arange(len(s_out_i)-1):
+        # Get non-zero out strengths for vertex i
+        n = s_out_i[i]
+        m = s_out_i[i + 1]
+
+        out_l_i = s_out_j[n:m]
+        out_v_i = s_out_w[n:m]
+
+        # Get non-zero in strengths for vertex i
+        n = s_in_i[i]
+        m = s_in_i[i + 1]
+
+        in_l_i = s_out_j[n:m]
+        in_v_i = s_out_w[n:m]
+
+        for j in np.arange(i + 1, len(s_in_i)-1):
+            # Get non-zero out strengths for vertex j
+            n = s_out_i[j]
+            m = s_out_i[j + 1]
+
+            out_l_j = s_out_j[n:m]
+            out_v_j = s_out_w[n:m]
+
+            # Get non-zero in strengths for vertex j
+            n = s_in_i[j]
+            m = s_in_i[j + 1]
+
+            in_l_j = s_out_j[n:m]
+            in_v_j = s_out_w[n:m]
+
+            # Get pij
+            pij = stripe_pij(p_f, param, out_l_i, out_v_i,
+                             in_l_j, in_v_j, per_label)
+            pji = stripe_pij(p_f, param, out_l_j, out_v_j,
+                             in_l_i, in_v_i, per_label)
+
+            if ndir == 'out':
+                av_nn[i] += pij*prop[j]
+                av_nn[j] += pji*prop[i]
+            elif ndir == 'in':
+                av_nn[i] += pji*prop[j]
+                av_nn[j] += pij*prop[i]
+            elif ndir == 'out-in':
+                p = 1 - (1 - pij)*(1 - pji)
+                av_nn[i] += p*prop[j]
+                av_nn[j] += p*prop[i]
+            else:
+                raise ValueError('Direction of neighbourhood not right.')
+
+    return av_nn
+
+
+@jit(nopython=True)
 def stripe_likelihood(adj_k, adj_i, adj_j, p_f, param, out_strength,
                       in_strength, num_labels, per_label, lgs):
     """ Compute the binary log likelihood of a graph given the fitted model.
