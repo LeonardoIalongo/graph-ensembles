@@ -1682,7 +1682,12 @@ class StripeFitnessModel(GraphEnsemble):
         assert np.all(av_nn[~ind] == 0), msg
         
         # Average results
-        av_nn[ind] = av_nn[ind] / deg[ind]
+        if av_nn.ndim > 1:
+            new_shape = [1, ]*av_nn.ndim
+            new_shape[0] = np.sum(ind)
+            av_nn[ind] = av_nn[ind] / deg[ind].reshape(tuple(new_shape))
+        else:
+            av_nn[ind] = av_nn[ind] / deg[ind]
 
         return av_nn
 
@@ -1739,6 +1744,8 @@ class StripeFitnessModel(GraphEnsemble):
 
         if not by_label:
             s = s.sum(axis=1).A1
+        else:
+            s = s.toarray()
 
         # Compute property and set attribute
         name = ('exp_av_' + ndir.replace('-', '_') + 
