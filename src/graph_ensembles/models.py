@@ -1537,12 +1537,21 @@ class StripeFitnessModel(GraphEnsemble):
         s_in_w = s_in.data
 
         # Get out_degree
-        self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.stripe_exp_degree(
                 self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
                 s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
 
         if get:
-            return self.exp_out_degree, self.exp_in_degree
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
 
     def expected_out_degree(self, get=False):
         """ Compute the expected out degree for a given z.

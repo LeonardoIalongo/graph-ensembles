@@ -970,43 +970,56 @@ def stripe_exp_degree(p_f, param, s_out_i, s_out_j, s_out_w,
     group_arr: array
         an array containing the label id for each vertex in order
     """
+    degree = np.zeros(N, dtype=np.float64)
     out_degree = np.zeros(N, dtype=np.float64)
     in_degree = np.zeros(N, dtype=np.float64)
 
     # Iterate over vertex ids of the out strength and compute for each id the
     # expected degree
-    for out_row in range(len(s_out_i)-1):
-        # Get non-zero out strengths for vertex out_row of label out_label
-        n = s_out_i[out_row]
-        m = s_out_i[out_row + 1]
+    for i in np.arange(len(s_out_i) - 1):
+        # Get non-zero out strengths for vertex i
+        n = s_out_i[i]
+        m = s_out_i[i + 1]
 
-        if n == m:
-            continue
+        out_l_i = s_out_j[n:m]
+        out_v_i = s_out_w[n:m]
 
-        out_label = s_out_j[n:m]
-        out_vals = s_out_w[n:m]
+        # Get non-zero in strengths for vertex i
+        n = s_in_i[i]
+        m = s_in_i[i + 1]
 
-        for in_row in range(len(s_in_i)-1):
-            # No self-loops
-            if out_row == in_row:
-                continue
+        in_l_i = s_in_j[n:m]
+        in_v_i = s_in_w[n:m]
 
-            # Get non-zero in strengths for vertex out_row of label out_label
-            r = s_in_i[in_row]
-            s = s_in_i[in_row + 1]
-            in_label = s_in_j[r:s]
-            in_vals = s_in_w[r:s]
+        for j in np.arange(i + 1, len(s_in_i) - 1):
+            # Get non-zero out strengths for vertex j
+            n = s_out_i[j]
+            m = s_out_i[j + 1]
 
-            if r == s:
-                continue
+            out_l_j = s_out_j[n:m]
+            out_v_j = s_out_w[n:m]
+
+            # Get non-zero in strengths for vertex j
+            n = s_in_i[j]
+            m = s_in_i[j + 1]
+
+            in_l_j = s_in_j[n:m]
+            in_v_j = s_in_w[n:m]
 
             # Get pij
-            pij = stripe_pij(p_f, param, out_label, out_vals,
-                             in_label, in_vals, per_label)
-            out_degree[out_row] += pij
-            in_degree[in_row] += pij
+            pij = stripe_pij(p_f, param, out_l_i, out_v_i,
+                             in_l_j, in_v_j, per_label)
+            pji = stripe_pij(p_f, param, out_l_j, out_v_j,
+                             in_l_i, in_v_i, per_label)
+            p = 1 - (1 - pij)*(1 - pji)
+            degree[i] += p
+            degree[j] += p
+            out_degree[i] += pij
+            out_degree[j] += pji
+            in_degree[j] += pij
+            in_degree[i] += pji
 
-    return out_degree, in_degree
+    return degree, out_degree, in_degree
 
 
 @jit(nopython=True)
