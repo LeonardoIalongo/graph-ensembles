@@ -1,3 +1,4 @@
+
 """ Test the performance of the stripe fitness model class on a set of graphs.
     The graphs can be generated using label_graph_gen.py in this folder.
 """
@@ -9,19 +10,19 @@ from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
 
-log = False
+log = True
 tol = 1e-5
 xtol = 1e-6
 
-test_names = ['init', 'newton', 'fixed-p', 'sample', 'degrees',
-              'inv', 'inv-deg', 'min_deg', 'min_d-deg']
+test_names = ['init', 'newton', 'fixed-p', 'edges', 'e_lbl', 'degrees', 
+              'd_lbl', 'k_nn', 's_nn', 'like', 'sample']
 test_times = []
 test_succ = []
 graph_names = []
 
 test_start = time.time()
 
-with open("logs/stripe_fitness.log", 'w') as f:
+with open("logs/stripe_single.log", 'w') as f:
 
     if log:
         sys.stdout = f
@@ -32,7 +33,7 @@ with open("logs/stripe_fitness.log", 'w') as f:
         if '.pk' not in filename:
             continue
 
-        # Select single layer files
+        # Select multi layer files
         if '_l' not in filename:
             continue
 
@@ -47,9 +48,11 @@ with open("logs/stripe_fitness.log", 'w') as f:
         print('Testing on graph: ', filename)
         print('Number of vertices: ', g.num_vertices)
         print('Number of edges: ', g.num_edges)
+        print('Number of labels: ', g.num_labels)
 
+        # ------ Init and fit ------
         start = perf_counter()
-        model = ge.StripeFitnessModel(g)
+        model = ge.StripeFitnessModel(g, per_label=False)
         perf = perf_counter() - start
         print('Time for model init: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
@@ -63,10 +66,10 @@ with open("logs/stripe_fitness.log", 'w') as f:
         times_tmp.append('{:.3f}'.format(perf))
         succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
-        if not np.allclose(model.expected_num_edges(), g.num_edges_label,
-                           atol=tol, rtol=0):
+        if not np.allclose(model.expected_num_edges_label(get=True),
+                           g.num_edges_label, atol=tol, rtol=0):
             print('Distance from root: ',
-                  model.expected_num_edges() - g.num_edges_label)
+                  model.expected_num_edges_label(get=True) - g.num_edges_label)
 
         print('Attempting fixed-point fit:')
         start = perf_counter()
@@ -76,10 +79,69 @@ with open("logs/stripe_fitness.log", 'w') as f:
         times_tmp.append('{:.3f}'.format(perf))
         succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
-        if not np.allclose(model.expected_num_edges(), g.num_edges_label,
-                           atol=tol, rtol=0):
+        if not np.allclose(model.expected_num_edges_label(get=True),
+                           g.num_edges_label, atol=tol, rtol=0):
             print('Distance from root: ',
-                  model.expected_num_edges() - g.num_edges_label)
+                  model.expected_num_edges_label(get=True) - g.num_edges_label)
+
+        # ------ Measures ------
+        start = perf_counter()
+        meas = model.expected_num_edges(get=True)
+        perf = perf_counter() - start
+        print('Time for expected edges: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(meas > 0)
+
+        start = perf_counter()
+        meas = model.expected_num_edges_label(get=True)
+        perf = perf_counter() - start
+        print('Time for expected edges by label: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(len(meas) == g.num_labels)
+        
+        start = perf_counter()
+        deg = model.expected_degree(get=True)
+        out_deg = model.expected_out_degree(get=True)
+        in_deg = model.expected_in_degree(get=True)
+        perf = perf_counter() - start
+        print('Time for expected degrees: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
+
+        start = perf_counter()
+        out_deg = model.expected_out_degree_by_label(get=True)
+        in_deg = model.expected_in_degree_by_label(get=True)
+        perf = perf_counter() - start
+        print('Time for expected degrees by label: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        res = True
+        for i in range(g.num_labels):
+            if not np.allclose(np.sum(out_deg[out_deg.label == i].value),
+                               np.sum(in_deg[in_deg.label == i].value)):
+                res = False
+                break
+        succ_tmp.append(res)
+
+        start = perf_counter()
+        meas = model.expected_av_nn_degree(get=True)
+        perf = perf_counter() - start
+        print('Time for expected av_nn_degree: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.all(meas > 0))
+
+        start = perf_counter()
+        meas = model.expected_av_nn_strength(get=True)
+        perf = perf_counter() - start
+        print('Time for expected av_nn_strength: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.all(meas > 0))
+        
+        start = perf_counter()
+        meas = model.log_likelihood(g)
+        perf = perf_counter() - start
+        print('Time for log_likelihood: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(meas < 0)
 
         start = perf_counter()
         g_sample = model.sample()
@@ -87,61 +149,6 @@ with open("logs/stripe_fitness.log", 'w') as f:
         print('Time for model sample: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
         succ_tmp.append(isinstance(g_sample, ge.WeightedLabelGraph))
-
-        start = perf_counter()
-        out_deg = model.expected_out_degree()
-        in_deg = model.expected_in_degree()
-        perf = perf_counter() - start
-        print('Time for model expected degrees: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
-
-        print('Attempting scale_invariant fit:')
-        inv = ge.StripeFitnessModel(g, scale_invariant=True)
-        start = perf_counter()
-        inv.fit(tol=tol, verbose=True)
-        perf = perf_counter() - start
-        print('Time for invariant fit: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
-
-        if not np.allclose(inv.expected_num_edges(), g.num_edges_label,
-                           atol=tol, rtol=0):
-            print('Distance from root: ',
-                  inv.expected_num_edges() - g.num_edges_label)
-
-        start = perf_counter()
-        out_deg = inv.expected_out_degree()
-        in_deg = inv.expected_in_degree()
-        perf = perf_counter() - start
-        print('Time for model expected degrees: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
-
-        print('Attempting min_degree fit:')
-        a_model = ge.StripeFitnessModel(g, min_degree=True)
-        start = perf_counter()
-        a_model.fit(tol=tol, max_iter=1000, verbose=True)
-        perf = perf_counter() - start
-        print('Time for min_degree fit: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
-
-        if not np.allclose(a_model.expected_num_edges(), g.num_edges_label,
-                           atol=tol, rtol=0):
-            print('Distance from root: ',
-                  a_model.expected_num_edges() - g.num_edges_label)
-
-        start = perf_counter()
-        out_deg = a_model.expected_out_degree()
-        in_deg = a_model.expected_in_degree()
-        perf = perf_counter() - start
-        print('Time for model expected degrees: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
-
-        test_times.append(times_tmp)
-        test_succ.append(succ_tmp)
 
     time_format = time.strftime(
         '%H:%M:%S', time.gmtime(time.time() - test_start))
