@@ -102,7 +102,7 @@ with open("logs/stripe_single.log", 'w') as f:
         start = perf_counter()
         deg = model.expected_degree(get=True)
         out_deg = model.expected_out_degree(get=True)
-        in_deg = model.expected_in_degree(get=True)
+        in_deg = model.exp_in_degree
         perf = perf_counter() - start
         print('Time for expected degrees: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
@@ -110,7 +110,7 @@ with open("logs/stripe_single.log", 'w') as f:
 
         start = perf_counter()
         out_deg = model.expected_out_degree_by_label(get=True)
-        in_deg = model.expected_in_degree_by_label(get=True)
+        in_deg = model.exp_in_degree_label
         perf = perf_counter() - start
         print('Time for expected degrees by label: ', perf)
         times_tmp.append('{:.3f}'.format(perf))

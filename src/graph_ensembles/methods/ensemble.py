@@ -567,6 +567,152 @@ def layer_sample(p_f, param, out_strength, in_strength, label):
 
 # --------------- STRIPE METHODS ---------------
 @jit(nopython=True)
+def stripe_pij(p_f, param, out_label, out_vals, in_label, in_vals, per_label):
+    """ Computes the probability of observing a link between two nodes (i,j)
+    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
+    """
+    p = 1
+    i = 0
+    j = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            if per_label:
+                p *= 1 - p_f(param[:, out_l], out_vals[i], in_vals[j])
+            else:
+                p *= 1 - p_f(param[:, 0], out_vals[i], in_vals[j])
+            i += 1
+            j += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    return 1 - p
+
+
+@jit(nopython=True)
+def stripe_pij_f_jac(p_f, jac_f, param, out_label, out_vals,
+                     in_label, in_vals):
+    """ Computes the probability of observing a link between two nodes (i,j)
+    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
+    """
+    max_a = max(len(out_label), len(in_label))
+    p = np.zeros(max_a, dtype=np.float64)
+    p_jac = np.zeros(max_a, dtype=np.float64)
+    i = 0
+    j = 0
+    a = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            p[a] = p_f(param, out_vals[i], in_vals[j])
+            p_jac[a] = jac_f(param, out_vals[i], in_vals[j])
+            i += 1
+            j += 1
+            a += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    if np.any(p == 1):
+        return 1, 0
+    else:
+        tmp = np.prod(1 - p)
+        pij_jac = tmp*np.sum(p_jac / (1 - p))
+        return 1 - tmp, pij_jac
+
+
+@jit(nopython=True)
+def stripe_pij_alpha(p_f, param, out_label, out_vals, in_label, in_vals):
+    """ Computes the probability of observing a link between two nodes (i,j)
+    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
+    """
+    p = 1
+    i = 0
+    j = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            p *= 1 - p_f(param, out_vals[i], in_vals[j])
+            i += 1
+            j += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    return 1 - p
+
+
+@jit(nopython=True)
+def stripe_pij_jac_alpha(p_f, jac_f, param, out_label, out_vals,
+                         in_label, in_vals):
+    """ Computes the derivative of the probability of observing a link between
+    two nodes (i,j) over all labels.
+    """
+    max_a = max(len(out_label), len(in_label))
+    p = np.zeros(max_a, dtype=np.float64)
+    p_jac = np.zeros((2, max_a), dtype=np.float64)
+    i = 0
+    j = 0
+    a = 0
+    while (i < len(out_label) and (j < len(in_label))):
+        out_l = out_label[i]
+        in_l = in_label[j]
+        if out_l == in_l:
+            p[a] = p_f(param, out_vals[i], in_vals[j])
+            tmp = jac_f(param, out_vals[i], in_vals[j])
+            p_jac[0, a] = tmp[0]
+            p_jac[1, a] = tmp[1]
+            i += 1
+            j += 1
+            a += 1
+        elif out_l < in_l:
+            i += 1
+        else:
+            j += 1
+
+    if np.any(p == 1):
+        return np.zeros(2, dtype=np.float64)
+    else:
+        tmp = np.prod(1 - p)
+        pij_jac = tmp*np.sum(p_jac / (1 - p), axis=1)
+        return pij_jac
+
+
+@jit(nopython=True)
+def stripe_exp_degree_vertex(p_f, param, i_id, i_label, i_val, 
+                             j_ptr, j_labels, j_vals):
+    """ Calculate the expected degree for the i-th vertex.
+    """
+    d = 0
+    for j_id in range(len(j_ptr)-1):
+        # No self-loops
+        if i_id == j_id:
+            continue
+
+        # Get non-zero in strengths for vertex out_row of label out_label
+        r = j_ptr[j_id]
+        s = j_ptr[j_id + 1]
+        j_label = j_labels[r:s]
+        j_val = j_vals[r:s]
+
+        if r == s:
+            continue
+
+        # Get pij
+        d += stripe_pij_alpha(p_f, param, i_label, i_val,
+                              j_label, j_val)
+
+    return d
+    
+
+@jit(nopython=True)
 def stripe_eq_constr_alpha(x, p_f, s_out_i, s_out_j, s_out_w,
                            s_in_i, s_in_j, s_in_w, num_e):
     exp_e = 0
@@ -626,33 +772,6 @@ def stripe_eq_jac_alpha(x, p_f, jac_f, s_out_i, s_out_j, s_out_w,
             jac[1] += res[1]
 
     return jac
-
-
-@jit(nopython=True)
-def stripe_exp_degree_vertex(p_f, param, i_id, i_label, i_val, 
-                             j_ptr, j_labels, j_vals):
-    """ Calculate the expected degree for the i-th vertex.
-    """
-    d = 0
-    for j_id in range(len(j_ptr)-1):
-        # No self-loops
-        if i_id == j_id:
-            continue
-
-        # Get non-zero in strengths for vertex out_row of label out_label
-        r = j_ptr[j_id]
-        s = j_ptr[j_id + 1]
-        j_label = j_labels[r:s]
-        j_val = j_vals[r:s]
-
-        if r == s:
-            continue
-
-        # Get pij
-        d += stripe_pij_alpha(p_f, param, i_label, i_val,
-                              j_label, j_val)
-
-    return d
 
 
 @jit(nopython=True)
@@ -821,125 +940,6 @@ def stripe_exp_edges_label(p_f, param, out_strength, in_strength, num_labels,
             in_strength[in_strength.label == i])
 
     return exp_edges
-
-
-@jit(nopython=True)
-def stripe_pij(p_f, param, out_label, out_vals, in_label, in_vals, per_label):
-    """ Computes the probability of observing a link between two nodes (i,j)
-    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
-    """
-    p = 1
-    i = 0
-    j = 0
-    while (i < len(out_label) and (j < len(in_label))):
-        out_l = out_label[i]
-        in_l = in_label[j]
-        if out_l == in_l:
-            if per_label:
-                p *= 1 - p_f(param[:, out_l], out_vals[i], in_vals[j])
-            else:
-                p *= 1 - p_f(param[:, 0], out_vals[i], in_vals[j])
-            i += 1
-            j += 1
-        elif out_l < in_l:
-            i += 1
-        else:
-            j += 1
-
-    return 1 - p
-
-
-@jit(nopython=True)
-def stripe_pij_f_jac(p_f, jac_f, param, out_label, out_vals,
-                     in_label, in_vals):
-    """ Computes the probability of observing a link between two nodes (i,j)
-    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
-    """
-    max_a = max(len(out_label), len(in_label))
-    p = np.zeros(max_a, dtype=np.float64)
-    p_jac = np.zeros(max_a, dtype=np.float64)
-    i = 0
-    j = 0
-    a = 0
-    while (i < len(out_label) and (j < len(in_label))):
-        out_l = out_label[i]
-        in_l = in_label[j]
-        if out_l == in_l:
-            p[a] = p_f(param, out_vals[i], in_vals[j])
-            p_jac[a] = jac_f(param, out_vals[i], in_vals[j])
-            i += 1
-            j += 1
-            a += 1
-        elif out_l < in_l:
-            i += 1
-        else:
-            j += 1
-
-    if np.any(p == 1):
-        return 1, 0
-    else:
-        tmp = np.prod(1 - p)
-        pij_jac = tmp*np.sum(p_jac / (1 - p))
-        return 1 - tmp, pij_jac
-
-
-@jit(nopython=True)
-def stripe_pij_alpha(p_f, param, out_label, out_vals, in_label, in_vals):
-    """ Computes the probability of observing a link between two nodes (i,j)
-    over all labels as p_ij = 1 - prod_alpha(1 - p_ij^alpha).
-    """
-    p = 1
-    i = 0
-    j = 0
-    while (i < len(out_label) and (j < len(in_label))):
-        out_l = out_label[i]
-        in_l = in_label[j]
-        if out_l == in_l:
-            p *= 1 - p_f(param, out_vals[i], in_vals[j])
-            i += 1
-            j += 1
-        elif out_l < in_l:
-            i += 1
-        else:
-            j += 1
-
-    return 1 - p
-
-
-@jit(nopython=True)
-def stripe_pij_jac_alpha(p_f, jac_f, param, out_label, out_vals,
-                         in_label, in_vals):
-    """ Computes the derivative of the probability of observing a link between
-    two nodes (i,j) over all labels.
-    """
-    max_a = max(len(out_label), len(in_label))
-    p = np.zeros(max_a, dtype=np.float64)
-    p_jac = np.zeros((2, max_a), dtype=np.float64)
-    i = 0
-    j = 0
-    a = 0
-    while (i < len(out_label) and (j < len(in_label))):
-        out_l = out_label[i]
-        in_l = in_label[j]
-        if out_l == in_l:
-            p[a] = p_f(param, out_vals[i], in_vals[j])
-            tmp = jac_f(param, out_vals[i], in_vals[j])
-            p_jac[0, a] = tmp[0]
-            p_jac[1, a] = tmp[1]
-            i += 1
-            j += 1
-            a += 1
-        elif out_l < in_l:
-            i += 1
-        else:
-            j += 1
-
-    if np.any(p == 1):
-        return np.zeros(2, dtype=np.float64)
-    else:
-        tmp = np.prod(1 - p)
-        pij_jac = tmp*np.sum(p_jac / (1 - p), axis=1)
-        return pij_jac
 
 
 @jit(nopython=True)
