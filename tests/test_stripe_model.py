@@ -1334,6 +1334,43 @@ class TestFitnessModelMeasures():
 
         assert np.abs(ref - model.log_likelihood(g)) < 1e-6
 
+    def test_likelihood_error(self):
+        """ Test likelihood code. """
+        adj = np.array([[0, 1, 0, 0],
+                        [1, 0, 1, 0],
+                        [0, 1, 0, 0]])
+
+        # Construct model
+        model = ge.StripeFitnessModel(num_vertices=num_vertices,
+                                      num_labels=num_labels,
+                                      out_strength=out_strength,
+                                      in_strength=in_strength,
+                                      param=z)
+
+        msg = 'Element 1 not a matrix'
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood([adj, 'dsf'])
+
+        msg = re.escape('Passed adjacency matrix must have three '
+                        'dimensions: (label, source, destination).')
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood(adj)
+
+        msg = ('g input not a graph or list of adjacency matrices or '
+               'numpy array.')
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood('dfsg')
+
+        msg = re.escape('Number of passed layers (one per label) in adjacency '
+                        'matrix is 1 instead of 4.')
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood([adj, ])
+
+        msg = re.escape('Passed layer 0 adjacency matrix has shape (3, 4) '
+                        'instead of (4, 4)')
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood([adj, ]*4)
+
 
 class TestFitnessModelSample():
     def test_sampling_single_z(self):

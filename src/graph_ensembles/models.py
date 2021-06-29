@@ -1765,8 +1765,47 @@ class StripeFitnessModel(GraphEnsemble):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before.')
 
-        # Extract binary adjacency matrix from graph
-        adj = g.adjacency_matrix(kind='csr')
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, list):
+            # Ensure list contains sparse csr matrices
+            for i in range(len(g)):
+                if isinstance(g[i], sp.spmatrix):
+                    g[i] = g[i].asformat('csr')
+                elif isinstance(g[i], np.ndarray):
+                    g[i] = sp.csr_matrix(g[i])
+                else:
+                    raise ValueError('Element {} not a matrix.'.format(i))
+            adj = g
+        elif isinstance(g, np.ndarray):
+            if g.ndim != 3:
+                raise ValueError('Passed adjacency matrix must have three '
+                                 'dimensions: (label, source, destination).')
+            adj = [None, ]*g.shape[0]
+            for i in range(g.shape[0]):
+                adj[i] = sp.csr_matrix(g[i, :, :])
+        else:
+            msg = 'g input not a graph or list of adjacency matrices or ' \
+                  'numpy array.'
+            raise ValueError(msg)
+
+        # Ensure dimensions are correct
+        if len(adj) != self.num_labels:
+            msg = ('Number of passed layers (one per label) in adjacency '
+                   'matrix is {0} instead of {1}.'.format(
+                    len(adj), self.num_labels))
+            raise ValueError(msg)
+
+        for i in range(len(adj)):
+            if adj[i].shape != (self.num_vertices, self.num_vertices):
+                msg = ('Passed layer {0} adjacency matrix has shape {1} '
+                       'instead of {2}'.format(i, adj[i].shape, 
+                                               (self.num_vertices,
+                                                self.num_vertices)))
+                raise ValueError(msg)
+
+        # Get pointer array for layers
         l_ptr = np.cumsum(np.array([0] + [len(x.indices) for x in adj]))
         i_ptr = np.stack([x.indptr for x in adj])
         j_ind = np.concatenate([x.indices for x in adj])
