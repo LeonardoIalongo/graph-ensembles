@@ -127,21 +127,22 @@ with open("logs/stripe_multi.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for expected av_nn_degree: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all(meas > 0))
+        succ_tmp.append(np.all(meas >= 0))
 
         start = perf_counter()
         meas = model.expected_av_nn_strength(get=True)
         perf = perf_counter() - start
+        print(meas)
         print('Time for expected av_nn_strength: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all(meas > 0))
+        succ_tmp.append(np.all(meas >= 0))
         
         start = perf_counter()
         meas = model.log_likelihood(g)
         perf = perf_counter() - start
         print('Time for log_likelihood: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(meas < 0)
+        succ_tmp.append(meas <= 0)
 
         start = perf_counter()
         g_sample = model.sample()
@@ -149,6 +150,9 @@ with open("logs/stripe_multi.log", 'w') as f:
         print('Time for model sample: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
         succ_tmp.append(isinstance(g_sample, ge.WeightedLabelGraph))
+
+        test_times.append(times_tmp)
+        test_succ.append(succ_tmp)
 
     time_format = time.strftime(
         '%H:%M:%S', time.gmtime(time.time() - test_start))
