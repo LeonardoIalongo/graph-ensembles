@@ -1,4 +1,3 @@
-
 """ Test the performance of the stripe fitness model class on a set of graphs.
     The graphs can be generated using label_graph_gen.py in this folder.
 """
@@ -14,7 +13,7 @@ log = True
 tol = 1e-5
 xtol = 1e-6
 
-test_names = ['init', 'fit', 'edges', 'e_lbl', 'degrees', 
+test_names = ['init', 'newton', 'fixed-p', 'edges', 'e_lbl', 'degrees', 
               'd_lbl', 'k_nn', 's_nn', 'like', 'sample']
 test_times = []
 test_succ = []
@@ -22,7 +21,7 @@ graph_names = []
 
 test_start = time.time()
 
-with open("logs/stripe_inv.log", 'w') as f:
+with open("logs/stripe_multi.log", 'w') as f:
 
     if log:
         sys.stdout = f
@@ -52,7 +51,7 @@ with open("logs/stripe_inv.log", 'w') as f:
 
         # ------ Init and fit ------
         start = perf_counter()
-        model = ge.StripeFitnessModel(g, scale_invariant=True)
+        model = ge.StripeFitnessModel(g, per_label=True, scale_invariant=True)
         perf = perf_counter() - start
         print('Time for model init: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
@@ -63,6 +62,19 @@ with open("logs/stripe_inv.log", 'w') as f:
         model.fit(tol=tol, method='newton', verbose=True)
         perf = perf_counter() - start
         print('Time for newton fit: ', perf)
+        times_tmp.append('{:.3f}'.format(perf))
+        succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
+
+        if not np.allclose(model.expected_num_edges_label(get=True),
+                           g.num_edges_label, atol=tol, rtol=0):
+            print('Distance from root: ',
+                  model.expected_num_edges_label(get=True) - g.num_edges_label)
+
+        print('Attempting fixed-point fit:')
+        start = perf_counter()
+        model.fit(xtol=1e-6, method='fixed-point', verbose=True)
+        perf = perf_counter() - start
+        print('Time for fixed-point fit: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
         succ_tmp.append(np.all([sol.converged for sol in model.solver_output]))
 
@@ -114,21 +126,22 @@ with open("logs/stripe_inv.log", 'w') as f:
         perf = perf_counter() - start
         print('Time for expected av_nn_degree: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all(meas > 0))
+        succ_tmp.append(np.all(meas >= 0))
 
         start = perf_counter()
         meas = model.expected_av_nn_strength(get=True)
         perf = perf_counter() - start
+        print(meas)
         print('Time for expected av_nn_strength: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.all(meas > 0))
+        succ_tmp.append(np.all(meas >= 0))
         
         start = perf_counter()
         meas = model.log_likelihood(g)
         perf = perf_counter() - start
         print('Time for log_likelihood: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(meas < 0)
+        succ_tmp.append(meas <= 0)
 
         start = perf_counter()
         g_sample = model.sample()
@@ -136,6 +149,9 @@ with open("logs/stripe_inv.log", 'w') as f:
         print('Time for model sample: ', perf)
         times_tmp.append('{:.3f}'.format(perf))
         succ_tmp.append(isinstance(g_sample, ge.WeightedLabelGraph))
+
+        test_times.append(times_tmp)
+        test_succ.append(succ_tmp)
 
     time_format = time.strftime(
         '%H:%M:%S', time.gmtime(time.time() - test_start))

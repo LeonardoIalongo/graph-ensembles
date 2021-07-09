@@ -1,4 +1,3 @@
-
 """ Test the performance of the stripe fitness model class on a set of graphs.
     The graphs can be generated using label_graph_gen.py in this folder.
 """
