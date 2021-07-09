@@ -3,153 +3,136 @@
 """
 import os
 import pickle as pk
-import sys
 import time
 from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
 
-log = True
+quick = True
 tol = 1e-5
 xtol = 1e-6
 
-test_names = ['init', 'newton', 'fixed-p', 'sample', 'degrees',
-              'inv', 'inv-deg', 'min_deg', 'min_d-deg']
+test_names = ['init', 'newton', 'fixed-p', 'edges', 'degrees',
+              'k_nn', 's_nn', 'like', 'sample']
 test_times = []
 test_succ = []
 graph_names = []
 
 test_start = time.time()
 
-with open("logs/fitness.log", 'w') as f:
+for filename in os.listdir('data/'):
+    # Select .pk files
+    if '.pk' not in filename:
+        continue
 
-    if log:
-        sys.stdout = f
-        sys.stderr = f
+    # Select single layer files
+    if '_z' not in filename:
+        continue
 
-    for filename in os.listdir('data/'):
-        # Select .pk files
-        if '.pk' not in filename:
-            continue
+    with open('data/' + filename, 'rb') as fl:
+        g = pk.load(fl)
 
-        # Select single layer files
-        if '_z' not in filename:
-            continue
+    graph_names.append(filename)
+    times_tmp = []
+    succ_tmp = []
 
-        with open('data/' + filename, 'rb') as fl:
-            g = pk.load(fl)
+    print('\n--------------------------')
+    print('Testing on graph: ', filename)
+    print('Number of vertices: ', g.num_vertices)
+    print('Number of edges: ', g.num_edges)
 
-        graph_names.append(filename)
-        times_tmp = []
-        succ_tmp = []
+    # ------ Init and fit ------
+    start = perf_counter()
+    model = ge.FitnessModel(g)
+    perf = perf_counter() - start
+    print('Time for model init: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(isinstance(model, ge.GraphEnsemble))
 
-        print('\n--------------------------')
-        print('Testing on graph: ', filename)
-        print('Number of vertices: ', g.num_vertices)
-        print('Number of edges: ', g.num_edges)
+    print('Attempting newton fit:')
+    start = perf_counter()
+    model.fit(tol=tol, method='newton', verbose=True)
+    perf = perf_counter() - start
+    print('Time for newton fit: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(model.solver_output.converged)
 
-        start = perf_counter()
-        model = ge.FitnessModel(g)
-        perf = perf_counter() - start
-        print('Time for model init: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(isinstance(model, ge.GraphEnsemble))
+    if not np.allclose(model.expected_num_edges(get=True), g.num_edges,
+                       atol=tol, rtol=0):
+        print('Distance from root: ',
+              model.expected_num_edges(get=True) - g.num_edges)
 
-        print('Attempting newton fit:')
-        start = perf_counter()
-        model.fit(tol=tol, method='newton', verbose=True)
-        perf = perf_counter() - start
-        print('Time for newton fit: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+    print('Attempting fixed-point fit:')
+    start = perf_counter()
+    model.fit(xtol=1e-6, method='fixed-point', verbose=True)
+    perf = perf_counter() - start
+    print('Time for fixed-point fit: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(model.solver_output.converged)
 
-        if not np.allclose(model.expected_num_edges(), g.num_edges,
-                           atol=tol, rtol=0):
-            print('Distance from root: ',
-                  model.expected_num_edges() - g.num_edges)
+    if not np.allclose(model.expected_num_edges(get=True), g.num_edges,
+                       atol=tol, rtol=0):
+        print('Distance from root: ',
+              model.expected_num_edges(get=True) - g.num_edges)
 
-        print('Attempting fixed-point fit:')
-        start = perf_counter()
-        model.fit(xtol=1e-6, method='fixed-point', verbose=True)
-        perf = perf_counter() - start
-        print('Time for fixed-point fit: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+    # ------ Measures ------
+    start = perf_counter()
+    meas = model.expected_num_edges(get=True)
+    perf = perf_counter() - start
+    print('Time for expected edges: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(meas > 0)
 
-        if not np.allclose(model.expected_num_edges(), g.num_edges,
-                           atol=tol, rtol=0):
-            print('Distance from root: ',
-                  model.expected_num_edges() - g.num_edges)
+    start = perf_counter()
+    deg = model.expected_degree(get=True)
+    out_deg = model.exp_out_degree
+    in_deg = model.exp_in_degree
+    perf = perf_counter() - start
+    print('Time for expected degrees: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
 
-        start = perf_counter()
-        g_sample = model.sample()
-        perf = perf_counter() - start
-        print('Time for model sample: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(isinstance(g_sample, ge.WeightedGraph))
+    start = perf_counter()
+    meas = model.expected_av_nn_degree(get=True)
+    perf = perf_counter() - start
+    print('Time for expected av_nn_degree: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(np.all(meas >= 0))
 
-        start = perf_counter()
-        out_deg = model.expected_out_degree()
-        in_deg = model.expected_in_degree()
-        perf = perf_counter() - start
-        print('Time for model expected degrees: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
+    start = perf_counter()
+    meas = model.expected_av_nn_strength(get=True)
+    perf = perf_counter() - start
+    print('Time for expected av_nn_strength: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(np.all(meas >= 0))
+    
+    start = perf_counter()
+    meas = model.log_likelihood(g)
+    perf = perf_counter() - start
+    print('Time for log_likelihood: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(meas <= 0)
 
-        print('Attempting scale_invariant fit:')
-        inv = ge.FitnessModel(g, scale_invariant=True)
-        start = perf_counter()
-        inv.fit(tol=tol, verbose=True)
-        perf = perf_counter() - start
-        print('Time for invariant fit: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+    start = perf_counter()
+    g_sample = model.sample()
+    perf = perf_counter() - start
+    print('Time for model sample: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(isinstance(g_sample, ge.WeightedGraph))
 
-        if not np.allclose(inv.expected_num_edges(), g.num_edges,
-                           atol=tol, rtol=0):
-            print('Distance from root: ',
-                  inv.expected_num_edges() - g.num_edges)
+    test_times.append(times_tmp)
+    test_succ.append(succ_tmp)
 
-        start = perf_counter()
-        out_deg = inv.expected_out_degree()
-        in_deg = inv.expected_in_degree()
-        perf = perf_counter() - start
-        print('Time for model expected degrees: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
+    if quick:
+        break
 
-        print('Attempting min_degree fit:')
-        a_model = ge.FitnessModel(g, min_degree=True)
-        start = perf_counter()
-        a_model.fit(tol=tol, max_iter=1000, verbose=True)
-        perf = perf_counter() - start
-        print('Time for min_degree fit: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(model.solver_output.converged)
+time_format = time.strftime(
+    '%H:%M:%S', time.gmtime(time.time() - test_start))
+print('Total test time: ', time_format)
 
-        if not np.allclose(a_model.expected_num_edges(), g.num_edges,
-                           atol=tol, rtol=0):
-            print('Distance from root: ',
-                  a_model.expected_num_edges() - g.num_edges)
-
-        start = perf_counter()
-        out_deg = a_model.expected_out_degree()
-        in_deg = a_model.expected_in_degree()
-        perf = perf_counter() - start
-        print('Time for model expected degrees: ', perf)
-        times_tmp.append('{:.3f}'.format(perf))
-        succ_tmp.append(np.allclose(np.sum(out_deg), model.num_edges))
-
-        test_times.append(times_tmp)
-        test_succ.append(succ_tmp)
-
-    time_format = time.strftime(
-        '%H:%M:%S', time.gmtime(time.time() - test_start))
-    print('Total test time: ', time_format)
-
-    for i in range(len(graph_names)):
-        print('\n--------------------------')
-        print('Graph:', graph_names[i])
-        print('Tests:', *test_names, sep='\t')
-        print('Time:', *test_times[i], sep='\t')
-        print('Status:', *test_succ[i], sep='\t')
+for i in range(len(graph_names)):
+    print('\n--------------------------')
+    print('Graph:', graph_names[i])
+    print('Tests:', *test_names, sep='\t')
+    print('Time:', *test_times[i], sep='\t')
+    print('Status:', *test_succ[i], sep='\t')
