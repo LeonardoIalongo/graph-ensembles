@@ -7,10 +7,16 @@ import time
 from time import perf_counter
 import graph_ensembles as ge
 import numpy as np
+import argparse
 
-quick = True
-tol = 1e-5
-xtol = 1e-6
+parser = argparse.ArgumentParser(description='Test performance of stripe model'
+                                 ' per label on example graphs.')
+parser.add_argument('--quick', action='store_true',
+                    help='Perform only on smaller graph.')
+parser.add_argument('-tol', default=1e-5, type=float)
+parser.add_argument('-xtol', default=1e-6, type=float)
+
+args = parser.parse_args()
 
 test_names = ['init', 'newton', 'edges', 'e_lbl', 'degrees', 
               'd_lbl', 'k_nn', 's_nn', 'like', 'sample']
@@ -52,14 +58,14 @@ for filename in os.listdir('data/'):
 
     print('Attempting newton fit:')
     start = perf_counter()
-    model.fit(tol=tol, method='newton', verbose=True)
+    model.fit(tol=args.tol, method='newton', verbose=True)
     perf = perf_counter() - start
     print('Time for newton fit: ', perf)
     times_tmp.append('{:.3f}'.format(perf))
     succ_tmp.append(model.solver_output.converged)
 
     if not np.allclose(model.expected_num_edges(get=True),
-                       g.num_edges, atol=tol, rtol=0):
+                       g.num_edges, atol=args.tol, rtol=0):
         print('Distance from root: ',
               model.exp_num_edges - g.num_edges)
 
@@ -132,7 +138,7 @@ for filename in os.listdir('data/'):
     test_times.append(times_tmp)
     test_succ.append(succ_tmp)
 
-    if quick:
+    if args.quick:
         break
 
 time_format = time.strftime(
