@@ -2,12 +2,17 @@
 History
 =======
 
-0.1.3 (2012-04-29)
+0.2.0 (2021-07-12)
+------------------
+* Added likelihood and nearest neighbour properties.
+* Revisited API for measures to ensure correct recompute if necessary.
+
+0.1.3 (2021-04-29)
 ------------------
 * Added new option for fitting the stripe model that ensures that the minimum non-zero expected degree is one
 * Corrected issue in expected degree calculations
 
-0.1.2 (2012-04-07)
+0.1.2 (2021-04-07)
 ------------------
 * Added scale invariant probability functional to all models
 * Improved methods for convergence with change in API, xtol now a relative measure
