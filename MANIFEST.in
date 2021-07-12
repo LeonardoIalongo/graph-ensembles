@@ -8,6 +8,7 @@ include *.sh
 recursive-include src *.py
 recursive-include examples *.ipynb
 recursive-include performance *.py
+recursive-include performance *.sh
 recursive-include tests *.py
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]
