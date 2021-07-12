@@ -1,5 +1,5 @@
-""" Test the performance of the fitness model class on a set of graphs.
-    The graphs can be generated using graph_gen.py in this folder.
+""" Test the performance of the stripe fitness model class on a set of graphs.
+    The graphs can be generated using label_graph_gen.py in this folder.
 """
 import os
 import pickle as pk
@@ -18,8 +18,8 @@ parser.add_argument('-xtol', default=1e-6, type=float)
 
 args = parser.parse_args()
 
-test_names = ['init', 'newton', 'fixed-p', 'edges', 'degrees',
-              'k_nn', 's_nn', 'like', 'sample']
+test_names = ['init', 'newton', 'edges', 'e_lbl', 'degrees', 
+              'd_lbl', 'k_nn', 's_nn', 'like', 'sample']
 test_times = []
 test_succ = []
 graph_names = []
@@ -31,8 +31,8 @@ for filename in os.listdir('data/'):
     if '.pk' not in filename:
         continue
 
-    # Select single layer files
-    if '_z' not in filename:
+    # Select multi layer files
+    if '_l' not in filename:
         continue
 
     with open('data/' + filename, 'rb') as fl:
@@ -46,10 +46,11 @@ for filename in os.listdir('data/'):
     print('Testing on graph: ', filename)
     print('Number of vertices: ', g.num_vertices)
     print('Number of edges: ', g.num_edges)
+    print('Number of labels: ', g.num_labels)
 
     # ------ Init and fit ------
     start = perf_counter()
-    model = ge.FitnessModel(g)
+    model = ge.StripeFitnessModel(g, per_label=False)
     perf = perf_counter() - start
     print('Time for model init: ', perf)
     times_tmp.append('{:.3f}'.format(perf))
@@ -63,23 +64,10 @@ for filename in os.listdir('data/'):
     times_tmp.append('{:.3f}'.format(perf))
     succ_tmp.append(model.solver_output.converged)
 
-    if not np.allclose(model.expected_num_edges(get=True), g.num_edges,
-                       atol=args.tol, rtol=0):
+    if not np.allclose(model.expected_num_edges(get=True),
+                       g.num_edges, atol=args.tol, rtol=0):
         print('Distance from root: ',
-              model.expected_num_edges(get=True) - g.num_edges)
-
-    print('Attempting fixed-point fit:')
-    start = perf_counter()
-    model.fit(xtol=args.xtol, method='fixed-point', verbose=True)
-    perf = perf_counter() - start
-    print('Time for fixed-point fit: ', perf)
-    times_tmp.append('{:.3f}'.format(perf))
-    succ_tmp.append(model.solver_output.converged)
-
-    if not np.allclose(model.expected_num_edges(get=True), g.num_edges,
-                       atol=args.tol, rtol=0):
-        print('Distance from root: ',
-              model.expected_num_edges(get=True) - g.num_edges)
+              model.exp_num_edges - g.num_edges)
 
     # ------ Measures ------
     start = perf_counter()
@@ -90,13 +78,34 @@ for filename in os.listdir('data/'):
     succ_tmp.append(meas > 0)
 
     start = perf_counter()
+    meas = model.expected_num_edges_label(get=True)
+    perf = perf_counter() - start
+    print('Time for expected edges by label: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    succ_tmp.append(len(meas) == g.num_labels)
+    
+    start = perf_counter()
     deg = model.expected_degree(get=True)
-    out_deg = model.exp_out_degree
+    out_deg = model.expected_out_degree(get=True)
     in_deg = model.exp_in_degree
     perf = perf_counter() - start
     print('Time for expected degrees: ', perf)
     times_tmp.append('{:.3f}'.format(perf))
     succ_tmp.append(np.allclose(np.sum(out_deg), np.sum(in_deg)))
+
+    start = perf_counter()
+    out_deg = model.expected_out_degree_by_label(get=True)
+    in_deg = model.exp_in_degree_label
+    perf = perf_counter() - start
+    print('Time for expected degrees by label: ', perf)
+    times_tmp.append('{:.3f}'.format(perf))
+    res = True
+    for i in range(g.num_labels):
+        if not np.allclose(np.sum(out_deg[out_deg.label == i].value),
+                           np.sum(in_deg[in_deg.label == i].value)):
+            res = False
+            break
+    succ_tmp.append(res)
 
     start = perf_counter()
     meas = model.expected_av_nn_degree(get=True)
@@ -124,7 +133,7 @@ for filename in os.listdir('data/'):
     perf = perf_counter() - start
     print('Time for model sample: ', perf)
     times_tmp.append('{:.3f}'.format(perf))
-    succ_tmp.append(isinstance(g_sample, ge.WeightedGraph))
+    succ_tmp.append(isinstance(g_sample, ge.WeightedLabelGraph))
 
     test_times.append(times_tmp)
     test_succ.append(succ_tmp)

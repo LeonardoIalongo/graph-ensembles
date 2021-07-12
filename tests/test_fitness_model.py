@@ -3,6 +3,7 @@ import graph_ensembles as ge
 import numpy as np
 import pandas as pd
 import pytest
+import re
 
 v = pd.DataFrame([['ING', 'NL'],
                  ['ABN', 'NL'],
@@ -51,6 +52,11 @@ num_vertices = 4
 num_edges = 5
 z = 4.291803e-12
 z_inv = 2.913604e-12
+
+p_ref = np.array([[0.0, 0.99065599, 0.04115187, 0.0],
+                  [0.41309584, 0.0, 0.01729211, 0.0],
+                  [0.97529924, 0.99959007, 0.0, 0.0],
+                  [0.54686647, 0.98676064, 0.02928772, 0.0]])
 
 
 class TestFitnessModelInit():
@@ -386,6 +392,17 @@ class TestFitnessModelMeasures():
                                    num_edges,
                                    rtol=1e-5)
 
+    def test_exp_degree(self):
+        """ Check expected d is correct. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+        model.expected_degrees()
+        d = model.exp_degree
+        d_ref = (1 - (1 - p_ref)*(1 - p_ref.T))  # Only valid if no self loops
+        np.testing.assert_allclose(d, d_ref.sum(axis=0), rtol=1e-5)
+
     def test_exp_out_degree(self):
         """ Check expected d_out is correct. """
         model = ge.FitnessModel(num_vertices=num_vertices,
@@ -394,9 +411,7 @@ class TestFitnessModelMeasures():
                                 param=z)
         model.expected_degrees()
         d_out = model.exp_out_degree
-        np.testing.assert_allclose(
-            d_out, np.array([1.031808, 0.430388, 1.974889, 1.562915]),
-            rtol=1e-5)
+        np.testing.assert_allclose(d_out, p_ref.sum(axis=1), rtol=1e-5)
         np.testing.assert_allclose(num_edges, np.sum(d_out))
 
     def test_exp_in_degree(self):
@@ -407,9 +422,202 @@ class TestFitnessModelMeasures():
                                 param=z)
         model.expected_degrees()
         d_in = model.exp_in_degree
-        np.testing.assert_allclose(
-            d_in, np.array([1.935262, 2.977007, 0.087732, 0]), rtol=1e-5)
+        np.testing.assert_allclose(d_in, p_ref.sum(axis=0), rtol=1e-5)
         np.testing.assert_allclose(num_edges, np.sum(d_in))
+
+    def test_av_nn_prop_ones(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        prop = np.ones(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, np.array([1, 1, 1, 0]), 
+                                   atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_zeros(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        prop = np.zeros(num_vertices)
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+    def test_av_nn_prop_scale(self):
+        """ Test correct value of av_nn_prop using simple local prop. """
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        prop = np.arange(num_vertices) + 1
+        p_u = (1 - (1 - p_ref)*(1 - p_ref.T))  # Only valid if no self loops
+        d = p_u.sum(axis=0)
+        d_out = p_ref.sum(axis=1)
+        d_in = p_ref.sum(axis=0)
+
+        exp = np.dot(p_ref, prop)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        res = model.expected_av_nn_property(prop, ndir='out')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+        exp = np.dot(p_ref.T, prop)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        res = model.expected_av_nn_property(prop, ndir='in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+        
+        exp = np.dot(p_u, prop)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        res = model.expected_av_nn_property(prop, ndir='out-in')
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+    def test_av_nn_deg(self):
+        """ Test average nn degree."""
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        model.expected_degrees()
+        d_out = model.exp_out_degree
+        d_in = model.exp_in_degree
+
+        model.expected_av_nn_degree(ddir='out', ndir='out')
+        exp = np.dot(p_ref, d_out)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_d_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='out', ndir='in')
+        exp = np.dot(p_ref.T, d_out)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_d_out, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='in', ndir='in')
+        exp = np.dot(p_ref.T, d_in)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_d_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='in', ndir='out')
+        exp = np.dot(p_ref, d_in)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_d_in, exp,
+                                   atol=1e-5, rtol=0)
+
+        model.expected_av_nn_degree(ddir='out-in', ndir='out-in')
+        d = model.exp_degree
+        exp = np.dot((1 - (1 - p_ref)*(1 - p_ref.T)), d)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        np.testing.assert_allclose(model.exp_av_out_in_nn_d_out_in, exp,
+                                   atol=1e-5, rtol=0)
+
+    def test_av_nn_strength(self):
+        """ Test average nn strength."""
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        model.expected_degrees()
+        d_out = model.exp_out_degree
+        d_in = model.exp_in_degree
+
+        model.expected_av_nn_strength(sdir='out', ndir='out')
+        exp = np.dot(p_ref, out_strength)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_s_out, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='in', ndir='out')
+        exp = np.dot(p_ref, in_strength)
+        exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
+        np.testing.assert_allclose(model.exp_av_out_nn_s_in, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='in', ndir='in')
+        exp = np.dot(p_ref.T, in_strength)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_s_in, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='out', ndir='in')
+        exp = np.dot(p_ref.T, out_strength)
+        exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
+        np.testing.assert_allclose(model.exp_av_in_nn_s_out, exp, rtol=1e-6)
+
+        model.expected_av_nn_strength(sdir='out-in', ndir='out-in')
+        d = model.exp_degree
+        exp = np.dot((1 - (1 - p_ref)*(1 - p_ref.T)),
+                     out_strength + in_strength)
+        exp[d != 0] = exp[d != 0] / d[d != 0]
+        np.testing.assert_allclose(model.exp_av_out_in_nn_s_out_in, exp,
+                                   rtol=1e-6)
+
+    def test_likelihood(self):
+        """ Test likelihood code. """
+        # Compute reference from p_ref
+        p_log = p_ref.copy()
+        p_log[p_log != 0] = np.log(p_log[p_log != 0])
+        np_log = np.log(1 - p_ref)
+        adj = np.array([[0, 1, 0, 0],
+                        [1, 0, 1, 0],
+                        [0, 1, 0, 0],
+                        [0, 1, 0, 0]])
+
+        ref = 0
+        for i in range(adj.shape[0]):
+            for j in range(adj.shape[1]):
+                if adj[i, j] != 0:
+                    ref += p_log[i, j]
+                else:
+                    ref += np_log[i, j]
+
+        # Construct model
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        assert np.abs(ref - model.log_likelihood(g)) < 1e-6
+        assert np.abs(ref - model.log_likelihood(g.adjacency_matrix())) < 1e-6
+        assert np.abs(ref - model.log_likelihood(adj)) < 1e-6
+
+    def test_likelihood_error(self):
+        """ Test likelihood code. """
+        adj = np.array([[0, 1, 0, 0],
+                        [1, 0, 1, 0],
+                        [0, 1, 0, 0]])
+
+        # Construct model
+        model = ge.FitnessModel(num_vertices=num_vertices,
+                                out_strength=out_strength,
+                                in_strength=in_strength,
+                                param=z)
+
+        msg = re.escape('Passed graph adjacency matrix does not have the '
+                        'correct shape: (3, 4) instead of (4, 4)')
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood(adj)
+
+        msg = 'g input not a graph or adjacency matrix.'
+        with pytest.raises(ValueError, match=msg):
+            model.log_likelihood('dfsg')
 
 
 class TestFitnessModelSample():

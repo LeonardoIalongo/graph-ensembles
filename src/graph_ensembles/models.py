@@ -6,6 +6,7 @@ from . import graphs
 from . import methods as mt
 from . import lib
 import numpy as np
+import scipy.sparse as sp
 import warnings
 
 
@@ -184,7 +185,7 @@ class RandomGraph(GraphEnsemble):
                 except Exception:
                     assert False, msg
 
-            self.total_weight = self.exp_total_weight()
+            self.total_weight = self.expected_total_weight()
 
     def fit(self):
         """ Fit the parameter p and q to the number of edges and total weight.
@@ -197,18 +198,24 @@ class RandomGraph(GraphEnsemble):
             else:
                 self.q = self.num_edges/self.total_weight
 
-    def exp_num_edges(self):
+    def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label) given p.
         """
-        return self.p*self.num_vertices*(self.num_vertices - 1)
+        self.exp_num_edges = self.p*self.num_vertices*(self.num_vertices - 1)
 
-    def exp_total_weight(self):
+        if get:
+            return self.exp_num_edges
+
+    def expected_total_weight(self, get=False):
         """ Compute the expected total weight (per label) given q.
         """
         if self.discrete_weights:
-            return self.num_edges/(1 - self.q)
+            self.exp_tot_weight = self.num_edges/(1 - self.q)
         else:
-            return self.num_edges/self.q
+            self.exp_tot_weight = self.num_edges/self.q
+
+        if get:
+            return self.exp_tot_weight
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -429,7 +436,18 @@ class FitnessModel(GraphEnsemble):
 
         # Ensure that number of edges is a positive number
         if hasattr(self, 'num_edges'):
-            if not isinstance(self.num_edges, (int, float)):
+            try: 
+                tmp = len(self.num_edges)
+                if tmp == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError('Number of edges must be a number.')
+            except TypeError:
+                pass        
+                
+            try:
+                self.num_edges = self.num_edges * 1.0
+            except TypeError:
                 raise ValueError('Number of edges must be a number.')
 
             if self.num_edges < 0:
@@ -626,7 +644,7 @@ class FitnessModel(GraphEnsemble):
         if not sol.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
-    def expected_num_edges(self):
+    def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'param'):
@@ -638,15 +656,166 @@ class FitnessModel(GraphEnsemble):
                 self.out_strength,
                 self.in_strength)
 
-    def expected_degrees(self):
-        """ Compute the expected out degree for a given z.
+        if get:
+            return self.exp_num_edges
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected out/in degree for a given z.
         """
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
-        self.exp_out_degree, self.exp_in_degree = mt.fit_exp_degree(
-            self.prob_fun, self.param, self.out_strength,
-            self.in_strength)
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.fit_exp_degree(self.prob_fun, self.param, self.out_strength,
+                              self.in_strength)
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected undirected degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
+    def expected_av_nn_property(self, prop, ndir='out', deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        av_nn = mt.fit_av_nn_prop(self.prob_fun, self.param, self.out_strength,
+                                  self.in_strength, prop, ndir=ndir)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def expected_av_nn_degree(self, ddir='out', ndir='out',
+                              deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ddir == 'out':
+            deg = self.exp_out_degree
+        elif ddir == 'in':
+            deg = self.exp_in_degree
+        elif ddir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_d_' + ddir.replace('-', '_'))
+        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def expected_av_nn_strength(self, sdir='out', ndir='out',
+                                deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the strength.
+        """
+        # Select the correct strength
+        if sdir == 'out':
+            s = self.out_strength
+        elif sdir == 'in':
+            s = self.in_strength
+        elif sdir == 'out-in':
+            s = self.out_strength + self.in_strength
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_s_' + sdir.replace('-', '_'))
+        res = self.expected_av_nn_property(s, ndir=ndir,
+                                           deg_recompute=deg_recompute)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def log_likelihood(self, g, log_space=True):
+        """ Compute the likelihood a graph given the fitted model.
+
+        Accepts as input either a graph or an adjacency matrix.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
+
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, sp.spmatrix):
+            adj = g.asformat('csr')
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError('g input not a graph or adjacency matrix.')
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = ('Passed graph adjacency matrix does not have the correct '
+                   'shape: {0} instead of {1}'.format(
+                    adj.shape, (self.num_vertices, self.num_vertices)))
+            raise ValueError(msg)
+
+        # Compute log likelihood of graph
+        like = mt.fit_likelihood(
+            adj.indptr, adj.indices, self.prob_fun, self.param,
+            self.out_strength, self.in_strength, log_space)
+
+        return like
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -1281,7 +1450,7 @@ class StripeFitnessModel(GraphEnsemble):
                 msg = 'Fit did not converge.'
                 warnings.warn(msg, UserWarning)
 
-    def expected_num_edges(self):
+    def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'param'):
@@ -1317,8 +1486,11 @@ class StripeFitnessModel(GraphEnsemble):
                 s_out_i, s_out_j, s_out_w,
                 s_in_i, s_in_j, s_in_w,
                 self.per_label)
+
+        if get:
+            return self.exp_num_edges
         
-    def expected_num_edges_label(self):
+    def expected_num_edges_label(self, get=False):
         """ Compute the expected number of edges (per label).
         """
         if not hasattr(self, 'param'):
@@ -1331,8 +1503,11 @@ class StripeFitnessModel(GraphEnsemble):
                     self.in_strength,
                     self.num_labels,
                     self.per_label)
+
+        if get:
+            return self.exp_num_edges_label
                 
-    def expected_degrees(self):
+    def expected_degrees(self, get=False):
         """ Compute the expected out degree for a given z.
         """
         if not hasattr(self, 'param'):
@@ -1362,11 +1537,39 @@ class StripeFitnessModel(GraphEnsemble):
         s_in_w = s_in.data
 
         # Get out_degree
-        self.exp_out_degree, self.exp_in_degree = mt.stripe_exp_degree(
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.stripe_exp_degree(
                 self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
                 s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
 
-    def expected_degrees_by_label(self):
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
+    def expected_degrees_by_label(self, get=False):
         """ Compute the expected out degree by label for a given z.
         """
         if not hasattr(self, 'param'):
@@ -1399,6 +1602,220 @@ class StripeFitnessModel(GraphEnsemble):
              ('id', self.id_dtype),
              ('value', 'f8')]
             ).reshape((d_in.shape[0],))
+
+        if get:
+            return self.exp_out_degree_label, self.exp_in_degree_label
+
+    def expected_out_degree_by_label(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees_by_label()
+
+        if get:
+            return self.exp_out_degree_label
+
+    def expected_in_degree_by_label(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees_by_label()
+        
+        if get:
+            return self.exp_in_degree_label
+
+    def expected_av_nn_property(self, prop, ndir='out', deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Convert to sparse matrices
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_labels),
+                              i_col='id', j_col='label', data_col='value',
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_labels),
+                             i_col='id', j_col='label', data_col='value',
+                             kind='csr')
+
+        if not s_out.has_sorted_indices:
+            s_out.sort_indices()
+        if not s_in.has_sorted_indices:
+            s_in.sort_indices()
+
+        # Extract arrays from sparse matrices
+        s_out_i = s_out.indptr
+        s_out_j = s_out.indices
+        s_out_w = s_out.data
+        s_in_i = s_in.indptr
+        s_in_j = s_in.indices
+        s_in_w = s_in.data
+
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        av_nn = mt.stripe_av_nn_prop(
+            self.prob_fun, self.param, prop, ndir, s_out_i, s_out_j, s_out_w,
+            s_in_i, s_in_j, s_in_w, self.per_label)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        if av_nn.ndim > 1:
+            new_shape = [1, ]*av_nn.ndim
+            new_shape[0] = np.sum(ind)
+            av_nn[ind] = av_nn[ind] / deg[ind].reshape(tuple(new_shape))
+        else:
+            av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def expected_av_nn_degree(self, ddir='out', ndir='out',
+                              deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ddir == 'out':
+            deg = self.exp_out_degree
+        elif ddir == 'in':
+            deg = self.exp_in_degree
+        elif ddir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_d_' + ddir.replace('-', '_'))
+        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def expected_av_nn_strength(self, sdir='out', ndir='out', by_label=False,
+                                deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the strength.
+        """
+        # Select the correct strength
+        s_out = lib.to_sparse(self.out_strength,
+                              (self.num_vertices, self.num_labels),
+                              i_col='id', j_col='label', data_col='value',
+                              kind='csr')
+        s_in = lib.to_sparse(self.in_strength,
+                             (self.num_vertices, self.num_labels),
+                             i_col='id', j_col='label', data_col='value',
+                             kind='csr')
+
+        if sdir == 'out':
+            s = s_out
+        elif sdir == 'in':
+            s = s_in
+        elif sdir == 'out-in':
+            s = s_out + s_in
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        if not by_label:
+            s = s.sum(axis=1).A1
+        else:
+            s = s.toarray()
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_s_' + sdir.replace('-', '_'))
+        if by_label:
+            name += '_label'
+        res = self.expected_av_nn_property(s, ndir=ndir,
+                                           deg_recompute=deg_recompute)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def log_likelihood(self, g, log_space=True):
+        """ Compute the likelihood a graph given the fitted model.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
+
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, list):
+            # Ensure list contains sparse csr matrices
+            for i in range(len(g)):
+                if isinstance(g[i], sp.spmatrix):
+                    g[i] = g[i].asformat('csr')
+                elif isinstance(g[i], np.ndarray):
+                    g[i] = sp.csr_matrix(g[i])
+                else:
+                    raise ValueError('Element {} not a matrix.'.format(i))
+            adj = g
+        elif isinstance(g, np.ndarray):
+            if g.ndim != 3:
+                raise ValueError('Passed adjacency matrix must have three '
+                                 'dimensions: (label, source, destination).')
+            adj = [None, ]*g.shape[0]
+            for i in range(g.shape[0]):
+                adj[i] = sp.csr_matrix(g[i, :, :])
+        else:
+            msg = 'g input not a graph or list of adjacency matrices or ' \
+                  'numpy array.'
+            raise ValueError(msg)
+
+        # Ensure dimensions are correct
+        if len(adj) != self.num_labels:
+            msg = ('Number of passed layers (one per label) in adjacency '
+                   'matrix is {0} instead of {1}.'.format(
+                    len(adj), self.num_labels))
+            raise ValueError(msg)
+
+        for i in range(len(adj)):
+            if adj[i].shape != (self.num_vertices, self.num_vertices):
+                msg = ('Passed layer {0} adjacency matrix has shape {1} '
+                       'instead of {2}'.format(i, adj[i].shape, 
+                                               (self.num_vertices,
+                                                self.num_vertices)))
+                raise ValueError(msg)
+
+        # Get pointer array for layers
+        l_ptr = np.cumsum(np.array([0] + [len(x.indices) for x in adj]))
+        i_ptr = np.stack([x.indptr for x in adj])
+        j_ind = np.concatenate([x.indices for x in adj])
+
+        # Compute log likelihood of graph
+        like = mt.stripe_likelihood(
+            l_ptr, i_ptr, j_ind, self.prob_fun, self.param, self.out_strength,
+            self.in_strength, self.num_labels, self.per_label, log_space)
+
+        return like
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
@@ -1805,7 +2222,7 @@ class BlockFitnessModel(GraphEnsemble):
         else:
             raise ValueError('Number of edges must be a single value.')
 
-    def expected_num_edges(self):
+    def expected_num_edges(self, get=False):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before hand.')
 
@@ -1834,7 +2251,19 @@ class BlockFitnessModel(GraphEnsemble):
             self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
             s_in_i, s_in_j, s_in_w, self.group_dict)
 
-    def expected_degrees(self):
+        if get:
+            return self.exp_num_edges
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_out_degree()
+        self.expected_in_degree()
+        
+        if get:
+            return self.exp_out_degree, self.exp_in_degree
+
+    def expected_out_degree(self, get=False):
         """ Compute the expected out degree for a given z.
         """
         if not hasattr(self, 'param'):
@@ -1866,6 +2295,15 @@ class BlockFitnessModel(GraphEnsemble):
             self.prob_fun, self.param, s_out_i, s_out_j, s_out_w, s_in_i,
             s_in_j, s_in_w, self.group_dict)
 
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before hand.')
+
         # Convert to sparse matrices
         s_out = lib.to_sparse(self.out_strength,
                               (self.num_vertices, self.num_groups),
@@ -1891,6 +2329,9 @@ class BlockFitnessModel(GraphEnsemble):
         self.exp_in_degree = mt.block_exp_out_degree(
             self.prob_fun, self.param, s_in_i, s_in_j, s_in_w, s_out_i,
             s_out_j, s_out_w, self.group_dict)
+        
+        if get:
+            return self.exp_in_degree
 
     def sample(self):
         """ Return a Graph sampled from the ensemble.
