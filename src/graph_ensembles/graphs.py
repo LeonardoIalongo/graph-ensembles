@@ -920,7 +920,10 @@ class LabelGraph(DirectedGraph):
         return adj
 
     def to_networkx(self, original=False, compressed=False):
-        G = nx.DiGraph()
+        if not compressed:
+            G = nx.MultiDiGraph()
+        else:
+            G = nx.DiGraph()
 
         if original:
             id_conv = list(self.id_dict.keys())
