@@ -1715,7 +1715,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         return av_nn
 
-    def expected_av_nn_degree(self, ddir='out', ndir='out',
+    def expected_av_nn_degree(self, ddir='out', ndir='out', multi_count=False,
                               deg_recompute=False, get=False):
         """ Computes the expected value of the nearest neighbour average of
         the degree.
@@ -1736,14 +1736,16 @@ class StripeFitnessModel(GraphEnsemble):
         # Compute property and set attribute
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_d_' + ddir.replace('-', '_'))
-        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
+        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False,
+                                           multi_count=multi_count)
         setattr(self, name, res)
 
         if get:
             return getattr(self, name)
 
     def expected_av_nn_strength(self, sdir='out', ndir='out', by_label=False,
-                                deg_recompute=False, get=False):
+                                multi_count=False, deg_recompute=False,
+                                get=False):
         """ Computes the expected value of the nearest neighbour average of
         the strength.
         """
@@ -1776,7 +1778,8 @@ class StripeFitnessModel(GraphEnsemble):
                 '_nn_s_' + sdir.replace('-', '_'))
         if by_label:
             name += '_label'
-        res = self.expected_av_nn_property(s, ndir=ndir,
+        res = self.expected_av_nn_property(s, ndir=ndir, 
+                                           multi_count=multi_count,
                                            deg_recompute=deg_recompute)
         setattr(self, name, res)
 
