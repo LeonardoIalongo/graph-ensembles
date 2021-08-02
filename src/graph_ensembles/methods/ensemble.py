@@ -1049,6 +1049,66 @@ def stripe_exp_degree_label(p_f, param, out_strength, in_strength, num_labels,
 
 
 @jit(nopython=True)
+def stripe_av_nn_prop_fast(p_f, param, prop, ndir, out_strength, in_strength,
+                           num_labels, per_label):
+    """ Compute the the average of the node properties over the neighbours. 
+
+    This fast implementation considers multi-links as weights, meaning that if
+    a node is connected twice with links of different labels its property will
+    have weight two in the average. 
+    """
+    av_nn = np.zeros(prop.shape, dtype=np.float64)
+
+    # Iterate over layers
+    for k in range(num_labels):
+        s_out = out_strength[out_strength.label == k]
+        s_in = in_strength[in_strength.label == k]
+
+        for i in np.arange(len(s_out)):
+            out_i = s_out[i].id
+            out_i_v = s_out[i].value
+            in_i = s_in[i].id
+            in_i_v = s_in[i].value
+
+            for j in np.arange(len(s_in)):
+                out_j = s_out[j].id
+                out_j_v = s_out[j].value
+                in_j = s_in[j].id
+                in_j_v = s_in[j].value
+
+                if out_i != in_j:
+                    if per_label:
+                        pij = p_f(param[:, k], out_i_v, in_j_v)
+                    else:
+                        pij = p_f(param[:, 0], out_i_v, in_j_v)
+                else:
+                    pij = 0
+
+                if out_j != in_i:
+                    if per_label:
+                        pji = p_f(param[:, k], out_j_v, in_i_v)
+                    else:
+                        pji = p_f(param[:, 0], out_j_v, in_i_v)
+                else:
+                    pji = 0
+
+                if ndir == 'out':
+                    av_nn[i] += pij*prop[j]
+                    av_nn[j] += pji*prop[i]
+                elif ndir == 'in':
+                    av_nn[i] += pji*prop[j]
+                    av_nn[j] += pij*prop[i]
+                elif ndir == 'out-in':
+                    p = 1 - (1 - pij)*(1 - pji)
+                    av_nn[i] += p*prop[j]
+                    av_nn[j] += p*prop[i]
+                else:
+                    raise ValueError('Direction of neighbourhood not right.')
+
+    return av_nn
+
+
+@jit(nopython=True)
 def stripe_av_nn_prop(p_f, param, prop, ndir, s_out_i, s_out_j, s_out_w,
                       s_in_i, s_in_j, s_in_w, per_label):
     """ Compute the expected number of edges.
