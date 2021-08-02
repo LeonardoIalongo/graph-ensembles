@@ -1099,9 +1099,7 @@ def stripe_av_nn_prop_fast(p_f, param, prop, ndir, out_strength, in_strength,
                     av_nn[i] += pji*prop[j]
                     av_nn[j] += pij*prop[i]
                 elif ndir == 'out-in':
-                    p = 1 - (1 - pij)*(1 - pji)
-                    av_nn[i] += p*prop[j]
-                    av_nn[j] += p*prop[i]
+                    raise ValueError('Not implemented yet. Sorry :)')
                 else:
                     raise ValueError('Direction of neighbourhood not right.')
 
