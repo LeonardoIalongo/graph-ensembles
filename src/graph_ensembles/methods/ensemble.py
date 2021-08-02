@@ -1067,12 +1067,8 @@ def stripe_av_nn_prop_fast(p_f, param, prop, ndir, out_strength, in_strength,
         for i in np.arange(len(s_out)):
             out_i = s_out[i].id
             out_i_v = s_out[i].value
-            in_i = s_in[i].id
-            in_i_v = s_in[i].value
 
             for j in np.arange(len(s_in)):
-                out_j = s_out[j].id
-                out_j_v = s_out[j].value
                 in_j = s_in[j].id
                 in_j_v = s_in[j].value
 
@@ -1084,20 +1080,10 @@ def stripe_av_nn_prop_fast(p_f, param, prop, ndir, out_strength, in_strength,
                 else:
                     pij = 0
 
-                if out_j != in_i:
-                    if per_label:
-                        pji = p_f(param[:, k], out_j_v, in_i_v)
-                    else:
-                        pji = p_f(param[:, 0], out_j_v, in_i_v)
-                else:
-                    pji = 0
-
                 if ndir == 'out':
-                    av_nn[i] += pij*prop[j]
-                    av_nn[j] += pji*prop[i]
+                    av_nn[out_i] += pij*prop[in_j]
                 elif ndir == 'in':
-                    av_nn[i] += pji*prop[j]
-                    av_nn[j] += pij*prop[i]
+                    av_nn[in_j] += pij*prop[out_i]
                 elif ndir == 'out-in':
                     raise ValueError('Not implemented yet. Sorry :)')
                 else:

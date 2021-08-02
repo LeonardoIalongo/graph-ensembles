@@ -869,6 +869,14 @@ class TestFitnessModelMeasures():
         res = model.expected_av_nn_property(prop, ndir='out-in')
         np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
 
+        # Ignoring multi-links
+        res = model.expected_av_nn_property(prop, ndir='out', multi_count=True)
+        np.testing.assert_allclose(res, prop, atol=1e-6, rtol=0)
+
+        res = model.expected_av_nn_property(prop, ndir='in', multi_count=True)
+        np.testing.assert_allclose(res, np.array([1, 1, 1, 0]), 
+                                   atol=1e-6, rtol=0)
+
     def test_av_nn_prop_ones_multi_z(self):
         """ Test correct value of av_nn_prop using simple local prop. """
         model = ge.StripeFitnessModel(num_vertices=num_vertices,

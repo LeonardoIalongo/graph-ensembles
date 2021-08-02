@@ -1639,7 +1639,7 @@ class StripeFitnessModel(GraphEnsemble):
 
         if multi_count:
             # Compute correct expected degree
-            if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            if deg_recompute or not hasattr(self, 'exp_out_degree_label'):
                 self.expected_degrees_by_label()
 
             deg = np.zeros(self.num_vertices, dtype=np.float64)
