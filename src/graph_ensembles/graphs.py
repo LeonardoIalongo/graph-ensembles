@@ -919,11 +919,16 @@ class LabelGraph(DirectedGraph):
                     i_col='src', j_col='dst', data_col=np.ones(len(e))))
         return adj
 
-    def to_networkx(self, original=False):
-        G = nx.MultiDiGraph()
+    def to_networkx(self, original=False, compressed=False):
+        if not compressed:
+            G = nx.MultiDiGraph()
+        else:
+            G = nx.DiGraph()
+
         if original:
             id_conv = list(self.id_dict.keys())
-            label_conv = list(self.label_dict.keys())
+            if not compressed:
+                label_conv = list(self.label_dict.keys())
 
             if hasattr(self, 'gv'):
                 group_conv = list(self.group_dict.keys())
@@ -941,17 +946,23 @@ class LabelGraph(DirectedGraph):
 
             e = []
             for row in self.e:
-                e.append((id_conv[row.src], id_conv[row.dst],
-                         {'label': label_conv[row.label]}))
+                if not compressed:
+                    e.append((id_conv[row.src], id_conv[row.dst],
+                             {'label': label_conv[row.label]}))
+                else:
+                    e.append((id_conv[row[0]], id_conv[row[1]]))
         else:
             if hasattr(self, 'gv'):
                 v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
             else:
                 v = self.v.id
 
-            e = []
-            for row in self.e:
-                e.append((row.src, row.dst, {'label': row.label}))
+            if not compressed:
+                e = []
+                for row in self.e:
+                    e.append((row.src, row.dst, {'label': row.label}))
+            else:
+                e = self.e[['src', 'dst']]
 
         G.add_nodes_from(v)
         G.add_edges_from(e)
