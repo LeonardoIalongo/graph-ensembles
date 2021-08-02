@@ -1084,6 +1084,21 @@ class TestFitnessModelMeasures():
         np.testing.assert_allclose(model.exp_av_out_in_nn_d_out_in, exp,
                                    atol=1e-5, rtol=0)
 
+        # Ignoring multi-links
+        d_out_m = p_ref.sum(axis=(0, 2))
+        exp = np.dot(p_ref, d_out).sum(axis=0)
+        exp[d_out_m != 0] = exp[d_out_m != 0] / d_out_m[d_out_m != 0]
+        res = model.expected_av_nn_degree(ddir='out', ndir='out',
+                                          multi_count=True, get=True)
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+        d_in_m = p_ref.sum(axis=(0, 1))
+        exp = np.dot(p_ref.transpose([0, 2, 1]), d_in).sum(axis=0)
+        exp[d_in_m != 0] = exp[d_in_m != 0] / d_in_m[d_in_m != 0]
+        res = model.expected_av_nn_degree(ddir='in', ndir='in',
+                                          multi_count=True, get=True)
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
     def test_av_nn_deg_multi_z(self):
         """ Test average nn degree."""
         model = ge.StripeFitnessModel(num_vertices=num_vertices,
@@ -1127,6 +1142,21 @@ class TestFitnessModelMeasures():
         exp[d != 0] = exp[d != 0] / d[d != 0]
         np.testing.assert_allclose(model.exp_av_out_in_nn_d_out_in, exp,
                                    atol=1e-5, rtol=0)
+
+        # Ignoring multi-links
+        d_out_m = p_ref_lbl.sum(axis=(0, 2))
+        exp = np.dot(p_ref_lbl, d_out).sum(axis=0)
+        exp[d_out_m != 0] = exp[d_out_m != 0] / d_out_m[d_out_m != 0]
+        res = model.expected_av_nn_degree(ddir='out', ndir='out',
+                                          multi_count=True, get=True)
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
+
+        d_in_m = p_ref_lbl.sum(axis=(0, 1))
+        exp = np.dot(p_ref_lbl.transpose([0, 2, 1]), d_in).sum(axis=0)
+        exp[d_in_m != 0] = exp[d_in_m != 0] / d_in_m[d_in_m != 0]
+        res = model.expected_av_nn_degree(ddir='in', ndir='in',
+                                          multi_count=True, get=True)
+        np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
     def test_av_nn_strength_single_z(self):
         """ Test average nn strength."""
