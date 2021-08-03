@@ -1077,17 +1077,16 @@ def stripe_av_nn_prop_fast(p_f, param, prop, ndir, out_strength, in_strength,
                         pij = p_f(param[:, k], out_i_v, in_j_v)
                     else:
                         pij = p_f(param[:, 0], out_i_v, in_j_v)
-                else:
-                    pij = 0
 
-                if ndir == 'out':
-                    av_nn[out_i] += pij*prop[in_j]
-                elif ndir == 'in':
-                    av_nn[in_j] += pij*prop[out_i]
-                elif ndir == 'out-in':
-                    raise ValueError('Not implemented yet. Sorry :)')
-                else:
-                    raise ValueError('Direction of neighbourhood not right.')
+                    if ndir == 'out':
+                        av_nn[out_i] += pij*prop[in_j]
+                    elif ndir == 'in':
+                        av_nn[in_j] += pij*prop[out_i]
+                    elif ndir == 'out-in':
+                        raise ValueError('Not implemented yet. Sorry :)')
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
 
     return av_nn
 
