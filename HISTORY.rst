@@ -2,6 +2,11 @@
 History
 =======
 
+0.2.1 (2021-08-03)
+------------------
+* Added option for faster computation of average nearest neighbour properties by allowing for multiple links between the same nodes.
+* Added compression option in to_networkx function.
+
 0.2.0 (2021-07-12)
 ------------------
 * Added likelihood and nearest neighbour properties.
