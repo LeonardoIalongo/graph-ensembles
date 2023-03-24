@@ -340,8 +340,7 @@ class FitnessModel(GraphEnsemble):
         the density parameter
     """
 
-    def __init__(self, *args, scale_invariant=False, min_degree=False,
-                 **kwargs):
+    def __init__(self, *args, **kwargs):
         """ Return a FitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedGraph, the
@@ -353,10 +352,6 @@ class FitnessModel(GraphEnsemble):
         in the second column there must be the value of the strength.
         All missing node ids are assumed zero.
 
-        The model defaults to the classic fitness model functional but can be
-        set to use the scale invariant formulation by setting the
-        scale_invariant flag to True. This changes the functional used for
-        the computation of the link probability but nothing else.
         """
         # If an argument is passed then it must be a graph
         if len(args) > 0:
@@ -377,9 +372,6 @@ class FitnessModel(GraphEnsemble):
                 warnings.warn(msg, UserWarning)
 
         # Get options from keyword arguments
-        self.scale_invariant = scale_invariant
-        self.min_degree = min_degree
-
         allowed_arguments = ['num_vertices', 'num_edges', 'out_strength',
                              'in_strength', 'param', 'discrete_weights']
         for name in kwargs:
@@ -457,10 +449,6 @@ class FitnessModel(GraphEnsemble):
             if not isinstance(self.param, np.ndarray):
                 self.param = np.array([self.param])
 
-            if self.min_degree:
-                if not (len(self.param) == 2):
-                    raise ValueError('The FitnessModel with min degree '
-                                     'correction requires two parameters.')
             else:
                 if not (len(self.param) == 1):
                     raise ValueError(
@@ -479,20 +467,8 @@ class FitnessModel(GraphEnsemble):
                            atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
-        if scale_invariant:
-            if min_degree:
-                msg = 'Cannot constrain min degree in scale invariant model.'
-                raise ValueError(msg)
-            else:
-                self.prob_fun = mt.p_invariant
-                self.jac_fun = mt.jac_invariant
-        else:
-            if min_degree:
-                self.prob_fun = mt.p_fitness_alpha
-                self.jac_fun = mt.jac_fitness_alpha
-            else:
-                self.prob_fun = mt.p_fitness
-                self.jac_fun = mt.jac_fitness
+        self.prob_fun = mt.p_fitness
+        self.jac_fun = mt.jac_fitness
 
         # If param are set computed expected number of edges per label
         if hasattr(self, 'param'):
@@ -524,95 +500,25 @@ class FitnessModel(GraphEnsemble):
 
         """
         if method is None:
-            if not self.min_degree:
-                method = 'newton'
-        elif self.min_degree:
-            warnings.warn('Method not recognised for solver with min degree '
-                          'constraint, using default SLSQP.', UserWarning)
-
-        if (method == 'fixed-point') and self.scale_invariant:
-            raise Exception('Fixed point solver not supported for scale '
-                            'invariant functional.')
+            method = 'newton'
 
         if x0 is None:
-            if self.min_degree:
-                x0 = np.array([0, 1], dtype=np.float64)
-            else:
-                x0 = np.array([0], dtype=np.float64)
-        else:
-            if not isinstance(x0, np.ndarray):
-                try:
-                    x0 = np.array([x for x in x0])
-                except Exception:
-                    x0 = np.array([x0])
+            x0 = np.array([0], dtype=np.float64)
 
-            if self.min_degree:
-                if not (len(x0) == 2):
-                    raise ValueError('The FitnessModel with min degree '
-                                     'correction requires two parameters.')
-            else:
-                if not (len(x0) == 1):
-                    raise ValueError(
-                        'The FitnessModel requires one parameter.')
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array([x0])
 
-            if not np.issubdtype(x0.dtype, np.number):
-                raise ValueError('x0 must be numeric.')
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The FitnessModel requires one parameter.')
 
-            if np.any(x0 < 0):
-                raise ValueError('x0 must be positive.')
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('x0 must be numeric.')
 
-        if self.min_degree:
-            # Find min degree node
-            if np.any(x0 == 0):
-                self.param = np.ones(x0.shape, dtype=np.float64)
-            else:
-                self.param = x0
-            self.expected_degrees()
-            d_out = self.exp_out_degree
-            d_in = self.exp_in_degree
-            min_out_i = np.argmin(d_out[d_out > 0])
-            min_in_i = np.argmin(d_in[d_in > 0])
+        if np.any(x0 < 0):
+            raise ValueError('x0 must be positive.')
 
-            def min_d(x):
-                return np.array([mt.fit_ineq_constr_alpha(
-                                    x, self.prob_fun, min_out_i,
-                                    self.out_strength[min_out_i],
-                                    self.in_strength),
-                                 mt.fit_ineq_constr_alpha(
-                                    x, self.prob_fun, min_in_i,
-                                    self.in_strength[min_in_i],
-                                    self.out_strength)
-                                 ], dtype=np.float64)
-
-            def jac_min_d(x):
-                return np.stack(
-                    (mt.fit_ineq_jac_alpha(
-                        x, self.jac_fun, min_out_i,
-                        self.out_strength[min_out_i],
-                        self.in_strength),
-                     mt.fit_ineq_jac_alpha(
-                        x, self.jac_fun, min_in_i,
-                        self.in_strength[min_in_i],
-                        self.out_strength)),
-                    axis=0)
-
-            # Solve
-            sol = mt.alpha_solver(
-                x0=x0,
-                fun=lambda x: mt.fit_eq_constr_alpha(
-                    x, self.prob_fun, self.out_strength,
-                    self.in_strength, self.num_edges),
-                jac=lambda x: mt.fit_eq_jac_alpha(
-                    x, self.jac_fun, self.out_strength,
-                    self.in_strength),
-                min_d=min_d,
-                jac_min_d=jac_min_d,
-                tol=tol,
-                max_iter=max_iter,
-                verbose=verbose,
-                full_return=True)
-
-        elif method == "newton":
+        if method == "newton":
             sol = mt.newton_solver(
                 x0=x0,
                 fun=lambda x: mt.fit_f_jac(
@@ -880,8 +786,7 @@ class StripeFitnessModel(GraphEnsemble):
         the parameters vector
     """
 
-    def __init__(self, *args, per_label=True, scale_invariant=False,
-                 min_degree=False, **kwargs):
+    def __init__(self, *args, per_label=True, **kwargs):
         """ Return a StripeFitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedLabelGraph, the
@@ -893,11 +798,6 @@ class StripeFitnessModel(GraphEnsemble):
         to which the strength refers, and in the third column must have the
         value of the strength for the node label pair. All node label pairs
         not included are assumed zero.
-
-        The model defaults to the classic fitness model functional but can be
-        set to use the scale invariant formulation by setting the
-        scale_invariant flag to True. This changes the functional used for
-        the computation of the link probability but nothing else.
 
         Note that the number of edges given implicitly determines if the
         quantity preserved is the total number of edges or the number of edges
@@ -931,9 +831,6 @@ class StripeFitnessModel(GraphEnsemble):
                 warnings.warn(msg, UserWarning)
 
         # Get options from keyword arguments
-        self.scale_invariant = scale_invariant
-        self.min_degree = min_degree
-
         allowed_arguments = ['num_vertices', 'num_edges', 'num_labels',
                              'out_strength', 'in_strength', 'param',
                              'discrete_weights']
@@ -1088,30 +985,18 @@ class StripeFitnessModel(GraphEnsemble):
                                  'two dimensions max.')
 
             p_shape = self.param.shape
-            if self.min_degree:
-                msg = ('StripeFitnessModel with min degree correction requires'
-                       ' two element or two rows with number of columns '
-                       'equal to the number of labels.')
-                if p_shape[0] != 2:
-                    raise ValueError(msg)
-                elif p_shape[1] == self.num_labels:
-                    self.per_label = True
-                elif p_shape[1] == 1:
-                    self.per_label = False
-                else:
-                    raise ValueError(msg)
+        
+            msg = ('StripeFitnessModel requires an array of parameters '
+                   'with number of elements equal to the number of labels '
+                   'or to one.')
+            if p_shape[0] != 1:
+                raise ValueError(msg)
+            elif p_shape[1] == self.num_labels:
+                self.per_label = True
+            elif p_shape[1] == 1:
+                self.per_label = False
             else:
-                msg = ('StripeFitnessModel requires an array of parameters '
-                       'with number of elements equal to the number of labels '
-                       'or to one.')
-                if p_shape[0] != 1:
-                    raise ValueError(msg)
-                elif p_shape[1] == self.num_labels:
-                    self.per_label = True
-                elif p_shape[1] == 1:
-                    self.per_label = False
-                else:
-                    raise ValueError(msg)
+                raise ValueError(msg)
 
             if not np.issubdtype(self.param.dtype, np.number):
                 raise ValueError('Parameters must be numeric.')
@@ -1134,20 +1019,8 @@ class StripeFitnessModel(GraphEnsemble):
         assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
 
         # Get the correct probability functional
-        if scale_invariant:
-            if min_degree:
-                msg = 'Cannot constrain min degree in scale invariant model.'
-                raise ValueError(msg)
-            else:
-                self.prob_fun = mt.p_invariant
-                self.jac_fun = mt.jac_invariant
-        else:
-            if min_degree:
-                self.prob_fun = mt.p_fitness_alpha
-                self.jac_fun = mt.jac_fitness_alpha
-            else:
-                self.prob_fun = mt.p_fitness
-                self.jac_fun = mt.jac_fitness
+        self.prob_fun = mt.p_fitness
+        self.jac_fun = mt.jac_fitness
 
         # If param are set computed expected number of edges per label
         if hasattr(self, 'param'):
@@ -1180,35 +1053,24 @@ class StripeFitnessModel(GraphEnsemble):
 
         """
         if method is None:
-            if not self.min_degree:
-                method = 'newton'
-        elif self.min_degree:
-            warnings.warn('Method not recognised for solver with min degree '
-                          'constraint, using default SLSQP.', UserWarning)
+            method = 'newton'
 
-        if (method == 'fixed-point') and (self.scale_invariant or not
-                                          self.per_label):
-            raise Exception('Fixed point solver not supported for scale '
-                            'invariant functional or for fit not per label.')
+        if (method == 'fixed-point') and self.per_label:
+            raise Exception('Fixed point solver not supported for fit '
+                            'not per label.')
 
         # Ensure initial conditions x0 are of correct format
         if x0 is None:
             if self.per_label:
-                num_clm = self.num_labels
+                x0 = np.zeros((1, self.num_labels), dtype=np.float64)
             else:
-                num_clm = 1
-
-            if self.min_degree:
-                x0 = np.zeros((2, num_clm), dtype=np.float64)
-                x0[1, :] = 1
-            else:
-                x0 = np.zeros((1, num_clm), dtype=np.float64)
-        else:
-            if not isinstance(x0, np.ndarray):
-                try:
-                    x0 = np.array([x for x in x0])
-                except Exception:
-                    x0 = np.array([x0])
+                x0 = np.zeros((1, 1), dtype=np.float64)
+            
+        if not isinstance(x0, np.ndarray):
+            try:
+                x0 = np.array([x for x in x0])
+            except Exception:
+                x0 = np.array([x0])
 
         # Ensure that x0 has two dimensions (row 1: z, row 2: alpha,
         # each column is a layer, if single z then single column)
@@ -1218,26 +1080,15 @@ class StripeFitnessModel(GraphEnsemble):
             raise ValueError('StripeFitnessModel x0 must have '
                              'two dimensions max.')
         p_shape = x0.shape
-        if self.min_degree:
-            msg = ('StripeFitnessModel with min degree correction requires'
-                   ' two element or two rows with number of columns '
-                   'equal to the number of labels.')
-            if p_shape[0] != 2:
-                raise ValueError(msg)
-            elif self.per_label:
-                assert p_shape[1] == self.num_labels, msg
-            else:
-                assert p_shape[1] == 1, msg
+        msg = ('StripeFitnessModel requires an array of parameters '
+               'with number of elements equal to the number of labels '
+               'or to one.')
+        if p_shape[0] != 1:
+            raise ValueError(msg)
+        elif self.per_label:
+            assert p_shape[1] == self.num_labels, msg
         else:
-            msg = ('StripeFitnessModel requires an array of parameters '
-                   'with number of elements equal to the number of labels '
-                   'or to one.')
-            if p_shape[0] != 1:
-                raise ValueError(msg)
-            elif self.per_label:
-                assert p_shape[1] == self.num_labels, msg
-            else:
-                assert p_shape[1] == 1, msg
+            assert p_shape[1] == 1, msg
 
         if not np.issubdtype(x0.dtype, np.number):
             raise ValueError('Parameters must be numeric.')
@@ -1245,29 +1096,9 @@ class StripeFitnessModel(GraphEnsemble):
         if np.any(x0 < 0):
             raise ValueError('Parameters must be positive.')
 
-        if self.min_degree:
-            # Initialize param to compute min degree
-            if np.any(x0 == 0):
-                self.param = np.ones(x0.shape, dtype=np.float64)
-            else:
-                self.param = x0
-
-            if self.per_label:
-                self.expected_degrees_by_label()
-                d_out = self.exp_out_degree_label
-                d_in = self.exp_in_degree_label
-            else:
-                self.expected_degrees()
-                d_out = self.exp_out_degree
-                d_in = self.exp_in_degree
-
         # Fit by layer
         if self.per_label:
-            if self.min_degree:
-                self.param = np.empty((2, self.num_labels), dtype=np.float64)
-            else:
-                self.param = np.empty((1, self.num_labels), dtype=np.float64)
-            
+            self.param = np.empty((1, self.num_labels), dtype=np.float64)
             self.solver_output = [None]*self.num_labels
 
             for i in range(self.num_labels):
@@ -1275,52 +1106,7 @@ class StripeFitnessModel(GraphEnsemble):
                 s_in = self.in_strength[self.in_strength.label == i]
                 num_e = self.num_edges[i]
                 
-                if self.min_degree:
-                    # Find min degree node
-                    d_out_l = d_out[d_out.label == i]
-                    d_in_l = d_in[d_in.label == i]
-                    min_d_out = np.argmin(d_out_l.value[d_out_l.value > 0])
-                    min_d_in = np.argmin(d_in_l.value[d_in_l.value > 0])
-                    min_out_id = d_out_l[min_d_out].id
-                    min_in_id = d_in_l[min_d_in].id
-                    min_s_out = s_out[s_out.id == min_out_id].value[0]
-                    min_s_in = s_in[s_in.id == min_in_id].value[0]
-
-                    def min_d(x):
-                        return np.array([
-                            mt.layer_ineq_constr_alpha(
-                                x, self.prob_fun, min_out_id,
-                                min_s_out, s_in),
-                            mt.layer_ineq_constr_alpha(
-                                x, self.prob_fun, min_in_id,
-                                min_s_in, s_out)],
-                            dtype=np.float64)
-
-                    def jac_min_d(x):
-                        return np.stack([
-                            mt.layer_ineq_jac_alpha(
-                                x, self.jac_fun, min_out_id,
-                                min_s_out, s_in),
-                            mt.layer_ineq_jac_alpha(
-                                x, self.jac_fun, min_in_id,
-                                min_s_in, s_out)],
-                            axis=0)
-
-                    # Solve
-                    sol = mt.alpha_solver(
-                        x0=x0[:, i],
-                        fun=lambda x: mt.layer_eq_constr_alpha(
-                            x, self.prob_fun, s_out, s_in, num_e),
-                        jac=lambda x: mt.layer_eq_jac_alpha(
-                            x, self.jac_fun, s_out, s_in),
-                        min_d=min_d,
-                        jac_min_d=jac_min_d,
-                        tol=tol,
-                        max_iter=max_iter,
-                        verbose=verbose,
-                        full_return=True)
-
-                elif method == "newton":
+                if method == "newton":
                     sol = mt.newton_solver(
                         x0=x0[:, i],
                         fun=lambda x: mt.layer_f_jac(
@@ -1378,55 +1164,7 @@ class StripeFitnessModel(GraphEnsemble):
             s_in_j = s_in.indices
             s_in_w = s_in.data
                 
-            if self.min_degree:
-                # Find min degree node
-                min_out_id = np.argmin(d_out[d_out > 0])
-                min_in_id = np.argmin(d_in[d_in > 0])
-                min_out_label = s_out_j[min_out_id: min_out_id + 1]
-                min_in_label = s_in_j[min_in_id: min_in_id + 1]
-                min_out_vals = s_out_w[min_out_id: min_out_id + 1]
-                min_in_vals = s_in_w[min_in_id: min_in_id + 1]
-                
-                def min_d(x):
-                    return np.array([
-                        mt.stripe_ineq_constr_alpha(
-                            x, self.prob_fun, min_out_id, min_out_label,
-                            min_out_vals, s_in_i, s_in_j, s_in_w),
-                        mt.stripe_ineq_constr_alpha(
-                            x, self.prob_fun, min_in_id, min_in_label,
-                            min_in_vals, s_out_i, s_out_j, s_out_w)],
-                        dtype=np.float64)
-
-                def jac_min_d(x):
-                    return np.stack([
-                        mt.stripe_ineq_jac_alpha(
-                            x, self.prob_fun, self.jac_fun,
-                            min_out_id, min_out_label, min_out_vals,
-                            s_in_i, s_in_j, s_in_w),
-                        mt.stripe_ineq_jac_alpha(
-                            x, self.prob_fun, self.jac_fun,
-                            min_in_id, min_in_label, min_in_vals,
-                            s_out_i, s_out_j, s_out_w)],
-                        axis=0)
-
-                # Solve
-                sol = mt.alpha_solver(
-                    x0=x0[:, 0],
-                    fun=lambda x: mt.stripe_eq_constr_alpha(
-                        x, self.prob_fun, s_out_i, s_out_j, s_out_w,
-                        s_in_i, s_in_j, s_in_w, self.num_edges),
-                    jac=lambda x: mt.stripe_eq_jac_alpha(
-                        x, self.prob_fun, self.jac_fun,
-                        s_out_i, s_out_j, s_out_w,
-                        s_in_i, s_in_j, s_in_w),
-                    min_d=min_d,
-                    jac_min_d=jac_min_d,
-                    tol=tol,
-                    max_iter=max_iter,
-                    verbose=verbose,
-                    full_return=True)
-
-            elif method == "newton":
+            if method == "newton":
                 sol = mt.newton_solver(
                     x0=x0[:, 0],
                     fun=lambda x: mt.stripe_f_jac(
@@ -1850,9 +1588,6 @@ class StripeFitnessModel(GraphEnsemble):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
 
-        if self.min_degree and not hasattr(self, 'alpha'):
-            raise Exception('Ensemble has to be fitted before sampling.')
-
         # Generate uninitialised graph object
         g = graphs.WeightedLabelGraph.__new__(graphs.WeightedLabelGraph)
         g.lv = graphs.LabelVertexList()
@@ -1890,6 +1625,436 @@ class StripeFitnessModel(GraphEnsemble):
         g.total_weight = np.sum(e.weight)
         g.total_weight_label = mt.compute_tot_weight_by_label(
                 g.e, g.num_labels)
+
+        return g
+
+
+class ScaleInvariantModel(GraphEnsemble):
+    """ The Scale Invariant model takes the strengths of each node in order to
+    construct a probability distribution over all possible graphs with the 
+    additional property that the parameters are consistent across all possible
+    node aggregations.
+
+    Attributes
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence
+    in_strength: np.ndarray
+        the in strength sequence
+    num_edges: int
+        the total number of edges
+    num_vertices: int
+        the total number of nodes
+    z: float
+        the density parameter
+    """
+
+    def __init__(self, *args, **kwargs):
+        """ Return a FitnessModel for the given graph data.
+
+        The model accepts as arguments either: a WeightedGraph, the
+        strength sequences (in and out) and the number of edges,
+        or the strength sequences and the z parameter.
+
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the node index to which the strength refers and
+        in the second column there must be the value of the strength.
+        All missing node ids are assumed zero.
+
+        The model defaults to the classic fitness model functional but can be
+        set to use the scale invariant formulation by setting the
+        scale_invariant flag to True. This changes the functional used for
+        the computation of the link probability but nothing else.
+        """
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges
+                self.id_dtype = g.id_dtype
+                self.out_strength = g.out_strength(get=True)
+                self.in_strength = g.in_strength(get=True)
+            else:
+                raise ValueError('First argument passed must be a '
+                                 'WeightedGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'out_strength',
+                             'in_strength', 'param', 'discrete_weights']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+        else:
+            try: 
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError('Number of vertices must be an integer.')
+
+            if self.num_vertices <= 0:
+                raise ValueError(
+                    'Number of vertices must be a positive number.')
+
+        if not hasattr(self, 'out_strength'):
+            raise ValueError('out_strength not set.')
+
+        if not hasattr(self, 'in_strength'):
+            raise ValueError('in_strength not set.')
+
+        if not (hasattr(self, 'num_edges') or
+                hasattr(self, 'param')):
+            raise ValueError('Either num_edges or param must be set.')
+
+        if not hasattr(self, 'id_dtype'):
+            num_bytes = mt.get_num_bytes(self.num_vertices)
+            self.id_dtype = np.dtype('u' + str(num_bytes))
+
+        # Ensure that strengths passed adhere to format (ndarray)
+        msg = ("Out strength must be a numpy array of length " +
+               str(self.num_vertices))
+        assert isinstance(self.out_strength, np.ndarray), msg
+        assert self.out_strength.shape == (self.num_vertices,), msg
+
+        msg = ("In strength must be a numpy array of length " +
+               str(self.num_vertices))
+        assert isinstance(self.in_strength, np.ndarray), msg
+        assert self.in_strength.shape == (self.num_vertices,), msg
+
+        # Ensure that strengths have positive values only
+        msg = "Out strength must contain positive values only."
+        assert np.all(self.out_strength >= 0), msg
+
+        msg = "In strength must contain positive values only."
+        assert np.all(self.in_strength >= 0), msg
+
+        # Ensure that number of edges is a positive number
+        if hasattr(self, 'num_edges'):
+            try: 
+                tmp = len(self.num_edges)
+                if tmp == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError('Number of edges must be a number.')
+            except TypeError:
+                pass        
+                
+            try:
+                self.num_edges = self.num_edges * 1.0
+            except TypeError:
+                raise ValueError('Number of edges must be a number.')
+
+            if self.num_edges < 0:
+                raise ValueError(
+                    'Number of edges must be a positive number.')
+        else:
+            if not isinstance(self.param, np.ndarray):
+                self.param = np.array([self.param])
+
+            if not (len(self.param) == 1):
+                raise ValueError(
+                    'The ScaleInvariantModel requires one parameter.')
+            
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError('Parameters must be numeric.')
+
+            if np.any(self.param < 0):
+                raise ValueError('Parameters must be positive.')
+
+        # Check that sum of in and out strengths are equal
+        msg = 'Sums of strengths do not match.'
+        assert np.allclose(np.sum(self.out_strength),
+                           np.sum(self.in_strength),
+                           atol=1e-14, rtol=1e-9), msg
+
+        # Get the correct probability functional
+        self.prob_fun = mt.p_invariant
+        self.jac_fun = mt.jac_invariant
+
+        # If param are set computed expected number of edges per label
+        if hasattr(self, 'param'):
+            self.num_edges = mt.fit_exp_edges(
+                self.prob_fun,
+                self.param,
+                self.out_strength,
+                self.in_strength)
+
+    def fit(self, x0=None, tol=1e-5, xtol=1e-12, max_iter=100, verbose=False):
+        """ Compute the optimal z to match the given number of edges.
+
+        Parameters
+        ----------
+        x0: float
+            optional initial conditions for parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol : float
+            tolerance for the exit condition on the norm
+        eps : float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+
+        """
+        
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+        
+        if not isinstance(x0, np.ndarray):
+            try:
+                x0 = np.array([x for x in x0])
+            except Exception:
+                x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The ScaleInvariantModel requires one parameter.')
+
+            if not np.issubdtype(x0.dtype, np.number):
+                raise ValueError('x0 must be numeric.')
+
+            if np.any(x0 < 0):
+                raise ValueError('x0 must be positive.')
+
+        sol = mt.newton_solver(
+            x0=x0,
+            fun=lambda x: mt.fit_f_jac(
+                self.prob_fun, self.jac_fun, x,
+                self.out_strength, self.in_strength, self.num_edges),
+            tol=tol,
+            xtol=xtol,
+            max_iter=max_iter,
+            verbose=verbose,
+            full_return=True)
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not sol.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+        
+        self.exp_num_edges = mt.fit_exp_edges(
+                self.prob_fun,
+                self.param,
+                self.out_strength,
+                self.in_strength)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected out/in degree for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.fit_exp_degree(self.prob_fun, self.param, self.out_strength,
+                              self.in_strength)
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected undirected degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
+    def expected_av_nn_property(self, prop, ndir='out', deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        av_nn = mt.fit_av_nn_prop(self.prob_fun, self.param, self.out_strength,
+                                  self.in_strength, prop, ndir=ndir)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def expected_av_nn_degree(self, ddir='out', ndir='out',
+                              deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ddir == 'out':
+            deg = self.exp_out_degree
+        elif ddir == 'in':
+            deg = self.exp_in_degree
+        elif ddir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_d_' + ddir.replace('-', '_'))
+        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def expected_av_nn_strength(self, sdir='out', ndir='out',
+                                deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the strength.
+        """
+        # Select the correct strength
+        if sdir == 'out':
+            s = self.out_strength
+        elif sdir == 'in':
+            s = self.in_strength
+        elif sdir == 'out-in':
+            s = self.out_strength + self.in_strength
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_s_' + sdir.replace('-', '_'))
+        res = self.expected_av_nn_property(s, ndir=ndir,
+                                           deg_recompute=deg_recompute)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def log_likelihood(self, g, log_space=True):
+        """ Compute the likelihood a graph given the fitted model.
+
+        Accepts as input either a graph or an adjacency matrix.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
+
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, sp.spmatrix):
+            adj = g.asformat('csr')
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError('g input not a graph or adjacency matrix.')
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = ('Passed graph adjacency matrix does not have the correct '
+                   'shape: {0} instead of {1}'.format(
+                    adj.shape, (self.num_vertices, self.num_vertices)))
+            raise ValueError(msg)
+
+        # Compute log likelihood of graph
+        like = mt.fit_likelihood(
+            adj.indptr, adj.indices, self.prob_fun, self.param,
+            self.out_strength, self.in_strength, log_space)
+
+        return like
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = graphs.WeightedGraph.__new__(graphs.WeightedGraph)
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        g.id_dtype = self.id_dtype
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges and extract properties
+        e = mt.fit_sample(
+                self.prob_fun, self.param, self.out_strength, self.in_strength)
+
+        e = np.array(e,
+                     dtype=[('src', 'f8'),
+                            ('dst', 'f8'),
+                            ('weight', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        g.total_weight = np.sum(e.weight)
 
         return g
 
