@@ -2058,6 +2058,435 @@ class ScaleInvariantModel(GraphEnsemble):
 
         return g
 
+class ScaleInvariantModel_selfloops(GraphEnsemble):
+    """ The Scale Invariant model takes the strengths of each node in order to
+    construct a probability distribution over all possible graphs with the 
+    additional property that the parameters are consistent across all possible
+    node aggregations. This class includes possible self-loops.
+
+    Attributes
+    ----------
+    out_strength: np.ndarray
+        the out strength sequence
+    in_strength: np.ndarray
+        the in strength sequence
+    num_edges: int
+        the total number of edges
+    num_vertices: int
+        the total number of nodes
+    z: float
+        the density parameter
+    """
+
+    def __init__(self, *args, **kwargs):
+        """ Return a FitnessModel for the given graph data.
+
+        The model accepts as arguments either: a WeightedGraph, the
+        strength sequences (in and out) and the number of edges,
+        or the strength sequences and the z parameter.
+
+        The model accepts the strength sequences as numpy recarrays. The first
+        column must contain the node index to which the strength refers and
+        in the second column there must be the value of the strength.
+        All missing node ids are assumed zero.
+
+        The model defaults to the classic fitness model functional but can be
+        set to use the scale invariant formulation by setting the
+        scale_invariant flag to True. This changes the functional used for
+        the computation of the link probability but nothing else.
+        """
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges
+                self.id_dtype = g.id_dtype
+                self.out_strength = g.out_strength(get=True)
+                self.in_strength = g.in_strength(get=True)
+            else:
+                raise ValueError('First argument passed must be a '
+                                 'WeightedGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'out_strength',
+                             'in_strength', 'param', 'discrete_weights']
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+        else:
+            try: 
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError('Number of vertices must be an integer.')
+
+            if self.num_vertices <= 0:
+                raise ValueError(
+                    'Number of vertices must be a positive number.')
+
+        if not hasattr(self, 'out_strength'):
+            raise ValueError('out_strength not set.')
+
+        if not hasattr(self, 'in_strength'):
+            raise ValueError('in_strength not set.')
+
+        if not (hasattr(self, 'num_edges') or
+                hasattr(self, 'param')):
+            raise ValueError('Either num_edges or param must be set.')
+
+        if not hasattr(self, 'id_dtype'):
+            num_bytes = mt.get_num_bytes(self.num_vertices)
+            self.id_dtype = np.dtype('u' + str(num_bytes))
+
+        # Ensure that strengths passed adhere to format (ndarray)
+        msg = ("Out strength must be a numpy array of length " +
+               str(self.num_vertices))
+        assert isinstance(self.out_strength, np.ndarray), msg
+        assert self.out_strength.shape == (self.num_vertices,), msg
+
+        msg = ("In strength must be a numpy array of length " +
+               str(self.num_vertices))
+        assert isinstance(self.in_strength, np.ndarray), msg
+        assert self.in_strength.shape == (self.num_vertices,), msg
+
+        # Ensure that strengths have positive values only
+        msg = "Out strength must contain positive values only."
+        assert np.all(self.out_strength >= 0), msg
+
+        msg = "In strength must contain positive values only."
+        assert np.all(self.in_strength >= 0), msg
+
+        # Ensure that number of edges is a positive number
+        if hasattr(self, 'num_edges'):
+            try: 
+                tmp = len(self.num_edges)
+                if tmp == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError('Number of edges must be a number.')
+            except TypeError:
+                pass        
+                
+            try:
+                self.num_edges = self.num_edges * 1.0
+            except TypeError:
+                raise ValueError('Number of edges must be a number.')
+
+            if self.num_edges < 0:
+                raise ValueError(
+                    'Number of edges must be a positive number.')
+        else:
+            if not isinstance(self.param, np.ndarray):
+                self.param = np.array([self.param])
+
+            if not (len(self.param) == 1):
+                raise ValueError(
+                    'The ScaleInvariantModel requires one parameter.')
+            
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError('Parameters must be numeric.')
+
+            if np.any(self.param < 0):
+                raise ValueError('Parameters must be positive.')
+
+        # Check that sum of in and out strengths are equal
+        msg = 'Sums of strengths do not match.'
+        assert np.allclose(np.sum(self.out_strength),
+                           np.sum(self.in_strength),
+                           atol=1e-14, rtol=1e-9), msg
+
+        # Get the correct probability functional
+        self.prob_fun = mt.p_invariant
+        self.jac_fun = mt.jac_invariant
+
+        # If param are set computed expected number of edges per label
+        if hasattr(self, 'param'):
+            self.num_edges = mt.fit_exp_edges_selfloops(
+                self.prob_fun,
+                self.param,
+                self.out_strength,
+                self.in_strength)
+
+    def fit(self, x0=None, tol=1e-5, xtol=1e-12, max_iter=100, verbose=False):
+        """ Compute the optimal z to match the given number of edges.
+
+        Parameters
+        ----------
+        x0: float
+            optional initial conditions for parameters
+        method: 'newton' or 'fixed-point'
+            selects which method to use for the solver
+        tol : float
+            tolerance for the exit condition on the norm
+        eps : float
+            tolerance for the exit condition on difference between two
+            iterations
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+
+        """
+        
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+        
+        if not isinstance(x0, np.ndarray):
+            try:
+                x0 = np.array([x for x in x0])
+            except Exception:
+                x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The ScaleInvariantModel requires one parameter.')
+
+            if not np.issubdtype(x0.dtype, np.number):
+                raise ValueError('x0 must be numeric.')
+
+            if np.any(x0 < 0):
+                raise ValueError('x0 must be positive.')
+
+        sol = mt.newton_solver(
+            x0=x0,
+            fun=lambda x: mt.fit_f_jac_selfloops(
+                self.prob_fun, self.jac_fun, x,
+                self.out_strength, self.in_strength, self.num_edges),
+            tol=tol,
+            xtol=xtol,
+            max_iter=max_iter,
+            verbose=verbose,
+            full_return=True)
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not sol.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+        
+        self.exp_num_edges = mt.fit_exp_edges_selfloops(
+                self.prob_fun,
+                self.param,
+                self.out_strength,
+                self.in_strength)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected out/in degree for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
+            mt.fit_exp_degree(self.prob_fun, self.param, self.out_strength,
+                              self.in_strength)
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected undirected degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
+    def expected_av_nn_property(self, prop, ndir='out', deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        av_nn = mt.fit_av_nn_prop(self.prob_fun, self.param, self.out_strength,
+                                  self.in_strength, prop, ndir=ndir)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def expected_av_nn_degree(self, ddir='out', ndir='out',
+                              deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ddir == 'out':
+            deg = self.exp_out_degree
+        elif ddir == 'in':
+            deg = self.exp_in_degree
+        elif ddir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_d_' + ddir.replace('-', '_'))
+        res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def expected_av_nn_strength(self, sdir='out', ndir='out',
+                                deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the strength.
+        """
+        # Select the correct strength
+        if sdir == 'out':
+            s = self.out_strength
+        elif sdir == 'in':
+            s = self.in_strength
+        elif sdir == 'out-in':
+            s = self.out_strength + self.in_strength
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_s_' + sdir.replace('-', '_'))
+        res = self.expected_av_nn_property(s, ndir=ndir,
+                                           deg_recompute=deg_recompute)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
+
+    def log_likelihood(self, g, log_space=True):
+        """ Compute the likelihood a graph given the fitted model.
+
+        Accepts as input either a graph or an adjacency matrix.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
+
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, sp.spmatrix):
+            adj = g.asformat('csr')
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError('g input not a graph or adjacency matrix.')
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = ('Passed graph adjacency matrix does not have the correct '
+                   'shape: {0} instead of {1}'.format(
+                    adj.shape, (self.num_vertices, self.num_vertices)))
+            raise ValueError(msg)
+
+        # Compute log likelihood of graph
+        like = mt.fit_likelihood(
+            adj.indptr, adj.indices, self.prob_fun, self.param,
+            self.out_strength, self.in_strength, log_space)
+
+        return like
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = graphs.WeightedGraph.__new__(graphs.WeightedGraph)
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        g.id_dtype = self.id_dtype
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges and extract properties
+        e = mt.fit_sample(
+                self.prob_fun, self.param, self.out_strength, self.in_strength)
+
+        e = np.array(e,
+                     dtype=[('src', 'f8'),
+                            ('dst', 'f8'),
+                            ('weight', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        g.total_weight = np.sum(e.weight)
+
+        return g
+
 
 class BlockFitnessModel(GraphEnsemble):
     """ A generalized fitness model that allows for grouped vertices.

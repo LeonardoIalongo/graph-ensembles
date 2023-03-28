@@ -160,6 +160,18 @@ def fit_exp_degree_vertex(p_f, param, i, fit_i, fit_j):
 
     return d
 
+@jit(nopython=True)
+def fit_exp_degree_vertex_selfloops(p_f, param, i, fit_i, fit_j):
+    """ Compute the expected degree of the i-th vertex.
+    """
+    d = 0
+    for j in np.arange(len(fit_j)):
+        val = fit_j[j]
+        d += p_f(param, fit_i, val)
+
+    return d
+
+
 
 @jit(nopython=True)
 def fit_exp_edges(p_f, param, fit_out, fit_in):
@@ -172,6 +184,20 @@ def fit_exp_edges(p_f, param, fit_out, fit_in):
             v_in = fit_in[j]
             if i != j:
                 exp_edges += p_f(param, v_out, v_in)
+
+    return exp_edges
+
+
+@jit(nopython=True)
+def fit_exp_edges_selfloops(p_f, param, fit_out, fit_in):
+    """ Compute the expected number of edges.
+    """
+    exp_edges = 0
+    for i in np.arange(len(fit_out)):
+        v_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            v_in = fit_in[j]
+            exp_edges += p_f(param, v_out, v_in)
 
     return exp_edges
 
@@ -191,6 +217,20 @@ def fit_exp_edges_jac(jac_f, param, fit_out, fit_in):
 
     return jac
 
+@jit(nopython=True)
+def fit_exp_edges_jac_selfloops(jac_f, param, fit_out, fit_in):
+    """ Compute the Jacobian of the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
+    """
+    jac = 0
+    for i in np.arange(len(fit_out)):
+        s_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            s_in = fit_in[j]
+            jac = jac_f(param, s_out, s_in)
+
+    return jac
+
 
 @jit(nopython=True)
 def fit_exp_edges_jac_alpha(jac_f, param, fit_out, fit_in):
@@ -206,6 +246,23 @@ def fit_exp_edges_jac_alpha(jac_f, param, fit_out, fit_in):
                 res = jac_f(param, s_out, s_in)
                 jac[0] += res[0]
                 jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
+def fit_exp_edges_jac_alpha_selfloops(jac_f, param, fit_out, fit_in):
+    """ Compute the Jacobian of the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
+    """
+    jac = np.zeros(2, dtype=np.float64)
+    for i in np.arange(len(fit_out)):
+        s_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            s_in = fit_in[j]
+            res = jac_f(param, s_out, s_in)
+            jac[0] += res[0]
+            jac[1] += res[1]
 
     return jac
 
@@ -253,6 +310,22 @@ def fit_f_jac(p_f, jac_f, param, fit_out, fit_in, n_edges):
 
     return f - n_edges, jac
 
+@jit(nopython=True)
+def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in, n_edges):
+    """ Compute the objective function of the newton solver and its
+    derivative for a single label of the stripe model.
+    """
+    jac = 0
+    f = 0
+    for i in np.arange(len(fit_out)):
+        s_out = fit_out[i]
+        for j in np.arange(len(fit_in)):
+            s_in = fit_in[j]
+            f += p_f(param, s_out, s_in)
+            jac += jac_f(param, s_out, s_in)
+
+    return f - n_edges, jac
+
 
 @jit(nopython=True)
 def fit_iterative(param, out_strength, in_strength, n_edges):
@@ -269,6 +342,22 @@ def fit_iterative(param, out_strength, in_strength, n_edges):
                 aux += tmp / (1 + param[0]*tmp)
 
     return n_edges/aux
+
+@jit(nopython=True)
+def fit_iterative_selfloops(param, out_strength, in_strength, n_edges):
+    """ Compute the next iteration of the fixed point method for a single
+    label of the stripe model.
+    """
+    aux = 0
+    for i in np.arange(len(out_strength)):
+        s_out = out_strength[i]
+        for j in np.arange(in_strength.shape[0]):
+            s_in = in_strength[j]
+            tmp = s_out*s_in
+            aux += tmp / (1 + param[0]*tmp)
+
+    return n_edges/aux
+
 
 
 @jit(nopython=True)
@@ -298,6 +387,18 @@ def fit_ineq_jac_alpha(x, jac_f, i, fit_i, fit_j):
             res = jac_f(x, fit_i, j_val)
             jac[0] += res[0]
             jac[1] += res[1]
+
+    return jac
+
+
+@jit(nopython=True)
+def fit_ineq_jac_alpha_selfloops(x, jac_f, i, fit_i, fit_j):
+    jac = np.zeros(2, dtype=np.float64)
+    for j in np.arange(len(fit_j)):
+        j_val = fit_j[j]
+        res = jac_f(x, fit_i, j_val)
+        jac[0] += res[0]
+        jac[1] += res[1]
 
     return jac
 
@@ -368,6 +469,40 @@ def fit_likelihood(adj_i, adj_j, p_f, param, out_strength, in_strength, lgs):
     else:
         return log(like)
 
+@jit(nopython=True)
+def fit_likelihood_selfloops(adj_i, adj_j, p_f, param, out_strength, in_strength, lgs):
+    """ Compute the binary log likelihood of a graph given the fitted model.
+    """
+    if lgs:
+        like = 0
+    else:
+        like = 1
+
+    for i in np.arange(len(out_strength)):
+        s_out = out_strength[i]
+        n = adj_i[i]
+        m = adj_i[i+1]
+        j_list = adj_j[n:m]
+        for j in np.arange(len(in_strength)):
+            s_in = in_strength[j]
+            p = p_f(param, s_out, s_in)
+
+            # Check if link exists
+            if j in j_list:
+                if lgs:
+                    like += log(p)
+                else:
+                    like *= p
+            else:
+                if lgs:
+                    like += log(1 - p)
+                else:
+                    like *= 1 - p
+    if lgs:
+        return like
+    else:
+        return log(like)
+
 
 @jit(nopython=True)
 def fit_sample(p_f, param, out_strength, in_strength):
@@ -388,6 +523,26 @@ def fit_sample(p_f, param, out_strength, in_strength):
                     sample.append((i, j, w))
 
     return sample
+
+@jit(nopython=True)
+def fit_sample_selfloops(p_f, param, out_strength, in_strength):
+    """ Sample from the fitness model ensemble.
+    """
+    s_tot = np.sum(out_strength)
+    msg = 'Sum of in/out strengths not the same.'
+    assert np.abs(1 - np.sum(in_strength)/s_tot) < 1e-6, msg
+    sample = []
+    for i in np.arange(len(out_strength)):
+        s_out = out_strength[i]
+        for j in np.arange(len(in_strength)):
+            s_in = in_strength[j]
+            p = p_f(param, s_out, s_in)
+            if rng.random() < p:
+                w = np.float64(rng.exponential(s_out*s_in/(s_tot*p)))
+                sample.append((i, j, w))
+
+    return sample
+
 
 
 # --------------- LAYER FITNESS METHODS ---------------
