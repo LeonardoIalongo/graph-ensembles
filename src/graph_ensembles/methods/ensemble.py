@@ -2,6 +2,7 @@ import numpy as np
 import numpy.random as rng
 from numba import jit
 from math import ceil, sqrt, isinf, exp, log
+from multiprocess import Process
 
 
 # --------------- PROBABILITY FUNCTIONALS ---------------
@@ -26,7 +27,7 @@ def jac_fitness(param, x_i, x_j):
 
 @jit(nopython=True)
 def p_invariant(param, x_i, x_j):
-    tmp = param[0]*x_i*x_j
+    tmp = param*x_i*x_j
     if isinf(tmp):
         return 1
     else:
@@ -36,7 +37,7 @@ def p_invariant(param, x_i, x_j):
 @jit(nopython=True)
 def jac_invariant(param, x_i, x_j):
     tmp = x_i*x_j
-    tmp1 = param[0]*tmp
+    tmp1 = param*tmp
     if isinf(tmp1):
         return 0
     else:
