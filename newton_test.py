@@ -7,7 +7,7 @@ import multiprocessing as mp
 from multiprocessing import Process
 import queue
 
-n_nodes = 100000
+n_nodes = 50000
 X_in  = np.random.exponential(scale=100, size=n_nodes)
 X_out = np.random.exponential(scale=200, size=n_nodes) + X_in
 density = 0.001
@@ -26,9 +26,9 @@ target = density * n_nodes**2
 # elapsed_time = time.time() - st
 # print('Stochastic Newton time:', elapsed_time)
 
-st2 = time.time()
+start = time.time()
 @jit(nopython=True)
-def fit_f_jac_selfloops_multiprocess(p_f, jac_f, param, fit_out, fit_in, n_edges):
+def fit_f_jac_selfloops_multiprocess(p_f, jac_f, param, fit_out, fit_in):
     """ Compute the objective function of the newton solver and its
     derivative for a single label of the stripe model.
     """
@@ -41,7 +41,7 @@ def fit_f_jac_selfloops_multiprocess(p_f, jac_f, param, fit_out, fit_in, n_edges
             f += p_f(param, s_out, s_in)
             jac += jac_f(param, s_out, s_in)
 
-    return f - n_edges, jac
+    return f, jac
 
 
 # def func21(delta):
@@ -71,80 +71,51 @@ def fit_f_jac_selfloops_multiprocess(p_f, jac_f, param, fit_out, fit_in, n_edges
 # elapsed_time2 = time.time() - st2
 # print('Regular Newton time:', elapsed_time2)
 
-def listener(q, n, t0):
-    '''Listens for messages on the q, to update status of computation.'''
-    i = 0
-    j = 0
-    while 1:
-        try:
-            m = q.get(block=True, timeout=1)
-            if m == 'kill':
-                break
-            elif m == 'skip':
-                i += 2
-                j += 2
-            elif m == 'done':
-                i += 1
-        except queue.Empty:
-            pass
-        print('Saved files {0}/{1}. Elapsed time: {3}. (skipped {2})'.format(
-              i, n, j,
-              time.strftime('%H:%M:%S', time.gmtime(time.time() - t0))),
-              end='\r', flush=True)
-
-    print('Saved files {0}/{1}. Elapsed time: {3}. (skipped {2})'.format(
-          i, n, j, time.strftime('%H:%M:%S', time.gmtime(time.time() - t0))))
-
 n_blocks = np.floor(n_nodes/10000)
 n_blocks = n_blocks.astype(int)
 p_function = mt.p_invariant
 jac_function = mt.jac_invariant
-newton_func = mt.newton_solver
+newton_func = mt.newton_solver_pool
 
-def jac_fit(delta, begin_xout, end_xout):
-            fval, fgrad = fit_f_jac_selfloops_multiprocess(p_function, 
-                                jac_function, delta, X_out[begin_xout:end_xout], X_in, target)
-            return fval, fgrad
-
-
-if __name__ =='__main__':
-    start=time.time()
-    #Generate manager queue and pool
-    manager = mp.Manager()
-    q = manager.Queue()
-    pool = mp.Pool(mp.cpu_count())
+def jac_fit(delta, pool, n_blocks):
     jobs = []
-
-    watcher = pool.apply_async(listener, (q, 2*n_blocks, start))
 
     for i in range(n_blocks):
         #Define blocks of 10000
         begin_xout = i*10000
         end_xout = (i+1)*10000
-        jac_fit_delta = lambda x: jac_fit(delta=x, begin_xout=begin_xout, end_xout=end_xout)
-        # def jac_func(delta):
-        #     fval, fgrad = fit_f_jac_selfloops_multiprocess(p_function, 
-        #                         jac_function, delta, X_out[begin_xout:end_xout], X_in, target)
-        #     return fval, fgrad
         jobs.append(
-        pool.apply_async(newton_func, (0, jac_fit_delta))
+            pool.apply_async(fit_f_jac_selfloops_multiprocess, 
+                             (p_function, jac_function, delta, X_out[begin_xout:end_xout], X_in))
         )
+
     #Add the last block with the remaining calculations to the pool
     last_xout = n_blocks*10000
-    jac_fit_delta_final = lambda x: jac_fit(delta=x, begin_xout=last_xout, end_xout=n_nodes)
-    # def jac_func_final(delta):
-    #         fval, fgrad = fit_f_jac_selfloops_multiprocess(p_function, 
-    #                             jac_function, delta, X_out[last_xout:], X_in, target)
-    #         return fval, fgrad
     jobs.append(
-    pool.apply_async(newton_func, (0,jac_fit_delta_final))
+        pool.apply_async(fit_f_jac_selfloops_multiprocess, 
+                         (p_function, jac_function, delta, X_out[last_xout:], X_in))
     )
     
     # Collect results from the workers through the pool result queue
+    tot_fval = -target
+    tot_fgrad = 0
     for job in jobs:
-        job.get()
+        tmp = job.get()
+        tot_fval += tmp[0]
+        tot_fgrad += tmp[1]
     
-    # Kill the listener
-    q.put('kill')
+    return tot_fval, tot_fgrad
+
+
+
+if __name__ =='__main__':
+    start=time.time()
+    #Generate manager queue and pool
+    pool = mp.Pool(mp.cpu_count())
+    print(newton_func(0, lambda x, y: jac_fit(x,y, n_blocks), pool))
+
     pool.close()
     pool.join()
+end = time.time()
+elapsed_time = end-start 
+print("elapsed time:", elapsed_time)

@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize
 import scipy
+import multiprocessing as mp
 
 
 class Solution():
@@ -112,6 +113,107 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
         # Update values
         x = x + dx
         f, f_p = fun(x)
+        # stopping condition computation
+        norm = np.abs(f)
+        if x_old != 0:
+            diff = np.abs((x - x_old)/x_old)
+        else:
+            diff = 1
+
+        if full_return:
+            f_seq.append(f)
+            x_seq.append(x)
+            norm_seq.append(norm)
+            diff_seq = np.append(diff_seq, diff)
+
+        # step update
+        n_iter += 1
+        if verbose > 1:
+            print("    Iteration {}".format(n_iter))
+            print("    fun = {}".format(f))
+            print("    fun_prime = {}".format(f_p))
+            print("    dx = {}".format(dx))
+            print("    x = {}".format(x))
+            print("    |f(x)| = {}".format(norm))
+            print("    diff = {}".format(diff))
+            print(' ')
+
+    if verbose > 1:
+        print(' ')
+
+    if verbose:
+        print('Converged: ', norm <= tol)
+        print('Final distance from root: ', norm)
+        print('Last relative change in x: ', diff)
+        print('Iterations: ', n_iter)
+
+    if full_return:
+        return Solution(x, n_iter, max_iter, 'newton',
+                        f_seq=np.array(f_seq),
+                        x_seq=np.array(x_seq),
+                        norm_seq=np.array(norm_seq),
+                        diff_seq=np.array(diff_seq),
+                        tol=tol,
+                        xtol=xtol)
+    else:
+        return x
+
+def newton_solver_pool(x0, parallel_fun, pool, tol=1e-6, xtol=1e-6, max_iter=100,
+                  full_return=False, verbose=False):
+    """Find roots of eq. f(x) = 0, using the newton method.
+
+    Parameters
+    ----------
+    x0: float or np.ndarray
+        starting points of the method
+    fun: function
+        function of which to find roots.
+    fun_jac: function
+        Jacobian of the function.
+    tol: float
+        tolerance for the exit condition on the norm
+    xtol: float
+        tolerance for the exit condition on difference between two iterations
+    max_iter: int or float
+        maximum number of iteration
+    full_return: boolean
+        if true return all info on convergence
+    verbose: boolean
+        if true print debug info while iterating
+    Returns
+    -------
+    Solution
+        Returns a Solution object.
+    """
+    n_iter = 0
+    x = x0
+    f, f_p = parallel_fun(x, pool)
+    norm = np.abs(f)
+    diff = np.array([1])
+
+    if verbose > 1:
+        print("x0 = {}".format(x))
+        print("|f(x0)| = {}".format(norm))
+
+    if full_return:
+        f_seq = [f]
+        x_seq = [x]
+        norm_seq = [norm]
+        diff_seq = diff
+
+    while (norm > tol and n_iter < max_iter and diff > xtol):
+        # Save previous iteration
+        x_old = x
+
+        # Compute update
+        if f_p > tol:
+            dx = - f/f_p
+        else:
+            dx = - f/tol  # Note that H is always positive
+
+        # Update values
+        x = x + dx
+        f, f_p = parallel_fun(x, pool)
         # stopping condition computation
         norm = np.abs(f)
         if x_old != 0:
