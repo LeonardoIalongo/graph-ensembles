@@ -8,6 +8,11 @@ from . import lib
 import numpy as np
 import scipy.sparse as sp
 import warnings
+from src.graph_ensembles import methods as mt
+from numba import jit
+import time
+import multiprocessing as mp
+
 
 
 class GraphEnsemble():
@@ -2259,16 +2264,64 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
             if np.any(x0 < 0):
                 raise ValueError('x0 must be positive.')
 
-        sol = mt.newton_solver(
-            x0=x0,
-            fun=lambda x: mt.fit_f_jac_selfloops(
-                self.prob_fun, self.jac_fun, x,
-                self.out_strength, self.in_strength, self.num_edges),
-            tol=tol,
-            xtol=xtol,
-            max_iter=max_iter,
-            verbose=verbose,
-            full_return=True)
+        # sol = mt.newton_solver(
+        #     x0=x0,
+        #     fun=lambda x: mt.fit_f_jac_selfloops(
+        #         self.prob_fun, self.jac_fun, x,
+        #         self.out_strength, self.in_strength, self.num_edges),
+        #     tol=tol,
+        #     xtol=xtol,
+        #     max_iter=max_iter,
+        #     verbose=verbose,
+        #     full_return=True)
+        n_nodes = self.num_vertices
+        block_size = 10000
+        density = 0.001
+        target = density * n_nodes**2
+
+        n_blocks = np.floor(n_nodes/block_size)
+        n_blocks = n_blocks.astype(int)
+        p_function = mt.p_invariant
+        jac_function = mt.jac_invariant
+
+        def jac_fit(delta, pool, n_blocks):
+            jobs = []
+
+            for i in range(n_blocks):
+                #Define blocks of block_size
+                begin_xout = i*block_size
+                end_xout = (i+1)*block_size
+                jobs.append(
+                    pool.apply_async(mt.fit_f_jac_selfloops, 
+                                    (p_function, jac_function, delta, self.out_strength[begin_xout:end_xout], self.in_strength))
+                )
+
+            #Add the last block with the remaining calculations to the pool
+            last_xout = n_blocks*block_size
+            jobs.append(
+                pool.apply_async(mt.fit_f_jac_selfloops, 
+                                (p_function, jac_function, delta, self.out_strength[last_xout:], self.in_strength))
+            )
+            
+            # Collect results from the workers through the pool result queue
+            tot_fval = -target
+            tot_fgrad = 0
+            for job in jobs:
+                tmp = job.get()
+                tot_fval += tmp[0]
+                tot_fgrad += tmp[1]
+            
+            return tot_fval, tot_fgrad
+        
+        if __name__ =='__main__':
+            start=time.time()
+            #Generate pool
+            pool = mp.Pool(mp.cpu_count())
+            print(pool)
+            sol = mt.newton_solver_pool(0, lambda x, y: jac_fit(x,y, n_blocks), pool, full_return=True, verbose=True)
+
+            pool.close()
+            pool.join()
 
         # Update results and check convergence
         self.param = sol.x

@@ -312,7 +312,7 @@ def fit_f_jac(p_f, jac_f, param, fit_out, fit_in, n_edges):
     return f - n_edges, jac
 
 @jit(nopython=True)
-def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in, n_edges):
+def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in):
     """ Compute the objective function of the newton solver and its
     derivative for a single label of the stripe model.
     """
@@ -325,7 +325,7 @@ def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in, n_edges):
             f += p_f(param, s_out, s_in)
             jac += jac_f(param, s_out, s_in)
 
-    return f - n_edges, jac
+    return f, jac
 
 
 @jit(nopython=True)
