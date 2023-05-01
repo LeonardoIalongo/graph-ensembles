@@ -2313,15 +2313,13 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
             
             return tot_fval, tot_fgrad
         
-        if __name__ =='__main__':
-            start=time.time()
-            #Generate pool
-            pool = mp.Pool(mp.cpu_count())
-            print(pool)
-            sol = mt.newton_solver_pool(0, lambda x, y: jac_fit(x,y, n_blocks), pool, full_return=True, verbose=True)
-
-            pool.close()
-            pool.join()
+        start=time.time()
+        #Generate pool
+        pool = mp.Pool(mp.cpu_count())
+        sol = mt.newton_solver_pool(0, lambda x, y: jac_fit(x,y, n_blocks), pool, full_return=True, verbose=True)
+        print(sol is None)
+        pool.close()
+        pool.join()
 
         # Update results and check convergence
         self.param = sol.x

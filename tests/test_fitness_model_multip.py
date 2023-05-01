@@ -28,7 +28,7 @@ g = ge.Graph(v, e, v_id=['name', 'country'],
 
 model = ge.ScaleInvariantModel_selfloops(g)
 
-fitted_model = model.fit
+fitted_model = model.fit()
 
 param = fitted_model.param
 print(param)
