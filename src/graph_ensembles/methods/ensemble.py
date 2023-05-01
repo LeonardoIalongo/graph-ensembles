@@ -327,6 +327,14 @@ def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in):
 
     return f, jac
 
+@jit(nopython=True)
+def NLL(param, out_in_pairs, remainder):
+    """Negative log likelihood of the scale invariant probability function"""
+    func = -np.sum(np.log(1-np.e**(param*out_in_pairs[i][0]*out_in_pairs[i][1])) for i in range(len(out_in_pairs))) 
+    + param*(remainder - np.sum(out_in_pairs[i][0]*out_in_pairs[i][1] for i in range(len(out_in_pairs))))
+
+    return func
+    
 
 @jit(nopython=True)
 def fit_iterative(param, out_strength, in_strength, n_edges):

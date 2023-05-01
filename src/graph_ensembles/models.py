@@ -12,6 +12,8 @@ from src.graph_ensembles import methods as mt
 from numba import jit
 import time
 import multiprocessing as mp
+import scipy.optimize as opt
+from itertools import product
 
 
 
@@ -2263,7 +2265,8 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
 
             if np.any(x0 < 0):
                 raise ValueError('x0 must be positive.')
-
+            
+        #Classic newton solver
         # sol = mt.newton_solver(
         #     x0=x0,
         #     fun=lambda x: mt.fit_f_jac_selfloops(
@@ -2274,54 +2277,62 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
         #     max_iter=max_iter,
         #     verbose=verbose,
         #     full_return=True)
-        n_nodes = self.num_vertices
-        block_size = 10000
-        density = 0.001
-        target = density * n_nodes**2
 
-        n_blocks = np.floor(n_nodes/block_size)
-        n_blocks = n_blocks.astype(int)
-        p_function = mt.p_invariant
-        jac_function = mt.jac_invariant
+        #Multiprocessing method
+        # n_nodes = self.num_vertices
+        # block_size = 10000
+        # density = 0.001
+        # target = density * n_nodes**2
 
-        def jac_fit(delta, pool, n_blocks):
-            jobs = []
+        # n_blocks = np.floor(n_nodes/block_size)
+        # n_blocks = n_blocks.astype(int)
+        # p_function = mt.p_invariant
+        # jac_function = mt.jac_invariant
 
-            for i in range(n_blocks):
-                #Define blocks of block_size
-                begin_xout = i*block_size
-                end_xout = (i+1)*block_size
-                jobs.append(
-                    pool.apply_async(mt.fit_f_jac_selfloops, 
-                                    (p_function, jac_function, delta, self.out_strength[begin_xout:end_xout], self.in_strength))
-                )
+        # def jac_fit(delta, pool, n_blocks):
+        #     jobs = []
 
-            #Add the last block with the remaining calculations to the pool
-            last_xout = n_blocks*block_size
-            jobs.append(
-                pool.apply_async(mt.fit_f_jac_selfloops, 
-                                (p_function, jac_function, delta, self.out_strength[last_xout:], self.in_strength))
-            )
+        #     for i in range(n_blocks):
+        #         #Define blocks of block_size
+        #         begin_xout = i*block_size
+        #         end_xout = (i+1)*block_size
+        #         jobs.append(
+        #             pool.apply_async(mt.fit_f_jac_selfloops, 
+        #                             (p_function, jac_function, delta, self.out_strength[begin_xout:end_xout], self.in_strength))
+        #         )
+
+        #     #Add the last block with the remaining calculations to the pool
+        #     last_xout = n_blocks*block_size
+        #     jobs.append(
+        #         pool.apply_async(mt.fit_f_jac_selfloops, 
+        #                         (p_function, jac_function, delta, self.out_strength[last_xout:], self.in_strength))
+        #     )
             
-            # Collect results from the workers through the pool result queue
-            tot_fval = -target
-            tot_fgrad = 0
-            for job in jobs:
-                tmp = job.get()
-                tot_fval += tmp[0]
-                tot_fgrad += tmp[1]
+        #     # Collect results from the workers through the pool result queue
+        #     tot_fval = -target
+        #     tot_fgrad = 0
+        #     for job in jobs:
+        #         tmp = job.get()
+        #         tot_fval += tmp[0]
+        #         tot_fgrad += tmp[1]
             
-            return tot_fval, tot_fgrad
+        #     return tot_fval, tot_fgrad
         
-        start=time.time()
-        #Generate pool
-        pool = mp.Pool(mp.cpu_count())
-        sol = mt.newton_solver_pool(0, lambda x, y: jac_fit(x,y, n_blocks), pool, full_return=True, verbose=True)
-        print(sol is None)
-        pool.close()
-        pool.join()
+        # start=time.time()
+        # #Generate pool
+        # pool = mp.Pool(mp.cpu_count())
+        # sol = mt.newton_solver_pool(0, lambda x, y: jac_fit(x,y, n_blocks), pool, full_return=True, verbose=True)
+        # print(sol is None)
+        # pool.close()
+        # pool.join()
 
         # Update results and check convergence
+
+        #Minimize log likelihood
+        #First calculate the constant remainder (to optimize the minimization)
+        in_out_combinations = list(product(self.out_strength, self.in_strength))
+        remainder = np.sum(in_out_combinations[i][0]*in_out_combinations[i][1] for i in range(len(in_out_combinations)))
+        sol = opt.minimize(fun = lambda x: mt.NLL(x, pairs, remainder), x0=0)
         self.param = sol.x
         self.solver_output = sol
 

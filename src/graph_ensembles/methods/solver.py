@@ -259,7 +259,6 @@ def newton_solver_pool(x0, parallel_fun, pool, tol=1e-6, xtol=1e-6, max_iter=100
     else:
         return x
 
-
 def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patience=20, atol=0.0, rtol=1e-9, nullhypo=0.1, fprime2=False, verbose=0):
     """ Newton Raphson zero point finding with absolute or statistical convergence
     
