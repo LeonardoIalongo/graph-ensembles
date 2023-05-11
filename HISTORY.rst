@@ -2,6 +2,10 @@
 History
 =======
 
+0.2.2 (2023-05-11)
+------------------
+* Created submodule spark for allowing some models to be parallelize computations using spark
+
 0.2.1 (2021-08-03)
 ------------------
 * Added option for faster computation of average nearest neighbour properties by allowing for multiple links between the same nodes.

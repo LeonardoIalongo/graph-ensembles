@@ -1,7 +1,6 @@
 import numpy as np
 from scipy.optimize import minimize
 import scipy
-import multiprocessing as mp
 
 
 class Solution():
@@ -55,6 +54,149 @@ class Solution():
                     self.converged = False
             else:
                 raise ValueError('xtol or diff_seq not set.')
+
+
+def monotonic_newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
+                            full_return=False, verbose=False):
+    """Find roots of eq. f(x) = 0, using the newton method.
+    This implementation assumes that the function is monotonic in x:
+    it identifies a bracket within which the root must be and uses a 
+    bisection method if the newton algorithm is trying results outside
+    the bracket.
+
+    Parameters
+    ----------
+    x0: float or np.ndarray
+        starting points of the method
+    fun: function
+        function of which to find roots.
+    fun_jac: function
+        Jacobian of the function.
+    tol: float
+        tolerance for the exit condition on the norm
+    xtol: float
+        tolerance for the exit condition on difference between two iterations
+    max_iter: int or float
+        maximum number of iteration
+    full_return: boolean
+        if true return all info on convergence
+    verbose: boolean
+        if true print debug info while iterating
+
+    Returns
+    -------
+    Solution
+        Returns a Solution object.
+    """
+    n_iter = 0
+    x = x0
+    f, f_p = fun(x)
+    norm = np.abs(f)
+    diff = np.array([1])
+
+    if full_return:
+        f_seq = [f]
+        x_seq = [x]
+        norm_seq = [norm]
+        diff_seq = diff
+
+    # Initialize bounds on x
+    if norm < tol:
+        if full_return:
+            return Solution(x, n_iter, max_iter, 'newton',
+                            f_seq=np.array(f_seq),
+                            x_seq=np.array(x_seq),
+                            norm_seq=np.array(norm_seq),
+                            diff_seq=np.array(diff_seq),
+                            tol=tol,
+                            xtol=xtol)
+        else:
+            return x
+    elif f > 0:
+        x_u = x
+        f_u = f
+        x_l = 0
+        f_l = -np.infty
+    else:
+        x_u = +np.infty
+        f_u = +np.infty
+        x_l = x
+        f_l = f
+
+    if verbose > 1:
+        print("x0 = {}".format(x))
+        print("|f(x0)| = {}".format(norm))
+
+    while (norm > tol and n_iter < max_iter and diff > xtol):
+        # Save previous iteration
+        x_old = x
+
+        # Compute update
+        if f_p > tol:
+            dx = - f/f_p
+        else:
+            dx = - f/tol  # Note that H is always positive
+
+        # Check that new x exists within the bound (x_u, x_l)
+        # otherwise use bisection method
+        if (x + dx >= x_u) or (x + dx <= x_l):
+            x = x_u - (f_u * (x_u - x_l))/(f_u - f_l)
+
+        # Update values
+        x = x + dx
+        f, f_p = fun(x)
+
+        if f > 0:
+            x_u = x
+            f_u = f
+        else:
+            x_l = x
+            f_l = f
+        
+        # Compute stopping condition
+        norm = np.abs(f)
+        if x_old != 0:
+            diff = np.abs((x - x_old)/x_old)
+        else:
+            diff = 1
+
+        if full_return:
+            f_seq.append(f)
+            x_seq.append(x)
+            norm_seq.append(norm)
+            diff_seq = np.append(diff_seq, diff)
+
+        # step update
+        n_iter += 1
+        if verbose > 1:
+            print("    Iteration {}".format(n_iter))
+            print("    fun = {}".format(f))
+            print("    fun_prime = {}".format(f_p))
+            print("    dx = {}".format(dx))
+            print("    x = {}".format(x))
+            print("    |f(x)| = {}".format(norm))
+            print("    diff = {}".format(diff))
+            print(' ')
+
+    if verbose > 1:
+        print(' ')
+
+    if verbose:
+        print('Converged: ', norm <= tol)
+        print('Final distance from root: ', norm)
+        print('Last relative change in x: ', diff)
+        print('Iterations: ', n_iter)
+
+    if full_return:
+        return Solution(x, n_iter, max_iter, 'newton',
+                        f_seq=np.array(f_seq),
+                        x_seq=np.array(x_seq),
+                        norm_seq=np.array(norm_seq),
+                        diff_seq=np.array(diff_seq),
+                        tol=tol,
+                        xtol=xtol)
+    else:
+        return x
 
 
 def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
@@ -158,8 +300,9 @@ def newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     else:
         return x
 
-def newton_solver_pool(x0, parallel_fun, pool, tol=1e-6, xtol=1e-6, max_iter=100,
-                  full_return=False, verbose=False):
+
+def newton_solver_pool(x0, parallel_fun, pool, tol=1e-6, xtol=1e-6, 
+                       max_iter=100, full_return=False, verbose=False):
     """Find roots of eq. f(x) = 0, using the newton method.
 
     Parameters
@@ -259,27 +402,35 @@ def newton_solver_pool(x0, parallel_fun, pool, tol=1e-6, xtol=1e-6, max_iter=100
     else:
         return x
 
-def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patience=20, atol=0.0, rtol=1e-9, nullhypo=0.1, fprime2=False, verbose=0):
-    """ Newton Raphson zero point finding with absolute or statistical convergence
+
+def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, 
+                     patience=20, atol=0.0, rtol=1e-9, nullhypo=0.1, 
+                     fprime2=False, verbose=0):
+    """ Newton Raphson zero point finding with absolute or statistical convergence.
     
-        Converges if function values are close to target value for a given number of consequtive iterations
-        Or if function values are statistically stable, with a zero slope in a linear fit over given number of iterations
+    Converges if function values are close to target value for a given number
+    of consequtive iterations or if function values are statistically stable, 
+    with a zero slope in a linear fit over given number of iterations
         
-        Args:
-            func: function that returns tuple with function value and gradient wrt x, and possibly second derivative wrt x0
-            target: target value for function. Determine x0 such that func(x) = target
-            x0: starting value for parameter
-            args: extra arguments for func
-            kwargs: extra keyword arguments for func
-            maxiter: maximum number of iterations to perform
-            patience: number of iterations to determine convergence over, either absolute of statistical
-            atol: absolute tolerance for absolute convergence
-            rtol: relative tolerance for absolute convergence
-            nullhypo: confidence level to establish zero slope of fit at
-                Probability that function values come from zero slope stochastic process is at least this
-                Bigger is better, but around 0.3 becomes a coin toss. 
-            fprime2: Use second derivative of function or not
-            verbose: verbosity level
+    Args:
+        func: function that returns tuple with function value and gradient 
+            wrt x, and possibly second derivative wrt x0
+        target: target value for function. Determine x0 such that func(x) = 
+            target
+        x0: starting value for parameter
+        args: extra arguments for func
+        kwargs: extra keyword arguments for func
+        maxiter: maximum number of iterations to perform
+        patience: number of iterations to determine convergence over, either 
+            absolute of statistical
+        atol: absolute tolerance for absolute convergence
+        rtol: relative tolerance for absolute convergence
+        nullhypo: confidence level to establish zero slope of fit at
+            Probability that function values come from zero slope stochastic 
+            process is at least this
+            Bigger is better, but around 0.3 becomes a coin toss. 
+        fprime2: Use second derivative of function or not
+        verbose: verbosity level
     """
     # Store function values
     funcvalues = []
@@ -287,7 +438,9 @@ def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patienc
     xvalues = []
     
     # Iterate without checking for convergence to fill the funcvalues array
-    if verbose >= 1: print(f"\nPerforming {patience} burn in iterations\n")
+    if verbose >= 1: 
+        print(f"\nPerforming {patience} burn in iterations\n")
+
     for itr in range(patience):
         if verbose >= 1:
             print(f"Iteration {itr+1}")
@@ -299,20 +452,25 @@ def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patienc
         funcvalues.append(f[0])
         newton_step = (f[0] - target) / f[1]
         if np.isinf(newton_step):
-            raise RuntimeError(f"Infinite step size at function call values {f}")
+            raise RuntimeError(
+                f"Infinite step size at function call values {f}")
         elif np.isnan(newton_step):
             raise RuntimeError(f"NaN step size at function call values {f}")
-        if verbose >= 1: print(f"\tStep={newton_step}")
-        if fprime2==True:
+        if verbose >= 1: 
+            print(f"\tStep={newton_step}")
+        if fprime2:
             adj = newton_step * f[2] / f[1] / 2
             if np.abs(adj) < 1:
                 newton_step /= 1.0 - adj
-                if verbose >= 1: print(f"\tAdjusted step={newton_step}")
+                if verbose >= 1: 
+                    print(f"\tAdjusted step={newton_step}")
         x = x0 - newton_step
         x0 = x
         
-    # Iterate with checking for convergence on the last 'patience' number of iterations
-    if verbose >= 1: print("\nAttempting convergence\n")
+    # Iterate with checking for convergence on the last 'patience' number of 
+    # iterations
+    if verbose >= 1: 
+        print("\nAttempting convergence\n")
     for itr in range(patience, maxiter):
         if verbose >= 1:
             print(f"Iteration {itr+1}")
@@ -323,9 +481,12 @@ def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patienc
             print(f"\tFuction output={f}")
         funcvalues.append(f[0])
 
-        # If the last 'patience' function values are close to target, then we have absolute convergence
-        # The x value returned is in this case the last used x value, but you can get your own from the xvalues array if you want
-        if np.all(np.isclose(funcvalues[-patience:], target, atol=atol, rtol=rtol)):
+        # If the last 'patience' function values are close to target, then we 
+        # have absolute convergence
+        # The x value returned is in this case the last used x value, but you 
+        # can get your own from the xvalues array if you want
+        if np.all(np.isclose(funcvalues[-patience:], target, 
+                  atol=atol, rtol=rtol)):
             return {"convergence": True,
                     "status": "absolute convergence", 
                     "patience": patience,
@@ -335,10 +496,15 @@ def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patienc
                     "iterations": itr+1,
                     "function values": funcvalues}
         
-        # If the slope of the last 'patience' function values is significantly close to zero, then we have statistical convergence
-        # The x value returned is in this case the mean over the last 'patience' iterations
-        fitresult = scipy.stats.linregress(np.arange(patience), funcvalues[-patience:], alternative="two-sided")
-        if verbose >= 2: print(f"\t\tFitresult={fitresult}")
+        # If the slope of the last 'patience' function values is 
+        # significantly close to zero, then we have statistical convergence
+        # The x value returned is in this case the mean over the last 
+        # 'patience' iterations
+        fitresult = scipy.stats.linregress(
+            np.arange(patience), funcvalues[-patience:], 
+            alternative="two-sided")
+        if verbose >= 2: 
+            print(f"\t\tFitresult={fitresult}")
         if fitresult.pvalue > nullhypo:
             return {"convergence": True,
                     "status": "statistical convergence", 
@@ -354,15 +520,18 @@ def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patienc
             
         newton_step = (f[0] - target) / f[1]
         if np.isinf(newton_step):
-            raise RuntimeError(f"Infinite step size at function call values {f}")
+            raise RuntimeError(
+                f"Infinite step size at function call values {f}")
         elif np.isnan(newton_step):
             raise RuntimeError(f"NaN step size at function call values {f}")
-        if verbose >= 1: print(f"\tStep={newton_step}")
-        if fprime2==True:
+        if verbose >= 1: 
+            print(f"\tStep={newton_step}")
+        if fprime2:
             adj = newton_step * f[2] / f[1] / 2
             if np.abs(adj) < 1:
                 newton_step /= 1.0 - adj
-                if verbose >= 1: print(f"\tAdjusted step={newton_step}")
+                if verbose >= 1: 
+                    print(f"\tAdjusted step={newton_step}")
         x = x0 - newton_step
         x0 = x
     return {"convergence": False,
@@ -372,6 +541,7 @@ def stochasticNewton(func, target, x0=0, args=(), kwargs={}, maxiter=50, patienc
             "target": target, 
             "iterations": maxiter,
             "function values": funcvalues}
+
 
 def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
                        verbose=False):
