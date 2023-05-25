@@ -11,7 +11,6 @@ import warnings
 from src.graph_ensembles import methods as mt
 from numba import jit
 import time
-import multiprocessing as mp
 import scipy.optimize as opt
 from itertools import product
 import torch
@@ -2230,7 +2229,7 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
                 self.out_strength,
                 self.in_strength)
 
-    def fit(self, x0=None, tol=1e-5, xtol=1e-12, max_iter=100, verbose=False):
+    def fit(self, connected_pairs, x0=None, tol=1e-5, xtol=1e-12, max_iter=100, verbose=False):
         """ Compute the optimal z to match the given number of edges.
 
         Parameters
@@ -2329,8 +2328,6 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
         # print(sol is None)
         # pool.close()
         # pool.join()
-
-        # Update results and check convergence
 
         #Minimize log likelihood
         #First calculate the constant remainder (to optimize the minimization)
