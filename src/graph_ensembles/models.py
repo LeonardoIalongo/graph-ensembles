@@ -14,6 +14,10 @@ import time
 import multiprocessing as mp
 import scipy.optimize as opt
 from itertools import product
+import torch
+import jax
+import jax.numpy as jnp
+import optax
 
 
 
@@ -2330,11 +2334,23 @@ class ScaleInvariantModel_selfloops(GraphEnsemble):
 
         #Minimize log likelihood
         #First calculate the constant remainder (to optimize the minimization)
-        in_out_combinations = list(product(self.out_strength, self.in_strength))
-        remainder = np.sum(in_out_combinations[i][0]*in_out_combinations[i][1] for i in range(len(in_out_combinations)))
-        sol = opt.minimize(fun = lambda x: mt.NLL(x, pairs, remainder), x0=0)
-        self.param = sol.x
-        self.solver_output = sol
+        sum_in = jnp.sum(self.in_strength)
+        sum_out = jnp.sum(self.out_strength)
+        remainder = sum_in*sum_out
+
+        #Use jax and optax for optimization
+        optimizer = optax.adam(learning_rate=0.001)
+        param = 0.1
+        opt_state = optimizer.init(param)
+
+        for i in range(2000):
+            value, grads = jax.value_and_grad(mt.NLL, argnums=0)(param, connected_pairs, remainder)
+            update, opt_state = optimizer.update(grads, opt_state)
+            param = optax.apply_updates(param, update)
+
+        # sol = opt.minimize(fun = lambda x: mt.NLL(x, connected_pairs, remainder), x0=0)
+        self.param = param
+        # self.solver_output = sol
 
         if not sol.converged:
             warnings.warn('Fit did not converge', UserWarning)

@@ -2,7 +2,8 @@ import numpy as np
 import numpy.random as rng
 from numba import jit
 from math import ceil, sqrt, isinf, exp, log
-from multiprocess import Process
+import jax 
+import jax.numpy as jnp
 
 
 # --------------- PROBABILITY FUNCTIONALS ---------------
@@ -327,12 +328,11 @@ def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in):
 
     return f, jac
 
-@jit(nopython=True)
-def NLL(param, out_in_pairs, remainder):
+@jax.jit
+def NLL(param, connected_pairs, remainder):
     """Negative log likelihood of the scale invariant probability function"""
-    func = -np.sum(np.log(1-exp(-param*out_in_pairs[i][0]*out_in_pairs[i][1])) for i in range(len(out_in_pairs))) 
-    + param*(remainder - np.sum(out_in_pairs[i][0]*out_in_pairs[i][1] for i in range(len(out_in_pairs))))
-
+    func = -jnp.sum(jnp.log(1-jnp.exp(-param*connected_pairs))) + param*(remainder - jnp.sum(connected_pairs))
+    
     return func
     
 
