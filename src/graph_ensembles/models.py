@@ -8,7 +8,6 @@ from . import lib
 import numpy as np
 import scipy.sparse as sp
 import warnings
-# from src.graph_ensembles import methods as mt
 from numba import jit
 import time
 import scipy.optimize as opt
