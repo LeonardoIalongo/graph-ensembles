@@ -299,8 +299,8 @@ class FitnessModel(GraphEnsemble):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
             sol = mt.monotonic_newton_solver(
-                x0, self.density_fit_fun, tol=atol, xtol=rtol, max_iter=100,
-                full_return=True, verbose=verbose)
+                x0, self.density_fit_fun, tol=atol, xtol=rtol, 
+                max_iter=maxiter, full_return=True, verbose=verbose)
 
         elif method == 'mle':
             raise ValueError("Method not implemented.")
@@ -1203,9 +1203,9 @@ class StripeFitnessModel(FitnessModel):
         self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
 
         # the third divides the pij in label layers
-        x = self.fit_out.to_csc()
-        y = self.fit_in.to_csc()
-        elements = [(i, x[i], y[i]) for i in range(self.num_labels)]
+        x = sp.csc_matrix(self.fit_out)
+        y = sp.csc_matrix(self.fit_in)
+        elements = [(i, x[:, i], y[:, i]) for i in range(self.num_labels)]
         self.layers_rdd = sc.parallelize(
             elements, numSlices=len(elements)).cache()
 
@@ -1271,11 +1271,26 @@ class StripeFitnessModel(FitnessModel):
             msg = 'Number of edge must be equal to the number of labels.'
             assert len(self.num_edges) == self.num_labels, msg
 
-            # SCRIVI FIT PER LAYER TENENDO CONTO DEI SELF-LOOPS E DELLA SPARSITA'
+            # Initialize each layer with solver function
+            sol_rdd = self.layers_rdd.map(
+                lambda x: self.layer_map(x, x0))
 
-            sol = mt.monotonic_newton_solver(
-                x0, self.density_fit_fun, tol=atol, xtol=rtol, max_iter=100,
-                full_return=True, verbose=verbose)
+            # Map to solver
+            sol_rdd = sol_rdd.map(lambda x: (x[0], mt.monotonic_newton_solver(
+                x[1], x[2], tol=atol, xtol=rtol, max_iter=maxiter,
+                full_return=True, verbose=verbose)))
+
+            # Collect solution to array
+            self.param = x0.copy()
+            self.solver_output = [None]*self.num_labels
+            tmp = sol_rdd.collect()
+            for i, sol in tmp:
+                # Update results and check convergence
+                self.param[i] = sol.x
+                self.solver_output[i] = sol
+                if not sol.converged:
+                    msg = 'Fit of layer {}, did not converge.'.format(i)
+                    warnings.warn(msg, UserWarning)
 
         elif method == 'mle':
             raise ValueError("Method not implemented.")
@@ -1283,28 +1298,41 @@ class StripeFitnessModel(FitnessModel):
         else:
             raise ValueError("The selected method is not valid.")
 
-        # Update results and check convergence
-        self.param = sol.x
-        self.solver_output = sol
-
-        if not self.solver_output.converged:
-            warnings.warn('Fit did not converge', UserWarning)
-
-    def density_fit_fun(self, delta):
+    def density_fit_fun_layer(self, delta, ind_out, ind_in, fit_out, fit_in):
         """ Return the objective function value and the Jacobian
             for a given value of delta.
         """
-        f_jac = self.exp_edges_f_jac
-        p_jac_ij = self.p_jac_ij
-        slflps = self.selfloops
-        tmp = self.p_iter_rdd.map(
-            lambda x: f_jac(
-                p_jac_ij, delta, x[0][0], x[0][1], x[1], x[2], slflps))
-        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        f, jac = self.exp_edges_f_jac_layer(
+            self.p_jac_ij, delta, ind_out, ind_in, fit_out, fit_in, 
+            self.selfloops)
         f -= self.num_edges
         return f, jac
 
+    def layer_map(self, x, x0):
+        layer_id = x[0]
 
+        def layer_fun(y): 
+            self.density_fit_fun_layer(
+                y, x[1].indices, x[2].indices, x[1].data, x[2].data)
+            return (layer_id, x0[layer_id], layer_fun)
+
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_f_jac_layer(p_jac_ij, param, ind_out, ind_in, fit_out, 
+                              fit_in, selfloops):
+        """ Compute the objective function of the layer density solver and its
+        derivative.
+        """
+        f = 0.0
+        jac = 0.0
+        for i, out_i in enumerate(ind_out):
+            for j, in_j in enumerate(ind_in):
+                if (out_i != in_j) | selfloops:
+                    p_tmp, jac_tmp = p_jac_ij(param, fit_out[i], fit_in[j])
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
 
     # def fit(self, x0=None, method='None', tol=1e-5, xtol=1e-12, max_iter=100,
     #         verbose=False):
