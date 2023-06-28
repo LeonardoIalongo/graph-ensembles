@@ -2,8 +2,8 @@
 network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
-from . import graphs
-from . import methods as mt
+from .. import graphs
+from .. import methods as mt
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
@@ -52,7 +52,7 @@ class GraphEnsemble():
     pass
 
 
-class FitnessModel():
+class FitnessModel(GraphEnsemble):
     """ The Fitness model takes the fitnesses of each node in order to
     construct a probability distribution over all possible graphs.
 

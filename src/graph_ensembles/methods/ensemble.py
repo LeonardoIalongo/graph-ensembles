@@ -2,8 +2,6 @@ import numpy as np
 import numpy.random as rng
 from numba import jit
 from math import ceil, sqrt, isinf, exp, log
-import jax 
-import jax.numpy as jnp
 
 
 # --------------- PROBABILITY FUNCTIONALS ---------------
@@ -162,6 +160,7 @@ def fit_exp_degree_vertex(p_f, param, i, fit_i, fit_j):
 
     return d
 
+
 @jit(nopython=True)
 def fit_exp_degree_vertex_selfloops(p_f, param, i, fit_i, fit_j):
     """ Compute the expected degree of the i-th vertex.
@@ -172,7 +171,6 @@ def fit_exp_degree_vertex_selfloops(p_f, param, i, fit_i, fit_j):
         d += p_f(param, fit_i, val)
 
     return d
-
 
 
 @jit(nopython=True)
@@ -218,6 +216,7 @@ def fit_exp_edges_jac(jac_f, param, fit_out, fit_in):
                 jac = jac_f(param, s_out, s_in)
 
     return jac
+
 
 @jit(nopython=True)
 def fit_exp_edges_jac_selfloops(jac_f, param, fit_out, fit_in):
@@ -312,6 +311,7 @@ def fit_f_jac(p_f, jac_f, param, fit_out, fit_in, n_edges):
 
     return f - n_edges, jac
 
+
 @jit(nopython=True)
 def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in):
     """ Compute the objective function of the newton solver and its
@@ -327,13 +327,6 @@ def fit_f_jac_selfloops(p_f, jac_f, param, fit_out, fit_in):
             jac += jac_f(param, s_out, s_in)
 
     return f, jac
-
-@jax.jit
-def NLL(param, connected_pairs, remainder):
-    """Negative log likelihood of the scale invariant probability function"""
-    func = -jnp.sum(jnp.log(1-jnp.exp(-param*connected_pairs))) + param*(remainder - jnp.sum(connected_pairs))
-    
-    return func
     
 
 @jit(nopython=True)
@@ -352,6 +345,7 @@ def fit_iterative(param, out_strength, in_strength, n_edges):
 
     return n_edges/aux
 
+
 @jit(nopython=True)
 def fit_iterative_selfloops(param, out_strength, in_strength, n_edges):
     """ Compute the next iteration of the fixed point method for a single
@@ -366,7 +360,6 @@ def fit_iterative_selfloops(param, out_strength, in_strength, n_edges):
             aux += tmp / (1 + param[0]*tmp)
 
     return n_edges/aux
-
 
 
 @jit(nopython=True)
@@ -478,8 +471,10 @@ def fit_likelihood(adj_i, adj_j, p_f, param, out_strength, in_strength, lgs):
     else:
         return log(like)
 
+
 @jit(nopython=True)
-def fit_likelihood_selfloops(adj_i, adj_j, p_f, param, out_strength, in_strength, lgs):
+def fit_likelihood_selfloops(adj_i, adj_j, p_f, param, out_strength, 
+                             in_strength, lgs):
     """ Compute the binary log likelihood of a graph given the fitted model.
     """
     if lgs:
@@ -533,6 +528,7 @@ def fit_sample(p_f, param, out_strength, in_strength):
 
     return sample
 
+
 @jit(nopython=True)
 def fit_sample_selfloops(p_f, param, out_strength, in_strength):
     """ Sample from the fitness model ensemble.
@@ -551,7 +547,6 @@ def fit_sample_selfloops(p_f, param, out_strength, in_strength):
                 sample.append((i, j, w))
 
     return sample
-
 
 
 # --------------- LAYER FITNESS METHODS ---------------
