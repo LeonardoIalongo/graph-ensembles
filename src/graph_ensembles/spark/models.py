@@ -1392,6 +1392,150 @@ class StripeFitnessModel(FitnessModel):
         if not self.solver_output.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        if self.per_label:
+            msg = 'Parameters array size must be the number of labels.'
+            assert len(self.param) == self.num_labels, msg
+        else:
+            msg = 'Only one parameters if not per_label.'
+            assert len(self.param) == 1, msg
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+
+        if self.multi_label:
+            if self.per_label:
+                p_ij = self.p_ij_multi_per_layer
+            else:
+                p_ij = self.p_ij_multi
+            e_fun = self.exp_edges_multi
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                    x[2].indptr, x[1].indices, x[2].indices, 
+                    x[1].data, x[2].data, slflp))
+            self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        else:
+            p_ij = self.p_ij
+            e_fun = self.exp_edges_layer
+            if self.per_label:
+                tmp = self.layers_rdd.map(
+                    lambda x: (x[0], e_fun(
+                        p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                        x[1].data, x[2].data, slflp)))
+            else:
+                tmp = self.layers_rdd.map(
+                    lambda x: (x[0], e_fun(
+                        p_ij, delta, x[1].indices, x[2].indices, 
+                        x[1].data, x[2].data, slflp)))
+                
+        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_num_edges_label(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        if self.per_label:
+            msg = 'Parameters array size must be the number of labels.'
+            assert len(self.param) == self.num_labels, msg
+
+            # Initialize each layer
+            e_fun = self.exp_edges_layer
+            p_ij = self.p_ij
+            delta = self.param
+            slflp = self.selfloops
+            tmp_rdd = self.layers_rdd.map(
+                lambda x: (x[0], e_fun(
+                    p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                    x[1].data, x[2].data, slflp)))
+
+        else:
+            msg = 'Only one parameters in the single_label case.'
+            assert len(self.param) == 1, msg
+
+            # Initialize each layer
+            e_fun = self.exp_edges_layer
+            p_ij = self.p_ij
+            delta = self.param
+            slflp = self.selfloops
+            tmp_rdd = self.layers_rdd.map(
+                lambda x: (x[0], e_fun(
+                    p_ij, delta, x[1].indices, x[2].indices, 
+                    x[1].data, x[2].data, slflp)))
+
+        # Collect and assign results for each layer
+        self.exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
+        tmp = tmp_rdd.collect()
+        for i, v in tmp:
+            # Update results and check convergence
+            self.exp_num_edges_label[i] = v
+
+        if get:
+            return self.exp_num_edges_label
+              
+    def expected_degrees(self, get=False):
+        """ Compute the expected undirected/out/in degree.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted beforehand.')
+        
+        # It is necessary to select the elements or pickling will fail
+        e_fun = self.exp_degrees
+        p_ij = self.p_ij
+        delta = self.param
+        slflp = self.selfloops
+        num_v = self.num_vertices
+        tmp = self.p_sym_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1], x[2], num_v, slflp))
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+        self.exp_degree = res[0] 
+        self.exp_out_degree = res[1]
+        self.exp_in_degree = res[2]
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+
+    def expected_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
     def density_fit_multi(self, delta):
         """ Return the objective function value and the Jacobian
             for a given value of delta when there are multiple labels per 
@@ -1413,7 +1557,7 @@ class StripeFitnessModel(FitnessModel):
             for a given value of delta when each node exists on a single 
             layer.
         """
-        # Initialize each layer with solver function
+        # Initialize each layer
         f_jac = self.exp_edges_f_jac_layer
         p_jac = self.p_jac_ij
         slflp = self.selfloops
@@ -1453,6 +1597,31 @@ class StripeFitnessModel(FitnessModel):
         while i < len(x_lbl) and j < len(y_lbl):
             if x_lbl[i] == y_lbl[j]:
                 tmp = d*x_dat[i] * y_dat[j]
+                if isinf(tmp):
+                    return 1.0
+                else:
+                    val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_ij_multi_per_layer(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection between node i and j in the
+        multi-label case.
+        """
+        i = 0
+        j = 0
+        val = 1
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp = d[x_lbl[i]]*x_dat[i] * y_dat[j]
                 if isinf(tmp):
                     return 1.0
                 else:
@@ -1541,126 +1710,107 @@ class StripeFitnessModel(FitnessModel):
 
         return f, jac
 
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_multi(
+            p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+            lbl_out, lbl_in, fit_out, fit_in, slflp):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        for i in range(ind_out[1]-ind_out[0]):
+            f_out_i = ind_out[0]+i
+            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
+            for j in range(ind_in[1]-ind_in[0]):
+                f_in_j = ind_in[0]+j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[i]:indptr_in[i+1]]
+                    f_in_v = fit_in[indptr_in[i]:indptr_in[i+1]]
+                    f += p_ij(param, f_out_l, f_out_v, f_in_l, f_in_v)
+
+        return f
+
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
+                        selfloops):
+        """ Compute the objective function of the layer density solver and its
+        derivative.
+        """
+        f = 0.0
+        for i, out_i in enumerate(ind_out):
+            for j, in_j in enumerate(ind_in):
+                if (out_i != in_j) | selfloops:
+                    f += p_ij(param, fit_out[i], fit_in[j])
+
+        return f
+
+    @staticmethod
+    @jit(nopython=True)
+    def exp_degrees(p_ij, param, ind_out, ind_in, fit_out, fit_in, num_v, 
+                    selfloops):
+        """ Compute the expected undirected, in and out degree sequences.
+        """
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+        if ind_out == ind_in:
+            for i in range(ind_out[1]-ind_out[0]):
+                ind_i = ind_out[0]+i
+                f_out_i = fit_out[0][i]
+                f_in_i = fit_in[1][i]
+                for j in range(i+1):
+                    ind_j = ind_in[0]+j
+                    f_out_j = fit_out[1][j]
+                    f_in_j = fit_in[0][j]
+                    if ind_i != ind_j:
+                        pij = p_ij(param[0], f_out_i, f_in_j)
+                        pji = p_ij(param[0], f_out_j, f_in_i)
+                        p = pij + pji - pij*pji
+                        exp_d[ind_i] += p
+                        exp_d[ind_j] += p
+                        exp_d_out[ind_i] += pij
+                        exp_d_out[ind_j] += pji
+                        exp_d_in[ind_j] += pij
+                        exp_d_in[ind_i] += pji
+                    elif selfloops:
+                        pii = p_ij(param[0], f_out_i, f_in_j)
+                        exp_d[ind_i] += pii
+                        exp_d_out[ind_i] += pii
+                        exp_d_in[ind_j] += pii
+
+        else:
+            for i in range(ind_out[1]-ind_out[0]):
+                ind_i = ind_out[0]+i
+                f_out_i = fit_out[0][i]
+                f_in_i = fit_in[1][i]
+                for j in range(ind_in[1]-ind_in[0]):
+                    ind_j = ind_in[0]+j
+                    f_out_j = fit_out[1][j]
+                    f_in_j = fit_in[0][j]
+                    if ind_i != ind_j:
+                        pij = p_ij(param[0], f_out_i, f_in_j)
+                        pji = p_ij(param[0], f_out_j, f_in_i)
+                        p = pij + pji - pij*pji
+                        exp_d[ind_i] += p
+                        exp_d[ind_j] += p
+                        exp_d_out[ind_i] += pij
+                        exp_d_out[ind_j] += pji
+                        exp_d_in[ind_j] += pij
+                        exp_d_in[ind_i] += pji
+                    elif selfloops:
+                        pii = p_ij(param[0], f_out_i, f_in_j)
+                        exp_d[ind_i] += pii
+                        exp_d_out[ind_i] += pii
+                        exp_d_in[ind_j] += pii
+
+        return exp_d, exp_d_out, exp_d_in
+
 ##########################################################################
-   
-    def expected_num_edges(self, get=False):
-        """ Compute the expected number of edges (per label).
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted before hand.')
-        
-        # Convert to sparse matrices
-        s_out = lib.to_sparse(self.out_strength,
-                              (self.num_vertices, self.num_labels),
-                              i_col='id', j_col='label',
-                              data_col='value', kind='csr')
-        s_in = lib.to_sparse(self.in_strength,
-                             (self.num_vertices, self.num_labels),
-                             i_col='id', j_col='label',
-                             data_col='value', kind='csr')
 
-        if not s_out.has_sorted_indices:
-            s_out.sort_indices()
-        if not s_in.has_sorted_indices:
-            s_in.sort_indices()
-
-        # Extract arrays from sparse matrices
-        s_out_i = s_out.indptr
-        s_out_j = s_out.indices
-        s_out_w = s_out.data
-        s_in_i = s_in.indptr
-        s_in_j = s_in.indices
-        s_in_w = s_in.data
-
-        # Compute expected value
-        self.exp_num_edges = mt.stripe_exp_edges(
-                self.prob_fun,
-                self.param,
-                s_out_i, s_out_j, s_out_w,
-                s_in_i, s_in_j, s_in_w,
-                self.per_label)
-
-        if get:
-            return self.exp_num_edges
-        
-    def expected_num_edges_label(self, get=False):
-        """ Compute the expected number of edges (per label).
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted before hand.')
-
-        self.exp_num_edges_label = mt.stripe_exp_edges_label(
-                    self.prob_fun,
-                    self.param,
-                    self.out_strength,
-                    self.in_strength,
-                    self.num_labels,
-                    self.per_label)
-
-        if get:
-            return self.exp_num_edges_label
-                
-    def expected_degrees(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted before hand.')
-
-        # Convert to sparse matrices
-        s_out = lib.to_sparse(self.out_strength,
-                              (self.num_vertices, self.num_labels),
-                              i_col='id', j_col='label', data_col='value',
-                              kind='csr')
-        s_in = lib.to_sparse(self.in_strength,
-                             (self.num_vertices, self.num_labels),
-                             i_col='id', j_col='label', data_col='value',
-                             kind='csr')
-
-        if not s_out.has_sorted_indices:
-            s_out.sort_indices()
-        if not s_in.has_sorted_indices:
-            s_in.sort_indices()
-
-        # Extract arrays from sparse matrices
-        s_out_i = s_out.indptr
-        s_out_j = s_out.indices
-        s_out_w = s_out.data
-        s_in_i = s_in.indptr
-        s_in_j = s_in.indices
-        s_in_w = s_in.data
-
-        # Get out_degree
-        self.exp_degree, self.exp_out_degree, self.exp_in_degree = \
-            mt.stripe_exp_degree(
-                self.prob_fun, self.param, s_out_i, s_out_j, s_out_w,
-                s_in_i, s_in_j, s_in_w, self.num_vertices, self.per_label)
-
-        if get:
-            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
-
-    def expected_degree(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_degree
-
-    def expected_out_degree(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_out_degree
-
-    def expected_in_degree(self, get=False):
-        """ Compute the expected in degree for a given z.
-        """
-        self.expected_degrees()
-        
-        if get:
-            return self.exp_in_degree
+  
 
     def expected_degrees_by_label(self, get=False):
         """ Compute the expected out degree by label for a given z.
