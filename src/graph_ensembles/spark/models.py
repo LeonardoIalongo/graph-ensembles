@@ -1348,9 +1348,54 @@ class StripeFitnessModel(FitnessModel):
         if not self.solver_output.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
+    def single_label_fit(self, x0=None, method='density', solver='Newton-CG', 
+                         atol=1e-18, rtol=1e-9, maxiter=100, verbose=False):
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The single_label fit requires one parameter only.')
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('x0 must be numeric.')
+
+        if np.any(x0 < 0):
+            raise ValueError('x0 must be positive.')
+
+        if method == 'density':
+            # Ensure that num_edges is set
+            if not hasattr(self, 'num_edges'):
+                raise ValueError(
+                    'Number of edges must be set for density solver.')
+            msg = 'Number of edge array must contain a single number.'
+            assert len(self.num_edges) == 1, msg
+
+            # Send to solver
+            sol = mt.monotonic_newton_solver(
+                x0, self.density_fit_single, tol=atol, xtol=rtol, 
+                max_iter=maxiter, full_return=True, verbose=verbose)
+
+        elif method == 'mle':
+            raise ValueError("Method not implemented.")
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not self.solver_output.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
     def density_fit_multi(self, delta):
         """ Return the objective function value and the Jacobian
-            for a given value of delta.
+            for a given value of delta when there are multiple labels per 
+            edge allowed.
         """
         f_jac = self.exp_edges_f_jac_multi
         p_jac_ij = self.p_jac_ij_multi
@@ -1363,11 +1408,27 @@ class StripeFitnessModel(FitnessModel):
         f -= self.num_edges
         return f, jac
 
+    def density_fit_single(self, delta):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta when each node exists on a single 
+            layer.
+        """
+        # Initialize each layer with solver function
+        f_jac = self.exp_edges_f_jac_layer
+        p_jac = self.p_jac_ij
+        slflp = self.selfloops
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], f_jac(p_jac, delta, x[1].indices, x[2].indices, 
+                                   x[1].data, x[2].data, slflp)))
+        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        f -= self.num_edges
+        return f, jac
+
     @staticmethod
     def density_fit_layer(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
                           fit_in, num_e, slflp):
         """ Return the objective function value and the Jacobian
-            for a given value of delta.
+            for a given value of delta for one layer.
         """
         f, jac = f_jac(p_jac, delta, ind_out, ind_in, fit_out, fit_in, slflp)
         f -= num_e
