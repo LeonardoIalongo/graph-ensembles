@@ -544,10 +544,10 @@ class FitnessModel(GraphEnsemble):
         """
         f_jac = self.exp_edges_f_jac
         p_jac_ij = self.p_jac_ij
-        slflps = self.selfloops
+        slflp = self.selfloops
         tmp = self.p_iter_rdd.map(
             lambda x: f_jac(
-                p_jac_ij, delta, x[0][0], x[0][1], x[1], x[2], slflps))
+                p_jac_ij, delta, x[0][0], x[0][1], x[1], x[2], slflp))
         f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
         f -= self.num_edges
         return f, jac
@@ -1071,13 +1071,13 @@ class StripeFitnessModel(FitnessModel):
         msg = ('Out fitness must be a two dimensional array with shape '
                '(num_vertices, num_labels).')
         assert (isinstance(self.fit_out, np.ndarray) or 
-                isinstance(self.fit_out, sp.sparray)), msg
+                isinstance(self.fit_out, sp.spmatrix)), msg
         assert self.fit_out.shape == (self.num_vertices, self.num_labels)
 
         msg = ('In fitness must be a two dimensional array with shape '
                '(num_vertices, num_labels).')
         assert (isinstance(self.fit_in, np.ndarray) or 
-                isinstance(self.fit_in, sp.sparray)), msg
+                isinstance(self.fit_in, sp.spmatrix)), msg
         assert self.fit_in.shape == (self.num_vertices, self.num_labels)
 
         # Convert to csr matrices
@@ -1272,8 +1272,14 @@ class StripeFitnessModel(FitnessModel):
             assert len(self.num_edges) == self.num_labels, msg
 
             # Initialize each layer with solver function
+            l_map = self.layer_map
+            d_fit = self.density_fit_fun_layer
+            f_jac = self.exp_edges_f_jac_layer
+            p_jac = self.p_jac_ij
+            num_e = self.num_edges
+            slflp = self.selfloops
             sol_rdd = self.layers_rdd.map(
-                lambda x: self.layer_map(x, x0))
+                lambda x: l_map(x, x0, d_fit, f_jac, p_jac, num_e, slflp))
 
             # Map to solver
             sol_rdd = sol_rdd.map(lambda x: (x[0], mt.monotonic_newton_solver(
@@ -1298,23 +1304,22 @@ class StripeFitnessModel(FitnessModel):
         else:
             raise ValueError("The selected method is not valid.")
 
-    def density_fit_fun_layer(self, delta, ind_out, ind_in, fit_out, fit_in):
+    @staticmethod
+    def density_fit_fun_layer(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
+                              fit_in, num_e, slflp):
         """ Return the objective function value and the Jacobian
             for a given value of delta.
         """
-        f, jac = self.exp_edges_f_jac_layer(
-            self.p_jac_ij, delta, ind_out, ind_in, fit_out, fit_in, 
-            self.selfloops)
-        f -= self.num_edges
+        f, jac = f_jac(p_jac, delta, ind_out, ind_in, fit_out, fit_in, slflp)
+        f -= num_e
         return f, jac
 
-    def layer_map(self, x, x0):
+    @staticmethod
+    def layer_map(x, x0, d_fit, f_jac, p_jac, num_e, slflp):
         layer_id = x[0]
-
-        def layer_fun(y): 
-            self.density_fit_fun_layer(
-                y, x[1].indices, x[2].indices, x[1].data, x[2].data)
-            return (layer_id, x0[layer_id], layer_fun)
+        return (layer_id, x0[layer_id], 
+                lambda y: d_fit(y, f_jac, p_jac, x[1].indices, x[2].indices, 
+                                x[1].data, x[2].data, num_e[layer_id], slflp))
 
     @staticmethod              
     @jit(nopython=True)
