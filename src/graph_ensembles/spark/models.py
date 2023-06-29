@@ -1273,7 +1273,7 @@ class StripeFitnessModel(FitnessModel):
 
             # Initialize each layer with solver function
             l_map = self.layer_map
-            d_fit = self.density_fit_fun_layer
+            d_fit = self.density_fit_layer
             f_jac = self.exp_edges_f_jac_layer
             p_jac = self.p_jac_ij
             num_e = self.num_edges
@@ -1304,9 +1304,68 @@ class StripeFitnessModel(FitnessModel):
         else:
             raise ValueError("The selected method is not valid.")
 
+    def multi_label_fit(self, x0=None, method='density', solver='Newton-CG', 
+                        atol=1e-18, rtol=1e-9, maxiter=100, verbose=False):
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The multi_label fit requires one parameter only.')
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('x0 must be numeric.')
+
+        if np.any(x0 < 0):
+            raise ValueError('x0 must be positive.')
+
+        if method == 'density':
+            # Ensure that num_edges is set
+            if not hasattr(self, 'num_edges'):
+                raise ValueError(
+                    'Number of edges must be set for density solver.')
+            msg = 'Number of edge array must contain a single number.'
+            assert len(self.num_edges) == 1, msg
+
+            # Send to solver
+            sol = mt.monotonic_newton_solver(
+                x0, self.density_fit_multi, tol=atol, xtol=rtol, 
+                max_iter=maxiter, full_return=True, verbose=verbose)
+
+        elif method == 'mle':
+            raise ValueError("Method not implemented.")
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not self.solver_output.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
+    def density_fit_multi(self, delta):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta.
+        """
+        f_jac = self.exp_edges_f_jac_multi
+        p_jac_ij = self.p_jac_ij_multi
+        slflp = self.selfloops
+        tmp = self.p_iter_rdd.map(
+            lambda x: f_jac(
+                p_jac_ij, delta, x[0][0], x[0][1], x[1].indptr, x[2].indptr, 
+                x[1].indices, x[2].indices, x[1].data, x[2].data, slflp))
+        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        f -= self.num_edges
+        return f, jac
+
     @staticmethod
-    def density_fit_fun_layer(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
-                              fit_in, num_e, slflp):
+    def density_fit_layer(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
+                          fit_in, num_e, slflp):
         """ Return the objective function value and the Jacobian
             for a given value of delta.
         """
@@ -1320,6 +1379,88 @@ class StripeFitnessModel(FitnessModel):
         return (layer_id, x0[layer_id], 
                 lambda y: d_fit(y, f_jac, p_jac, x[1].indices, x[2].indices, 
                                 x[1].data, x[2].data, num_e[layer_id], slflp))
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection between node i and j in the
+        multi-label case.
+        """
+        i = 0
+        j = 0
+        val = 1
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp = d*x_dat[i] * y_dat[j]
+                if isinf(tmp):
+                    return 1.0
+                else:
+                    val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_jac_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection and the jacobian 
+            contribution of node i and jin the
+        multi-label case.
+        """
+        i = 0
+        j = 0
+        val = 1
+        num = 0
+        dnm = 1
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp = x_dat[i] * y_dat[j]
+                tmp1 = d*tmp
+                if isinf(tmp1):
+                    return 1.0, 0.0
+                else:
+                    val /= 1 + tmp
+                    num += tmp / (1 + tmp1)
+                    dnm *= 1 + tmp1
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val, num/dnm
+
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_f_jac_multi(
+            p_jac_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+            lbl_out, lbl_in, fit_out, fit_in, slflp):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        jac = 0.0
+        for i in range(ind_out[1]-ind_out[0]):
+            f_out_i = ind_out[0]+i
+            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
+            for j in range(ind_in[1]-ind_in[0]):
+                f_in_j = ind_in[0]+j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[i]:indptr_in[i+1]]
+                    f_in_v = fit_in[indptr_in[i]:indptr_in[i+1]]
+                    p_tmp, jac_tmp = p_jac_ij(
+                        param, f_out_l, f_out_v, f_in_l, f_in_v)
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
 
     @staticmethod              
     @jit(nopython=True)
@@ -1339,163 +1480,8 @@ class StripeFitnessModel(FitnessModel):
 
         return f, jac
 
-    # def fit(self, x0=None, method='None', tol=1e-5, xtol=1e-12, max_iter=100,
-    #         verbose=False):
-    #     """ Compute the optimal z to match the given number of edges.
-
-    #     Parameters
-        # ----------
-        # x0: np.ndarray
-        #     optional initial conditions for parameters
-        # method: 'newton' or 'fixed-point'
-        #     selects which method to use for the solver
-        # tol : float
-        #     tolerance for the exit condition on the norm
-        # eps : float
-        #     tolerance for the exit condition on difference between two
-        #     iterations
-        # max_iter : int or float
-        #     maximum number of iteration
-        # verbose: boolean
-        #     if true print debug info while iterating
-
-        # """
-        if method is None:
-            method = 'newton'
-
-        if (method == 'fixed-point') and self.per_label:
-            raise Exception('Fixed point solver not supported for fit '
-                            'not per label.')
-
-        # Ensure initial conditions x0 are of correct format
-        if x0 is None:
-            if self.per_label:
-                x0 = np.zeros((1, self.num_labels), dtype=np.float64)
-            else:
-                x0 = np.zeros((1, 1), dtype=np.float64)
-            
-        if not isinstance(x0, np.ndarray):
-            try:
-                x0 = np.array([x for x in x0])
-            except Exception:
-                x0 = np.array([x0])
-
-        # Ensure that x0 has two dimensions (row 1: z, row 2: alpha,
-        # each column is a layer, if single z then single column)
-        if x0.ndim < 2:
-            x0 = np.array([x0])
-        elif x0.ndim > 2:
-            raise ValueError('StripeFitnessModel x0 must have '
-                             'two dimensions max.')
-        p_shape = x0.shape
-        msg = ('StripeFitnessModel requires an array of parameters '
-               'with number of elements equal to the number of labels '
-               'or to one.')
-        if p_shape[0] != 1:
-            raise ValueError(msg)
-        elif self.per_label:
-            assert p_shape[1] == self.num_labels, msg
-        else:
-            assert p_shape[1] == 1, msg
-
-        if not np.issubdtype(x0.dtype, np.number):
-            raise ValueError('Parameters must be numeric.')
-
-        if np.any(x0 < 0):
-            raise ValueError('Parameters must be positive.')
-
-        # Fit by layer
-        if self.per_label:
-            self.param = np.empty((1, self.num_labels), dtype=np.float64)
-            self.solver_output = [None]*self.num_labels
-
-            for i in range(self.num_labels):
-                s_out = self.out_strength[self.out_strength.label == i]
-                s_in = self.in_strength[self.in_strength.label == i]
-                num_e = self.num_edges[i]
-                
-                if method == "newton":
-                    sol = mt.newton_solver(
-                        x0=x0[:, i],
-                        fun=lambda x: mt.layer_f_jac(
-                            self.prob_fun, self.jac_fun, x,
-                            s_out, s_in, num_e),
-                        tol=tol,
-                        xtol=xtol,
-                        max_iter=max_iter,
-                        verbose=verbose,
-                        full_return=True)
-
-                elif method == "fixed-point":
-                    sol = mt.fixed_point_solver(
-                        x0=x0[:, i],
-                        fun=lambda x: mt.layer_iterative(
-                            x, s_out, s_in, num_e),
-                        xtol=xtol,
-                        max_iter=max_iter,
-                        verbose=verbose,
-                        full_return=True)
-
-                else:
-                    raise ValueError("The selected method is not valid.")
-
-                # Update results and check convergence
-                self.param[:, i] = sol.x
-                self.solver_output[i] = sol
-
-                if not sol.converged:
-                    msg = 'Fit of layer {} '.format(i) + 'did not converge'
-                    warnings.warn(msg, UserWarning)
-
-        # Fit with single parameter
-        else:
-            # Convert to sparse matrices
-            s_out = lib.to_sparse(self.out_strength,
-                                  (self.num_vertices, self.num_labels),
-                                  i_col='id', j_col='label',
-                                  data_col='value', kind='csr')
-            s_in = lib.to_sparse(self.in_strength,
-                                 (self.num_vertices, self.num_labels),
-                                 i_col='id', j_col='label',
-                                 data_col='value', kind='csr')
-
-            if not s_out.has_sorted_indices:
-                s_out.sort_indices()
-            if not s_in.has_sorted_indices:
-                s_in.sort_indices()
-
-            # Extract arrays from sparse matrices
-            s_out_i = s_out.indptr
-            s_out_j = s_out.indices
-            s_out_w = s_out.data
-            s_in_i = s_in.indptr
-            s_in_j = s_in.indices
-            s_in_w = s_in.data
-                
-            if method == "newton":
-                sol = mt.newton_solver(
-                    x0=x0[:, 0],
-                    fun=lambda x: mt.stripe_f_jac(
-                        self.prob_fun, self.jac_fun, x,
-                        s_out_i, s_out_j, s_out_w,
-                        s_in_i, s_in_j, s_in_w, self.num_edges),
-                    tol=tol,
-                    xtol=xtol,
-                    max_iter=max_iter,
-                    verbose=verbose,
-                    full_return=True)
-
-            else:
-                raise ValueError("The selected method is not valid.")
-
-            # Update results and check convergence
-            self.param = np.array([sol.x]).T
-            self.solver_output = sol
-
-            if not sol.converged:
-                msg = 'Fit did not converge.'
-                warnings.warn(msg, UserWarning)
-
+##########################################################################
+   
     def expected_num_edges(self, get=False):
         """ Compute the expected number of edges (per label).
         """
@@ -1935,3 +1921,30 @@ class StripeFitnessModel(FitnessModel):
                 g.e, g.num_labels)
 
         return g
+
+
+
+    # @staticmethod
+    # @jit(nopython=True)
+    # def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+    #     """ Compute the probability of connection between node i and j in the
+    #     multi-label case.
+    #     """
+    #     i = 0
+    #     j = 0
+    #     val = 0
+    #     while i < len(x_lbl) and j < len(y_lbl):
+    #         if x_lbl[i] == y_lbl[j]:
+    #             val += x_dat[i] * y_dat[j]
+    #             i += 1
+    #             j += 1
+    #         elif x_lbl[i] < y_lbl[j]:
+    #             i += 1
+    #         else:
+    #             j += 1
+
+    #     tmp = d*val
+    #     if isinf(tmp):
+    #         return 1.0
+    #     else:
+    #         return tmp / (1 + tmp)
