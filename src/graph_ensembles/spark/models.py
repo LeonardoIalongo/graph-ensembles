@@ -1308,6 +1308,54 @@ class _StripeFitnessModel(FitnessModel):
 
         else:
             raise ValueError("The selected method is not valid.")
+
+    def expected_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_degree
+
+    def expected_out_degree(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees()
+
+        if get:
+            return self.exp_out_degree
+
+    def expected_in_degree(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees()
+        
+        if get:
+            return self.exp_in_degree
+
+    def expected_degree_by_label(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees_by_label()
+
+        if get:
+            return self.exp_degree_label
+
+    def expected_out_degree_by_label(self, get=False):
+        """ Compute the expected out degree for a given z.
+        """
+        self.expected_degrees_by_label()
+
+        if get:
+            return self.exp_out_degree_label
+
+    def expected_in_degree_by_label(self, get=False):
+        """ Compute the expected in degree for a given z.
+        """
+        self.expected_degrees_by_label()
+        
+        if get:
+            return self.exp_in_degree_label
           
     @staticmethod
     def density_fit(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
@@ -1360,156 +1408,121 @@ class _StripeFitnessModel(FitnessModel):
 
         return f
 
-####################################################################
-
-
-    def expected_degrees(self, get=False):
-        """ Compute the expected undirected/out/in degree.
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+                  lbl_out, lbl_in, fit_out, fit_in, slflp):
+        """ Compute the objective function of the density solver and its
+        derivative.
         """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted beforehand.')
+        f = 0.0
+        for i in range(ind_out[1]-ind_out[0]):
+            f_out_i = ind_out[0]+i
+            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
+            for j in range(ind_in[1]-ind_in[0]):
+                f_in_j = ind_in[0]+j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
+                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
+                    f += p_ij(param, f_out_l, f_out_v, f_in_l, f_in_v)
 
-        if self.per_label:
-            msg = 'Parameters array size must be the number of labels.'
-            assert len(self.param) == self.num_labels, msg
-        else:
-            msg = 'Only one parameters if not per_label.'
-            assert len(self.param) == 1, msg
+        return f
 
-        # It is necessary to select the elements or pickling will fail
-        delta = self.param
-        slflp = self.selfloops
-        num_v = self.num_vertices
-
-        if self.multi_label:
-            if self.per_label:
-                p_ij = self.p_ij_multi_per_layer
-            else:
-                p_ij = self.p_ij_multi
-            e_fun = self.exp_degrees
-            tmp = self.p_iter_rdd.map(
-                lambda x: e_fun(
-                    p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
-                    x[2].indptr, x[1].indices, x[2].indices, 
-                    x[1].data, x[2].data, num_v, slflp))
-        else:
-            p_ij = self.p_ij
-            e_fun = self.exp_degrees_layer
-            if self.per_label:
-                tmp = self.layers_rdd.map(
-                    lambda x: (x[0], e_fun(
-                        p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                        x[1].data, x[2].data, num_v, slflp)))
-            else:
-                tmp = self.layers_rdd.map(
-                    lambda x: (x[0], e_fun(
-                        p_ij, delta, x[1].indices, x[2].indices, 
-                        x[1].data, x[2].data, num_v, slflp)))
-
-        # Initialize results
+    @staticmethod
+    @jit(nopython=True)
+    def exp_degrees(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+                    lbl_out, lbl_in, fit_out, fit_in, num_v, slflp):
+        """ Compute the expected undirected, in and out degree sequences.
+        """
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
         exp_d_in = np.zeros(num_v, dtype=np.float64)
-        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
-                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
-        self.exp_degree = res[0] 
-        self.exp_out_degree = res[1]
-        self.exp_in_degree = res[2]
 
-        if get:
-            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
-
-    def expected_degree(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_degree
-
-    def expected_out_degree(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_out_degree
-
-    def expected_in_degree(self, get=False):
-        """ Compute the expected in degree for a given z.
-        """
-        self.expected_degrees()
-        
-        if get:
-            return self.exp_in_degree
-
-    def expected_degrees_by_label(self, get=False):
-        """ Compute the expected out degree by label for a given z.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted before hand.')
-
-        # Initialize each layer
-        e_fun = self.exp_degrees_layer
-        p_ij = self.p_ij
-        delta = self.param
-        num_v = self.num_vertices
-        slflp = self.selfloops
-
-        if self.per_label:
-            msg = 'Parameters array size must be the number of labels.'
-            assert len(self.param) == self.num_labels, msg
-            tmp_rdd = self.layers_rdd.map(
-                lambda x: (x[0], e_fun(
-                    p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                    x[1].data, x[2].data, num_v, slflp)))
-
+        if ind_out == ind_in:
+            out_range = range(ind_out[1]-ind_out[0])
+            def in_range(x): range(x + 1)
         else:
-            msg = 'Only one parameters in the single_label case.'
-            assert len(self.param) == 1, msg
-            tmp_rdd = self.layers_rdd.map(
-                lambda x: (x[0], e_fun(
-                    p_ij, delta, x[1].indices, x[2].indices, 
-                    x[1].data, x[2].data, num_v, slflp)))
+            out_range = range(ind_out[1]-ind_out[0])
+            def in_range(x): range(ind_in[1]-ind_in[0])
 
-        # Initialize results
-        res = tmp_rdd.collect()
-        d = sp.dok_matrix((self.num_vertices, self.num_labels), 
-                          dtype=np.float64)
-        d_out = sp.dok_matrix((self.num_vertices, self.num_labels), 
-                              dtype=np.float64)
-        d_in = sp.dok_matrix((self.num_vertices, self.num_labels), 
-                             dtype=np.float64)
+        for i in out_range:
+            ind_i = ind_out[0]+i
+            l_out_i = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_i = fit_out[indptr_out[i]:indptr_out[i+1]]
+            l_in_i = lbl_in[indptr_in[i]:indptr_in[i+1]]
+            f_in_i = fit_in[indptr_in[i]:indptr_in[i+1]]
+            for j in in_range(i):
+                ind_j = ind_in[0]+j
+                l_out_j = lbl_out[indptr_out[j]:indptr_out[j+1]]
+                f_out_j = fit_out[indptr_out[j]:indptr_out[j+1]]
+                l_in_j = lbl_in[indptr_in[j]:indptr_in[j+1]]
+                f_in_j = fit_in[indptr_in[j]:indptr_in[j+1]]
+            
+                if ind_i != ind_j:
+                    pij = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
+                    pji = p_ij(param, l_out_j, f_out_j, l_in_i, f_in_i)
+                    p = pij + pji - pij*pji
+                    exp_d[ind_i] += p
+                    exp_d[ind_j] += p
+                    exp_d_out[ind_i] += pij
+                    exp_d_out[ind_j] += pji
+                    exp_d_in[ind_j] += pij
+                    exp_d_in[ind_i] += pji
+                elif slflp:
+                    pii = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
+                    exp_d[ind_i] += pii
+                    exp_d_out[ind_i] += pii
+                    exp_d_in[ind_j] += pii
 
-        for i, (d_lyr, d_out_lyr, d_in_lyr) in res:
-            d[:, i] = d_lyr
-            d_out[:, i] = d_out_lyr
-            d_in[:, i] = d_in_lyr
+        return exp_d, exp_d_out, exp_d_in
 
-        self.exp_degree_label = sp.csr_matrix(d)
-        self.exp_out_degree_label = sp.csr_matrix(d_out)
-        self.exp_in_degree_label = sp.csr_matrix(d_in)
-
-        if get:
-            return (self.exp_degree_label, 
-                    self.exp_out_degree_label, 
-                    self.exp_in_degree_label)
-
-    def expected_out_degree_by_label(self, get=False):
-        """ Compute the expected out degree for a given z.
+    @staticmethod
+    @jit(nopython=True)
+    def exp_degrees_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
+                          num_v, selfloops):
+        """ Compute the expected undirected, in and out degree sequences.
         """
-        self.expected_degrees_by_label()
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
 
-        if get:
-            return self.exp_out_degree_label
+        for i, ind_i in enumerate(ind_out):
+            f_out_i = fit_out[i]
+            for j, ind_j in enumerate(ind_in):
+                f_in_j = fit_in[j]
+                if ind_i != ind_j:
+                    pij = p_ij(param, fit_out[i], fit_in[j])
 
-    def expected_in_degree_by_label(self, get=False):
-        """ Compute the expected in degree for a given z.
-        """
-        self.expected_degrees_by_label()
-        
-        if get:
-            return self.exp_in_degree_label
+                    if (ind_i in ind_in) and (ind_j in ind_out):
+                        f_in_i = fit_in[np.where(ind_in == ind_i)]
+                        f_out_j = fit_out[np.where(ind_out == ind_j)]
+                        pji = p_ij(param[0], f_out_j, f_in_i)
+                        p = pij + pji - pij*pji
+                        exp_d_out[ind_j] += pji
+                        exp_d_in[ind_i] += pji
+                    else:
+                        p = pij
+
+                    exp_d[ind_i] += p
+                    exp_d[ind_j] += p
+                    exp_d[ind_i] += pij
+                    exp_d[ind_j] += pij
+                    exp_d_out[ind_i] += pij
+                    exp_d_in[ind_j] += pij
+
+                elif selfloops:
+                    pii = p_ij(param, f_out_i, f_in_j)
+                    exp_d[ind_i] += pii
+                    exp_d_out[ind_i] += pii
+                    exp_d_in[ind_j] += pii
+
+        return exp_d, exp_d_out, exp_d_in
+
+
+####################################################################
+
+
 
     def expected_av_nn_property(self, prop, ndir='out', per_layer=False,
                                 deg_recompute=False, selfloops=False):
@@ -1628,96 +1641,6 @@ class _StripeFitnessModel(FitnessModel):
 
 
 
-
-    @staticmethod
-    @jit(nopython=True)
-    def exp_degrees(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
-                    lbl_out, lbl_in, fit_out, fit_in, num_v, slflp):
-        """ Compute the expected undirected, in and out degree sequences.
-        """
-        exp_d = np.zeros(num_v, dtype=np.float64)
-        exp_d_out = np.zeros(num_v, dtype=np.float64)
-        exp_d_in = np.zeros(num_v, dtype=np.float64)
-
-        if ind_out == ind_in:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(x + 1)
-        else:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(ind_in[1]-ind_in[0])
-
-        for i in out_range:
-            ind_i = ind_out[0]+i
-            l_out_i = lbl_out[indptr_out[i]:indptr_out[i+1]]
-            f_out_i = fit_out[indptr_out[i]:indptr_out[i+1]]
-            l_in_i = lbl_in[indptr_in[i]:indptr_in[i+1]]
-            f_in_i = fit_in[indptr_in[i]:indptr_in[i+1]]
-            for j in in_range(i):
-                ind_j = ind_in[0]+j
-                l_out_j = lbl_out[indptr_out[j]:indptr_out[j+1]]
-                f_out_j = fit_out[indptr_out[j]:indptr_out[j+1]]
-                l_in_j = lbl_in[indptr_in[j]:indptr_in[j+1]]
-                f_in_j = fit_in[indptr_in[j]:indptr_in[j+1]]
-            
-                if ind_i != ind_j:
-                    pij = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
-                    pji = p_ij(param, l_out_j, f_out_j, l_in_i, f_in_i)
-                    p = pij + pji - pij*pji
-                    exp_d[ind_i] += p
-                    exp_d[ind_j] += p
-                    exp_d_out[ind_i] += pij
-                    exp_d_out[ind_j] += pji
-                    exp_d_in[ind_j] += pij
-                    exp_d_in[ind_i] += pji
-                elif slflp:
-                    pii = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
-                    exp_d[ind_i] += pii
-                    exp_d_out[ind_i] += pii
-                    exp_d_in[ind_j] += pii
-
-        return exp_d, exp_d_out, exp_d_in
-
-    @staticmethod
-    @jit(nopython=True)
-    def exp_degrees_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
-                          num_v, selfloops):
-        """ Compute the expected undirected, in and out degree sequences.
-        """
-        exp_d = np.zeros(num_v, dtype=np.float64)
-        exp_d_out = np.zeros(num_v, dtype=np.float64)
-        exp_d_in = np.zeros(num_v, dtype=np.float64)
-
-        for i, ind_i in enumerate(ind_out):
-            f_out_i = fit_out[i]
-            for j, ind_j in enumerate(ind_in):
-                f_in_j = fit_in[j]
-                if ind_i != ind_j:
-                    pij = p_ij(param, fit_out[i], fit_in[j])
-
-                    if (ind_i in ind_in) and (ind_j in ind_out):
-                        f_in_i = fit_in[np.where(ind_in == ind_i)]
-                        f_out_j = fit_out[np.where(ind_out == ind_j)]
-                        pji = p_ij(param[0], f_out_j, f_in_i)
-                        p = pij + pji - pij*pji
-                        exp_d_out[ind_j] += pji
-                        exp_d_in[ind_i] += pji
-                    else:
-                        p = pij
-
-                    exp_d[ind_i] += p
-                    exp_d[ind_j] += p
-                    exp_d[ind_i] += pij
-                    exp_d[ind_j] += pij
-                    exp_d_out[ind_i] += pij
-                    exp_d_in[ind_j] += pij
-
-                elif selfloops:
-                    pii = p_ij(param, f_out_i, f_in_j)
-                    exp_d[ind_i] += pii
-                    exp_d_out[ind_i] += pii
-                    exp_d_in[ind_j] += pii
-
-        return exp_d, exp_d_out, exp_d_in
 
 ##########################################################################
 
@@ -1897,7 +1820,6 @@ class _StripeFitnessModel(FitnessModel):
 
     #     return g
 
-
 ###########################################################################
 
 class StripeMultiByLabel(_StripeFitnessModel):
@@ -1967,6 +1889,77 @@ class StripeMultiByLabel(_StripeFitnessModel):
         if get:
             return self.exp_num_edges_label
 
+    def expected_degrees(self, get=False):
+        """ Compute the expected undirected/out/in degree.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+        num_v = self.num_vertices
+        p_ij = self.p_ij_multi
+        e_fun = self.exp_degrees
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                x[2].indptr, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp))
+
+        # Initialize results
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+        self.exp_degree = res[0] 
+        self.exp_out_degree = res[1]
+        self.exp_in_degree = res[2]
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+    
+    def expected_degrees_by_label(self, get=False):
+        """ Compute the expected out degree by label for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_degrees_layer
+        p_ij = self.p_ij
+        delta = self.param
+        num_v = self.num_vertices
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp)))
+
+        # Initialize results
+        res = tmp_rdd.collect()
+        d = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                          dtype=np.float64)
+        d_out = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                              dtype=np.float64)
+        d_in = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                             dtype=np.float64)
+
+        for i, (d_lyr, d_out_lyr, d_in_lyr) in res:
+            d[:, i] = d_lyr
+            d_out[:, i] = d_out_lyr
+            d_in[:, i] = d_in_lyr
+
+        self.exp_degree_label = sp.csr_matrix(d)
+        self.exp_out_degree_label = sp.csr_matrix(d_out)
+        self.exp_in_degree_label = sp.csr_matrix(d_in)
+
+        if get:
+            return (self.exp_degree_label, 
+                    self.exp_out_degree_label, 
+                    self.exp_in_degree_label)
+
     @staticmethod
     @jit(nopython=True)
     def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
@@ -1991,27 +1984,6 @@ class StripeMultiByLabel(_StripeFitnessModel):
                 j += 1
 
         return 1 - val
-
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
-                  lbl_out, lbl_in, fit_out, fit_in, slflp):
-        """ Compute the objective function of the density solver and its
-        derivative.
-        """
-        f = 0.0
-        for i in range(ind_out[1]-ind_out[0]):
-            f_out_i = ind_out[0]+i
-            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
-            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
-            for j in range(ind_in[1]-ind_in[0]):
-                f_in_j = ind_in[0]+j
-                if (f_out_i != f_in_j) | slflp:
-                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
-                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
-                    f += p_ij(param, f_out_l, f_out_v, f_in_l, f_in_v)
-
-        return f
 
 
 class StripeMulti(_StripeFitnessModel):
@@ -2104,7 +2076,7 @@ class StripeMulti(_StripeFitnessModel):
             raise Exception('Model must be fitted beforehand.')
 
         # It is necessary to select the elements or pickling will fail
-        delta = self.param
+        delta = self.param[0]
         slflp = self.selfloops
         p_ij = self.p_ij_multi
         e_fun = self.exp_edges
@@ -2143,6 +2115,77 @@ class StripeMulti(_StripeFitnessModel):
 
         if get:
             return self.exp_num_edges_label
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected undirected/out/in degree.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param[0]
+        slflp = self.selfloops
+        num_v = self.num_vertices
+        p_ij = self.p_ij_multi
+        e_fun = self.exp_degrees
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                x[2].indptr, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp))
+
+        # Initialize results
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+        self.exp_degree = res[0] 
+        self.exp_out_degree = res[1]
+        self.exp_in_degree = res[2]
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+    
+    def expected_degrees_by_label(self, get=False):
+        """ Compute the expected out degree by label for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_degrees_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        num_v = self.num_vertices
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp)))
+
+        # Initialize results
+        res = tmp_rdd.collect()
+        d = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                          dtype=np.float64)
+        d_out = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                              dtype=np.float64)
+        d_in = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                             dtype=np.float64)
+
+        for i, (d_lyr, d_out_lyr, d_in_lyr) in res:
+            d[:, i] = d_lyr
+            d_out[:, i] = d_out_lyr
+            d_in[:, i] = d_in_lyr
+
+        self.exp_degree_label = sp.csr_matrix(d)
+        self.exp_out_degree_label = sp.csr_matrix(d_out)
+        self.exp_in_degree_label = sp.csr_matrix(d_in)
+
+        if get:
+            return (self.exp_degree_label, 
+                    self.exp_out_degree_label, 
+                    self.exp_in_degree_label)
 
     def density_fit(self, delta):
         """ Return the objective function value and the Jacobian
@@ -2240,27 +2283,6 @@ class StripeMulti(_StripeFitnessModel):
 
         return f, jac
 
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
-                  lbl_out, lbl_in, fit_out, fit_in, slflp):
-        """ Compute the objective function of the density solver and its
-        derivative.
-        """
-        f = 0.0
-        for i in range(ind_out[1]-ind_out[0]):
-            f_out_i = ind_out[0]+i
-            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
-            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
-            for j in range(ind_in[1]-ind_in[0]):
-                f_in_j = ind_in[0]+j
-                if (f_out_i != f_in_j) | slflp:
-                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
-                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
-                    f += p_ij(param[0], f_out_l, f_out_v, f_in_l, f_in_v)
-
-        return f
-
 
 class StripeSingleByLabel(_StripeFitnessModel):
     def __init__(self, sc, *args, **kwargs):
@@ -2328,6 +2350,76 @@ class StripeSingleByLabel(_StripeFitnessModel):
 
         if get:
             return self.exp_num_edges_label
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected undirected/out/in degree.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+        num_v = self.num_vertices
+        p_ij = self.p_ij
+        e_fun = self.exp_degrees_layer
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp)))
+
+        # Initialize results
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+        self.exp_degree = res[0] 
+        self.exp_out_degree = res[1]
+        self.exp_in_degree = res[2]
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+    
+    def expected_degrees_by_label(self, get=False):
+        """ Compute the expected out degree by label for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_degrees_layer
+        p_ij = self.p_ij
+        delta = self.param
+        num_v = self.num_vertices
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp)))
+
+        # Initialize results
+        res = tmp_rdd.collect()
+        d = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                          dtype=np.float64)
+        d_out = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                              dtype=np.float64)
+        d_in = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                             dtype=np.float64)
+
+        for i, (d_lyr, d_out_lyr, d_in_lyr) in res:
+            d[:, i] = d_lyr
+            d_out[:, i] = d_out_lyr
+            d_in[:, i] = d_in_lyr
+
+        self.exp_degree_label = sp.csr_matrix(d)
+        self.exp_out_degree_label = sp.csr_matrix(d_out)
+        self.exp_in_degree_label = sp.csr_matrix(d_in)
+
+        if get:
+            return (self.exp_degree_label, 
+                    self.exp_out_degree_label, 
+                    self.exp_in_degree_label)
 
 
 class StripeSingle(_StripeFitnessModel):
@@ -2438,6 +2530,76 @@ class StripeSingle(_StripeFitnessModel):
 
         if get:
             return self.exp_num_edges_label
+
+    def expected_degrees(self, get=False):
+        """ Compute the expected undirected/out/in degree.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param[0]
+        slflp = self.selfloops
+        num_v = self.num_vertices
+        p_ij = self.p_ij
+        e_fun = self.exp_degrees_layer
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp)))
+
+        # Initialize results
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+        self.exp_degree = res[0] 
+        self.exp_out_degree = res[1]
+        self.exp_in_degree = res[2]
+
+        if get:
+            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+    
+    def expected_degrees_by_label(self, get=False):
+        """ Compute the expected out degree by label for a given z.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_degrees_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        num_v = self.num_vertices
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, num_v, slflp)))
+
+        # Initialize results
+        res = tmp_rdd.collect()
+        d = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                          dtype=np.float64)
+        d_out = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                              dtype=np.float64)
+        d_in = sp.dok_matrix((self.num_vertices, self.num_labels), 
+                             dtype=np.float64)
+
+        for i, (d_lyr, d_out_lyr, d_in_lyr) in res:
+            d[:, i] = d_lyr
+            d_out[:, i] = d_out_lyr
+            d_in[:, i] = d_in_lyr
+
+        self.exp_degree_label = sp.csr_matrix(d)
+        self.exp_out_degree_label = sp.csr_matrix(d_out)
+        self.exp_in_degree_label = sp.csr_matrix(d_in)
+
+        if get:
+            return (self.exp_degree_label, 
+                    self.exp_out_degree_label, 
+                    self.exp_in_degree_label)
 
     def density_fit(self, delta):
         """ Return the objective function value and the Jacobian
