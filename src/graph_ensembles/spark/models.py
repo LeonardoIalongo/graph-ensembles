@@ -907,7 +907,68 @@ class ScaleInvariantModel(FitnessModel):
         return like
 
 
-class StripeFitnessModel(FitnessModel):
+class StripeFitnessModel():
+    """ A generalized fitness model that allows for strengths by label.
+
+    This model allows to take into account labels of the edges and include
+    this information as part of the model. The strength sequence is therefore
+    now subdivided in strength per label. Two quantities can be preserved by
+    the ensemble: either the total number of edges, or the number of edges per
+    label.
+
+    Attributes
+    ----------
+    sc: Spark Context
+        the Spark Context
+    fit_out: np.ndarray
+        the out fitness sequence
+    fit_in: np.ndarray
+        the in fitness sequence
+    num_edges: int (or np.ndarray)
+        the total number of edges (per label)
+    num_vertices: int
+        the total number of nodes
+    num_labels: int
+        the total number of labels by which the vector strengths are computed
+    param: float
+        the free parameters of the model
+    p_blocks: int
+        the number of blocks in which the fitnesses will be
+        divided for parallel computation, note that the number
+        of elements of the rdd will be p_blocks**2
+    selfloops: bool
+        selects if self loops (connections from i to i) are allowed
+    per_label: bool
+        selects if the model will have one parameter per layer or not
+    multi_label: bool
+        selects if the model allows for an edge to exist in multiple layers
+    """
+    def __new__(cls, sc, *args, per_label=True, **kwargs):
+
+        # Check if first argument is a graph
+        if ((len(args) > 0) & isinstance(args[0], graphs.WeightedLabelGraph) &
+                ('multi_label' not in kwargs)):
+            # If multi_label is not given check in graph
+            multi_label = mt.check_multi_label_edges(args[0].e)
+        else:
+            multi_label = True
+
+        # If multi_label is specified then use that 
+
+        if per_label:
+            if multi_label:
+                return StripeMultiByLabel(sc, *args, **kwargs)
+            else:
+                return StripeMulti(sc, *args, **kwargs)
+
+        else:
+            if multi_label:
+                return StripeSingleByLabel(sc, *args, **kwargs)
+            else:
+                return StripeSingle(sc, *args, **kwargs)
+
+
+class _StripeFitnessModel(FitnessModel):
     """ A generalized fitness model that allows for strengths by label.
 
     This model allows to take into account labels of the edges and include
@@ -940,7 +1001,7 @@ class StripeFitnessModel(FitnessModel):
         selects if self loops (connections from i to i) are allowed
     """
 
-    def __init__(self, sc, *args, per_label=True, multi_label=True, **kwargs):
+    def __init__(self, sc, *args, **kwargs):
         """ Return a StripeFitnessModel for the given graph data.
 
         The model accepts as arguments either: a WeightedLabelGraph, the
@@ -961,7 +1022,6 @@ class StripeFitnessModel(FitnessModel):
         same as the one in the fitness sequence.
 
         """
-
         # If an argument is passed then it must be a graph
         if len(args) > 0:
             if isinstance(args[0], graphs.WeightedLabelGraph):
@@ -970,7 +1030,7 @@ class StripeFitnessModel(FitnessModel):
                 self.num_labels = g.num_labels
                 self.id_dtype = g.id_dtype
                 self.label_dtype = g.label_dtype
-                if per_label:
+                if self.per_label:
                     self.num_edges = g.num_edges_label
                 else:
                     self.num_edges = g.num_edges
@@ -1080,14 +1140,6 @@ class StripeFitnessModel(FitnessModel):
             if not isinstance(self.num_edges, np.ndarray):
                 self.num_edges = np.array([self.num_edges])
 
-            msg = ('Number of edges must be a number or a numpy array of '
-                   'length equal to the number of labels.')
-            if len(self.num_edges) > 1:
-                self.per_label = True
-                assert len(self.num_edges) == self.num_labels, msg
-            else:
-                self.per_label = False
-
             if not np.issubdtype(self.num_edges.dtype, np.number):
                 raise ValueError(msg)
 
@@ -1106,13 +1158,6 @@ class StripeFitnessModel(FitnessModel):
                     self.param = np.array([p for p in self.param])
                 except Exception:
                     self.param = np.array([self.param])
-
-            msg = ('Number of parameters must be a number or a numpy array of'
-                   ' length equal to the number of labels.')
-            if self.per_label:
-                assert len(self.param) == self.num_labels, msg
-            else:
-                assert len(self.param) == 1, msg
 
             if not np.issubdtype(self.param.dtype, np.number):
                 raise ValueError(msg)
@@ -1214,21 +1259,6 @@ class StripeFitnessModel(FitnessModel):
         verbose: boolean
             if true print debug info while iterating
         """
-        # If the problem is per label solve each layer independently
-        if self.per_label:
-            self.per_label_fit(x0=x0, method=method, solver=solver, atol=atol,
-                               rtol=rtol, maxiter=maxiter, verbose=verbose)
-        elif not self.multi_label:
-            self.single_label_fit(x0=x0, method=method, solver=solver, 
-                                  atol=atol, rtol=rtol, maxiter=maxiter, 
-                                  verbose=verbose)
-        else:
-            self.multi_label_fit(x0=x0, method=method, solver=solver, 
-                                 atol=atol, rtol=rtol, maxiter=maxiter, 
-                                 verbose=verbose)
-
-    def per_label_fit(self, x0=None, method='density', solver='Newton-CG', 
-                      atol=1e-18, rtol=1e-9, maxiter=100, verbose=False):
         if x0 is None:
             x0 = np.zeros(self.num_labels, dtype=np.float64)
 
@@ -1246,17 +1276,10 @@ class StripeFitnessModel(FitnessModel):
             raise ValueError('x0 must be positive.')
 
         if method == 'density':
-            # Ensure that num_edges is set
-            if not hasattr(self, 'num_edges'):
-                raise ValueError(
-                    'Number of edges must be set for density solver.')
-            msg = 'Number of edge must be equal to the number of labels.'
-            assert len(self.num_edges) == self.num_labels, msg
-
             # Initialize each layer with solver function
             l_map = self.layer_map
-            d_fit = self.density_fit_layer
-            f_jac = self.exp_edges_f_jac_layer
+            d_fit = self.density_fit
+            f_jac = self.exp_edges_f_jac
             p_jac = self.p_jac_ij
             num_e = self.num_edges
             slflp = self.selfloops
@@ -1285,182 +1308,61 @@ class StripeFitnessModel(FitnessModel):
 
         else:
             raise ValueError("The selected method is not valid.")
-
-    def multi_label_fit(self, x0=None, method='density', solver='Newton-CG', 
-                        atol=1e-18, rtol=1e-9, maxiter=100, verbose=False):
-        if x0 is None:
-            x0 = np.array([0], dtype=np.float64)
-
-        if not isinstance(x0, np.ndarray):
-            x0 = np.array([x0])
-
-        if not (len(x0) == 1):
-            raise ValueError(
-                'The multi_label fit requires one parameter only.')
-
-        if not np.issubdtype(x0.dtype, np.number):
-            raise ValueError('x0 must be numeric.')
-
-        if np.any(x0 < 0):
-            raise ValueError('x0 must be positive.')
-
-        if method == 'density':
-            # Ensure that num_edges is set
-            if not hasattr(self, 'num_edges'):
-                raise ValueError(
-                    'Number of edges must be set for density solver.')
-            msg = 'Number of edge array must contain a single number.'
-            assert len(self.num_edges) == 1, msg
-
-            # Send to solver
-            sol = mt.monotonic_newton_solver(
-                x0, self.density_fit_multi, tol=atol, xtol=rtol, 
-                max_iter=maxiter, full_return=True, verbose=verbose)
-
-        elif method == 'mle':
-            raise ValueError("Method not implemented.")
-
-        else:
-            raise ValueError("The selected method is not valid.")
-
-        # Update results and check convergence
-        self.param = sol.x
-        self.solver_output = sol
-
-        if not self.solver_output.converged:
-            warnings.warn('Fit did not converge', UserWarning)
-
-    def single_label_fit(self, x0=None, method='density', solver='Newton-CG', 
-                         atol=1e-18, rtol=1e-9, maxiter=100, verbose=False):
-        if x0 is None:
-            x0 = np.array([0], dtype=np.float64)
-
-        if not isinstance(x0, np.ndarray):
-            x0 = np.array([x0])
-
-        if not (len(x0) == 1):
-            raise ValueError(
-                'The single_label fit requires one parameter only.')
-
-        if not np.issubdtype(x0.dtype, np.number):
-            raise ValueError('x0 must be numeric.')
-
-        if np.any(x0 < 0):
-            raise ValueError('x0 must be positive.')
-
-        if method == 'density':
-            # Ensure that num_edges is set
-            if not hasattr(self, 'num_edges'):
-                raise ValueError(
-                    'Number of edges must be set for density solver.')
-            msg = 'Number of edge array must contain a single number.'
-            assert len(self.num_edges) == 1, msg
-
-            # Send to solver
-            sol = mt.monotonic_newton_solver(
-                x0, self.density_fit_single, tol=atol, xtol=rtol, 
-                max_iter=maxiter, full_return=True, verbose=verbose)
-
-        elif method == 'mle':
-            raise ValueError("Method not implemented.")
-
-        else:
-            raise ValueError("The selected method is not valid.")
-
-        # Update results and check convergence
-        self.param = sol.x
-        self.solver_output = sol
-
-        if not self.solver_output.converged:
-            warnings.warn('Fit did not converge', UserWarning)
-
-    def expected_num_edges(self, get=False):
-        """ Compute the expected number of edges.
+          
+    @staticmethod
+    def density_fit(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
+                    fit_in, num_e, slflp):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta for one layer.
         """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted beforehand.')
+        f, jac = f_jac(p_jac, delta, ind_out, ind_in, 
+                       fit_out, fit_in, slflp)
+        f -= num_e
+        return f, jac    
 
-        if self.per_label:
-            msg = 'Parameters array size must be the number of labels.'
-            assert len(self.param) == self.num_labels, msg
-        else:
-            msg = 'Only one parameters if not per_label.'
-            assert len(self.param) == 1, msg
+    @staticmethod
+    def layer_map(x, x0, d_fit, f_jac, p_jac, num_e, slflp):
+        layer_id = x[0]
+        return (layer_id, x0[layer_id], 
+                lambda y: d_fit(y, f_jac, p_jac, x[1].indices, x[2].indices, 
+                                x[1].data, x[2].data, num_e[layer_id], slflp))
 
-        # It is necessary to select the elements or pickling will fail
-        delta = self.param
-        slflp = self.selfloops
-
-        if self.multi_label:
-            if self.per_label:
-                p_ij = self.p_ij_multi_per_layer
-            else:
-                p_ij = self.p_ij_multi
-            e_fun = self.exp_edges_multi
-            tmp = self.p_iter_rdd.map(
-                lambda x: e_fun(
-                    p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
-                    x[2].indptr, x[1].indices, x[2].indices, 
-                    x[1].data, x[2].data, slflp))
-            self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
-
-        else:
-            p_ij = self.p_ij
-            e_fun = self.exp_edges_layer
-            if self.per_label:
-                tmp = self.layers_rdd.map(
-                    lambda x: (x[0], e_fun(
-                        p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                        x[1].data, x[2].data, slflp)))
-            else:
-                tmp = self.layers_rdd.map(
-                    lambda x: (x[0], e_fun(
-                        p_ij, delta, x[1].indices, x[2].indices, 
-                        x[1].data, x[2].data, slflp)))
-                
-        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
-
-        if get:
-            return self.exp_num_edges
-
-    def expected_num_edges_label(self, get=False):
-        """ Compute the expected number of edges (per label).
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, fit_out, 
+                        fit_in, selfloops):
+        """ Compute the objective function of the layer density solver and its
+        derivative.
         """
-        if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted before hand.')
+        f = 0.0
+        jac = 0.0
+        for i, out_i in enumerate(ind_out):
+            for j, in_j in enumerate(ind_in):
+                if (out_i != in_j) | selfloops:
+                    p_tmp, jac_tmp = p_jac_ij(param[0], fit_out[i], fit_in[j])
+                    f += p_tmp
+                    jac += jac_tmp
 
-        # Initialize each layer
-        e_fun = self.exp_edges_layer
-        p_ij = self.p_ij
-        delta = self.param
-        slflp = self.selfloops
+        return f, jac
 
-        if self.per_label:
-            msg = 'Parameters array size must be the number of labels.'
-            assert len(self.param) == self.num_labels, msg
-            tmp_rdd = self.layers_rdd.map(
-                lambda x: (x[0], e_fun(
-                    p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                    x[1].data, x[2].data, slflp)))
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
+                        selfloops):
+        """ Compute the objective function of the layer density solver and its
+        derivative.
+        """
+        f = 0.0
+        for i, out_i in enumerate(ind_out):
+            for j, in_j in enumerate(ind_in):
+                if (out_i != in_j) | selfloops:
+                    f += p_ij(param[0], fit_out[i], fit_in[j])
 
-        else:
-            msg = 'Only one parameters in the single_label case.'
-            assert len(self.param) == 1, msg
-            tmp_rdd = self.layers_rdd.map(
-                lambda x: (x[0], e_fun(
-                    p_ij, delta, x[1].indices, x[2].indices, 
-                    x[1].data, x[2].data, slflp)))
+        return f
 
-        # Collect and assign results for each layer
-        self.exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
-        tmp = tmp_rdd.collect()
-        for i, v in tmp:
-            # Update results and check convergence
-            self.exp_num_edges_label[i] = v
+####################################################################
 
-        if get:
-            return self.exp_num_edges_label
-              
+
     def expected_degrees(self, get=False):
         """ Compute the expected undirected/out/in degree.
         """
@@ -1609,216 +1511,123 @@ class StripeFitnessModel(FitnessModel):
         if get:
             return self.exp_in_degree_label
 
-    def density_fit_multi(self, delta):
-        """ Return the objective function value and the Jacobian
-            for a given value of delta when there are multiple labels per 
-            edge allowed.
+    def expected_av_nn_property(self, prop, ndir='out', per_layer=False,
+                                deg_recompute=False, selfloops=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
         """
-        f_jac = self.exp_edges_f_jac_multi
-        p_jac_ij = self.p_jac_ij_multi
-        slflp = self.selfloops
-        tmp = self.p_iter_rdd.map(
-            lambda x: f_jac(
-                p_jac_ij, delta, x[0][0], x[0][1], x[1].indptr, x[2].indptr, 
-                x[1].indices, x[2].indices, x[1].data, x[2].data, slflp))
-        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
-        f -= self.num_edges
-        return f, jac
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
 
-    def density_fit_single(self, delta):
-        """ Return the objective function value and the Jacobian
-            for a given value of delta when each node exists on a single 
-            layer.
-        """
-        # Initialize each layer
-        f_jac = self.exp_edges_f_jac_layer
-        p_jac = self.p_jac_ij
-        slflp = self.selfloops
-        tmp = self.layers_rdd.map(
-            lambda x: (x[0], f_jac(p_jac, delta, x[1].indices, x[2].indices, 
-                                   x[1].data, x[2].data, slflp)))
-        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
-        f -= self.num_edges
-        return f, jac
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal'
+                   ' to the number of vertices.')
+            raise ValueError(msg)
 
-    @staticmethod
-    def density_fit_layer(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
-                          fit_in, num_e, slflp):
-        """ Return the objective function value and the Jacobian
-            for a given value of delta for one layer.
-        """
-        f, jac = f_jac(p_jac, delta, ind_out, ind_in, fit_out, fit_in, slflp)
-        f -= num_e
-        return f, jac
+        if per_layer:
+            # Compute correct expected degree
+            if deg_recompute or not hasattr(self, 'exp_out_degree_label'):
+                self.expected_degrees_by_label()
 
-    @staticmethod
-    def layer_map(x, x0, d_fit, f_jac, p_jac, num_e, slflp):
-        layer_id = x[0]
-        return (layer_id, x0[layer_id], 
-                lambda y: d_fit(y, f_jac, p_jac, x[1].indices, x[2].indices, 
-                                x[1].data, x[2].data, num_e[layer_id], slflp))
+            deg = np.zeros(self.num_vertices, dtype=np.float64)
 
-    @staticmethod
-    @jit(nopython=True)
-    def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
-        """ Compute the probability of connection between node i and j in the
-        multi-label case.
-        """
-        i = 0
-        j = 0
-        val = 1
-        while i < len(x_lbl) and j < len(y_lbl):
-            if x_lbl[i] == y_lbl[j]:
-                tmp = d*x_dat[i] * y_dat[j]
-                if isinf(tmp):
-                    return 1.0
-                else:
-                    val /= 1 + tmp
-                i += 1
-                j += 1
-            elif x_lbl[i] < y_lbl[j]:
-                i += 1
+            if ndir == 'out':
+                for row in self.exp_out_degree_label:
+                    deg[row.id] += row.value
+            elif ndir == 'in':
+                for row in self.exp_in_degree_label:
+                    deg[row.id] += row.value
+            elif ndir == 'out-in':
+                raise ValueError('Not implemented yet. Sorry :)')
             else:
-                j += 1
+                raise ValueError('Neighbourhood direction not recognised.')
 
-        return 1 - val
+            av_nn = mt.stripe_av_nn_prop_fast(
+                self.prob_fun, self.param, prop, ndir, self.out_strength,
+                self.in_strength, self.num_labels, self.per_label)
 
-    @staticmethod
-    @jit(nopython=True)
-    def p_ij_multi_per_layer(d, x_lbl, x_dat, y_lbl, y_dat):
-        """ Compute the probability of connection between node i and j in the
-        multi-label case.
-        """
-        i = 0
-        j = 0
-        val = 1
-        while i < len(x_lbl) and j < len(y_lbl):
-            if x_lbl[i] == y_lbl[j]:
-                tmp = d[x_lbl[i]]*x_dat[i] * y_dat[j]
-                if isinf(tmp):
-                    return 1.0
-                else:
-                    val /= 1 + tmp
-                i += 1
-                j += 1
-            elif x_lbl[i] < y_lbl[j]:
-                i += 1
+        else:
+            # Compute correct expected degree
+            if deg_recompute or not hasattr(self, 'exp_out_degree'):
+                self.expected_degrees()
+
+            if ndir == 'out':
+                deg = self.exp_out_degree
+            elif ndir == 'in':
+                deg = self.exp_in_degree
+            elif ndir == 'out-in':
+                deg = self.exp_degree
             else:
-                j += 1
+                raise ValueError('Neighbourhood direction not recognised.')
 
-        return 1 - val
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_av_nn_prop
+            p_ij = self.p_ij
+            delta = self.param
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
+                                x[1], x[2], prop, ndir, selfloops))
+            av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
+                             lambda x, y: x + y)
+            
+            # Test that mask is the same
+            ind = deg != 0
+            msg = 'Got a av_nn for an empty neighbourhood.'
+            assert np.all(av_nn[~ind] == 0), msg
+            
+            # Average results
+            av_nn[ind] = av_nn[ind] / deg[ind]
 
-    @staticmethod
-    @jit(nopython=True)
-    def p_jac_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
-        """ Compute the probability of connection and the jacobian 
-            contribution of node i and jin the
-        multi-label case.
-        """
-        i = 0
-        j = 0
-        val = 1
-        num = 0
-        dnm = 1
-        while i < len(x_lbl) and j < len(y_lbl):
-            if x_lbl[i] == y_lbl[j]:
-                tmp = x_dat[i] * y_dat[j]
-                tmp1 = d*tmp
-                if isinf(tmp1):
-                    return 1.0, 0.0
+            return av_nn
+            
+            if self.multi_label:
+                if self.per_label:
+                    p_ij = self.p_ij_multi_per_layer
                 else:
-                    val /= 1 + tmp
-                    num += tmp / (1 + tmp1)
-                    dnm *= 1 + tmp1
-                i += 1
-                j += 1
-            elif x_lbl[i] < y_lbl[j]:
-                i += 1
+                    p_ij = self.p_ij_multi
+                e_fun = self.exp_degrees
+                tmp = self.p_iter_rdd.map(
+                    lambda x: e_fun(
+                        p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                        x[2].indptr, x[1].indices, x[2].indices, 
+                        x[1].data, x[2].data, num_v, slflp))
             else:
-                j += 1
+                p_ij = self.p_ij
+                e_fun = self.exp_degrees_layer
+                if self.per_label:
+                    tmp = self.layers_rdd.map(
+                        lambda x: (x[0], e_fun(
+                            p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, num_v, slflp)))
+                else:
+                    tmp = self.layers_rdd.map(
+                        lambda x: (x[0], e_fun(
+                            p_ij, delta, x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, num_v, slflp)))
 
-        return 1 - val, num/dnm
 
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges_f_jac_multi(
-            p_jac_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
-            lbl_out, lbl_in, fit_out, fit_in, slflp):
-        """ Compute the objective function of the density solver and its
-        derivative.
-        """
-        f = 0.0
-        jac = 0.0
-        for i in range(ind_out[1]-ind_out[0]):
-            f_out_i = ind_out[0]+i
-            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
-            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
-            for j in range(ind_in[1]-ind_in[0]):
-                f_in_j = ind_in[0]+j
-                if (f_out_i != f_in_j) | slflp:
-                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
-                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
-                    p_tmp, jac_tmp = p_jac_ij(
-                        param, f_out_l, f_out_v, f_in_l, f_in_v)
-                    f += p_tmp
-                    jac += jac_tmp
 
-        return f, jac
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        if av_nn.ndim > 1:
+            new_shape = [1, ]*av_nn.ndim
+            new_shape[0] = np.sum(ind)
+            av_nn[ind] = av_nn[ind] / deg[ind].reshape(tuple(new_shape))
+        else:
+            av_nn[ind] = av_nn[ind] / deg[ind]
 
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges_f_jac_layer(p_jac_ij, param, ind_out, ind_in, fit_out, 
-                              fit_in, selfloops):
-        """ Compute the objective function of the layer density solver and its
-        derivative.
-        """
-        f = 0.0
-        jac = 0.0
-        for i, out_i in enumerate(ind_out):
-            for j, in_j in enumerate(ind_in):
-                if (out_i != in_j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param, fit_out[i], fit_in[j])
-                    f += p_tmp
-                    jac += jac_tmp
+        return av_nn
 
-        return f, jac
 
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges_multi(
-            p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
-            lbl_out, lbl_in, fit_out, fit_in, slflp):
-        """ Compute the objective function of the density solver and its
-        derivative.
-        """
-        f = 0.0
-        for i in range(ind_out[1]-ind_out[0]):
-            f_out_i = ind_out[0]+i
-            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
-            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
-            for j in range(ind_in[1]-ind_in[0]):
-                f_in_j = ind_in[0]+j
-                if (f_out_i != f_in_j) | slflp:
-                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
-                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
-                    f += p_ij(param, f_out_l, f_out_v, f_in_l, f_in_v)
 
-        return f
 
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
-                        selfloops):
-        """ Compute the objective function of the layer density solver and its
-        derivative.
-        """
-        f = 0.0
-        for i, out_i in enumerate(ind_out):
-            for j, in_j in enumerate(ind_in):
-                if (out_i != in_j) | selfloops:
-                    f += p_ij(param, fit_out[i], fit_in[j])
 
-        return f
 
     @staticmethod
     @jit(nopython=True)
@@ -1912,98 +1721,6 @@ class StripeFitnessModel(FitnessModel):
 
 ##########################################################################
 
-    # def expected_av_nn_property(self, prop, ndir='out', multi_count=False,
-    #                             deg_recompute=False):
-    #     """ Computes the expected value of the nearest neighbour average of
-    #     the property array. The array must have the first dimension
-    #     corresponding to the vertex index.
-    #     """
-    #     if not hasattr(self, 'param'):
-    #         raise Exception('Model must be fitted before hand.')
-
-    #     # Check first dimension of property array is correct
-    #     if not prop.shape[0] == self.num_vertices:
-    #         msg = ('Property array must have first dimension size be equal'
-    #                ' to the number of vertices.')
-    #         raise ValueError(msg)
-
-    #     if multi_count:
-    #         # Compute correct expected degree
-    #         if deg_recompute or not hasattr(self, 'exp_out_degree_label'):
-    #             self.expected_degrees_by_label()
-
-    #         deg = np.zeros(self.num_vertices, dtype=np.float64)
-
-    #         if ndir == 'out':
-    #             for row in self.exp_out_degree_label:
-    #                 deg[row.id] += row.value
-    #         elif ndir == 'in':
-    #             for row in self.exp_in_degree_label:
-    #                 deg[row.id] += row.value
-    #         elif ndir == 'out-in':
-    #             raise ValueError('Not implemented yet. Sorry :)')
-    #         else:
-    #             raise ValueError('Neighbourhood direction not recognised.')
-
-    #         av_nn = mt.stripe_av_nn_prop_fast(
-    #             self.prob_fun, self.param, prop, ndir, self.out_strength,
-    #             self.in_strength, self.num_labels, self.per_label)
-
-    #     else:
-    #         # Convert to sparse matrices
-    #         s_out = lib.to_sparse(self.out_strength,
-    #                               (self.num_vertices, self.num_labels),
-    #                               i_col='id', j_col='label', data_col='value',
-    #                               kind='csr')
-    #         s_in = lib.to_sparse(self.in_strength,
-    #                              (self.num_vertices, self.num_labels),
-    #                              i_col='id', j_col='label', data_col='value',
-    #                              kind='csr')
-
-    #         if not s_out.has_sorted_indices:
-    #             s_out.sort_indices()
-    #         if not s_in.has_sorted_indices:
-    #             s_in.sort_indices()
-
-    #         # Extract arrays from sparse matrices
-    #         s_out_i = s_out.indptr
-    #         s_out_j = s_out.indices
-    #         s_out_w = s_out.data
-    #         s_in_i = s_in.indptr
-    #         s_in_j = s_in.indices
-    #         s_in_w = s_in.data
-
-    #         # Compute correct expected degree
-    #         if deg_recompute or not hasattr(self, 'exp_out_degree'):
-    #             self.expected_degrees()
-
-    #         if ndir == 'out':
-    #             deg = self.exp_out_degree
-    #         elif ndir == 'in':
-    #             deg = self.exp_in_degree
-    #         elif ndir == 'out-in':
-    #             deg = self.exp_degree
-    #         else:
-    #             raise ValueError('Neighbourhood direction not recognised.')
-
-    #         av_nn = mt.stripe_av_nn_prop(
-    #             self.prob_fun, self.param, prop, ndir, s_out_i, s_out_j,
-    #             s_out_w, s_in_i, s_in_j, s_in_w, self.per_label)
-            
-    #     # Test that mask is the same
-    #     ind = deg != 0
-    #     msg = 'Got a av_nn for an empty neighbourhood.'
-    #     assert np.all(av_nn[~ind] == 0), msg
-        
-    #     # Average results
-    #     if av_nn.ndim > 1:
-    #         new_shape = [1, ]*av_nn.ndim
-    #         new_shape[0] = np.sum(ind)
-    #         av_nn[ind] = av_nn[ind] / deg[ind].reshape(tuple(new_shape))
-    #     else:
-    #         av_nn[ind] = av_nn[ind] / deg[ind]
-
-    #     return av_nn
 
     # def expected_av_nn_degree(self, ddir='out', ndir='out', multi_count=False,
     #                           deg_recompute=False, get=False):
@@ -2179,6 +1896,564 @@ class StripeFitnessModel(FitnessModel):
     #             g.e, g.num_labels)
 
     #     return g
+
+
+###########################################################################
+
+class StripeMultiByLabel(_StripeFitnessModel):
+    def __init__(self, sc, *args, **kwargs):
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedLabelGraph):
+                g = args[0]
+                self.num_edges = g.num_edges_label
+
+        super().__init__(sc, *args, **kwargs)
+
+        if hasattr(self, 'num_edges'):
+            msg = ('Number of edges must be a numpy array of '
+                   'length equal to the number of labels.')
+            assert len(self.num_edges) == self.num_labels, msg
+
+        if hasattr(self, 'param'):
+            msg = ('Parameters must be a numpy array of'
+                   ' length equal to the number of labels.')
+            assert len(self.param) == self.num_labels, msg
+
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+        p_ij = self.p_ij_multi
+        e_fun = self.exp_edges
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                x[2].indptr, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp))
+        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_num_edges_label(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_edges_layer
+        p_ij = self.p_ij
+        delta = self.param
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp)))
+
+        # Collect and assign results for each layer
+        self.exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
+        tmp = tmp_rdd.collect()
+        for i, v in tmp:
+            # Update results and check convergence
+            self.exp_num_edges_label[i] = v
+
+        if get:
+            return self.exp_num_edges_label
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection between node i and j in the
+        multi-label case.
+        """
+        i = 0
+        j = 0
+        val = 1
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp = d[x_lbl[i]]*x_dat[i] * y_dat[j]
+                if isinf(tmp):
+                    return 1.0
+                else:
+                    val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val
+
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+                  lbl_out, lbl_in, fit_out, fit_in, slflp):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        for i in range(ind_out[1]-ind_out[0]):
+            f_out_i = ind_out[0]+i
+            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
+            for j in range(ind_in[1]-ind_in[0]):
+                f_in_j = ind_in[0]+j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
+                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
+                    f += p_ij(param, f_out_l, f_out_v, f_in_l, f_in_v)
+
+        return f
+
+
+class StripeMulti(_StripeFitnessModel):
+    def __init__(self, sc, *args, **kwargs):
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedLabelGraph):
+                g = args[0]
+                self.num_edges = g.num_edges
+
+        super().__init__(sc, *args, **kwargs)
+
+        if hasattr(self, 'num_edges'):
+            msg = ('Number of edges must be a single number.')
+            assert len(self.num_edges) == self.num_labels, msg
+
+        if hasattr(self, 'param'):
+            msg = ('Parameter must be a single number.')
+            assert len(self.param) == 1, msg
+
+    def fit(self, x0=None, method='density', solver='Newton-CG', atol=1e-18, 
+            rtol=1e-9, maxiter=100, verbose=False):
+        """ Fit the parameter either to match the given number of edges or
+            using maximum likelihood estimation.
+
+        Parameters
+        ----------
+        x0: float
+            optional initial conditions for parameters
+        method: 'density' or 'mle'
+            selects whether to fit param using maximum likelihood estimation
+            or by ensuring that the expected density matches the given one
+        solver: 'Newton-CG' or any scipy minimization solvers
+            selects which scipy solver is used for the mle method
+        atol : float
+            absolute tolerance for the exit condition
+        rtol : float
+            relative tolerance for the exit condition
+        max_iter : int or float
+            maximum number of iteration
+        verbose: boolean
+            if true print debug info while iterating
+        """
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The multi_label fit requires one parameter only.')
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('x0 must be numeric.')
+
+        if np.any(x0 < 0):
+            raise ValueError('x0 must be positive.')
+
+        if method == 'density':
+            # Ensure that num_edges is set
+            if not hasattr(self, 'num_edges'):
+                raise ValueError(
+                    'Number of edges must be set for density solver.')
+            msg = 'Number of edge array must contain a single number.'
+            assert len(self.num_edges) == 1, msg
+
+            # Send to solver
+            sol = mt.monotonic_newton_solver(
+                x0, self.density_fit, tol=atol, xtol=rtol, 
+                max_iter=maxiter, full_return=True, verbose=verbose)
+
+        elif method == 'mle':
+            raise ValueError("Method not implemented.")
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not self.solver_output.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+        p_ij = self.p_ij_multi
+        e_fun = self.exp_edges
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                x[2].indptr, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp))
+        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_num_edges_label(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_edges_layer
+        p_ij = self.p_ij
+        delta = self.param
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp)))
+
+        # Collect and assign results for each layer
+        self.exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
+        tmp = tmp_rdd.collect()
+        for i, v in tmp:
+            # Update results and check convergence
+            self.exp_num_edges_label[i] = v
+
+        if get:
+            return self.exp_num_edges_label
+
+    def density_fit(self, delta):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta when there are multiple labels per 
+            edge allowed.
+        """
+        f_jac = self.exp_edges_f_jac
+        p_jac_ij = self.p_jac_ij
+        slflp = self.selfloops
+        tmp = self.p_iter_rdd.map(
+            lambda x: f_jac(
+                p_jac_ij, delta, x[0][0], x[0][1], x[1].indptr, x[2].indptr, 
+                x[1].indices, x[2].indices, x[1].data, x[2].data, slflp))
+        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        f -= self.num_edges
+        return f, jac
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_jac_ij(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection and the jacobian 
+            contribution of node i and j in the multi-label case.
+        """
+        i = 0
+        j = 0
+        val = 1
+        num = 0
+        dnm = 1
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp = x_dat[i] * y_dat[j]
+                tmp1 = d*tmp
+                if isinf(tmp1):
+                    return 1.0, 0.0
+                else:
+                    val /= 1 + tmp
+                    num += tmp / (1 + tmp1)
+                    dnm *= 1 + tmp1
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val, num/dnm
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection between node i and j in the
+        multi-label case.
+        """
+        i = 0
+        j = 0
+        val = 1
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp = d*x_dat[i] * y_dat[j]
+                if isinf(tmp):
+                    return 1.0
+                else:
+                    val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val
+
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, indptr_out, 
+                        indptr_in, lbl_out, lbl_in, fit_out, fit_in, slflp):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        jac = 0.0
+        for i in range(ind_out[1]-ind_out[0]):
+            f_out_i = ind_out[0]+i
+            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
+            for j in range(ind_in[1]-ind_in[0]):
+                f_in_j = ind_in[0]+j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
+                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
+                    p_tmp, jac_tmp = p_jac_ij(
+                        param[0], f_out_l, f_out_v, f_in_l, f_in_v)
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
+
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+                  lbl_out, lbl_in, fit_out, fit_in, slflp):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        for i in range(ind_out[1]-ind_out[0]):
+            f_out_i = ind_out[0]+i
+            f_out_l = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_v = fit_out[indptr_out[i]:indptr_out[i+1]]
+            for j in range(ind_in[1]-ind_in[0]):
+                f_in_j = ind_in[0]+j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j]:indptr_in[j+1]]
+                    f_in_v = fit_in[indptr_in[j]:indptr_in[j+1]]
+                    f += p_ij(param[0], f_out_l, f_out_v, f_in_l, f_in_v)
+
+        return f
+
+
+class StripeSingleByLabel(_StripeFitnessModel):
+    def __init__(self, sc, *args, **kwargs):
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedLabelGraph):
+                g = args[0]
+                self.num_edges = g.num_edges_label
+
+        super().__init__(sc, *args, **kwargs)
+
+        if hasattr(self, 'num_edges'):
+            msg = ('Number of edges must be a numpy array of '
+                   'length equal to the number of labels.')
+            assert len(self.num_edges) == self.num_labels, msg
+
+        if hasattr(self, 'param'):
+            msg = ('Parameters must be a numpy array of'
+                   ' length equal to the number of labels.')
+            assert len(self.param) == self.num_labels, msg
+
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+        p_ij = self.p_ij
+        e_fun = self.exp_edges_layer
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp)))
+        
+        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_num_edges_label(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_edges_layer
+        p_ij = self.p_ij
+        delta = self.param
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp)))
+
+        # Collect and assign results for each layer
+        self.exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
+        tmp = tmp_rdd.collect()
+        for i, v in tmp:
+            # Update results and check convergence
+            self.exp_num_edges_label[i] = v
+
+        if get:
+            return self.exp_num_edges_label
+
+
+class StripeSingle(_StripeFitnessModel):
+    def __init__(self, sc, *args, **kwargs):
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.WeightedLabelGraph):
+                g = args[0]
+                self.num_edges = g.num_edges
+                
+        super().__init__(sc, *args, **kwargs)
+
+        if hasattr(self, 'num_edges'):
+            msg = ('Number of edges must be a single number.')
+            assert len(self.num_edges) == self.num_labels, msg
+
+        if hasattr(self, 'param'):
+            msg = ('Parameter must be a single number.')
+            assert len(self.param) == 1, msg
+
+    def fit(self, x0=None, method='density', solver='Newton-CG', 
+            atol=1e-18, rtol=1e-9, maxiter=100, verbose=False):
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError(
+                'The single_label fit requires one parameter only.')
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('x0 must be numeric.')
+
+        if np.any(x0 < 0):
+            raise ValueError('x0 must be positive.')
+
+        if method == 'density':
+            # Ensure that num_edges is set
+            if not hasattr(self, 'num_edges'):
+                raise ValueError(
+                    'Number of edges must be set for density solver.')
+            msg = 'Number of edge array must contain a single number.'
+            assert len(self.num_edges) == 1, msg
+
+            # Send to solver
+            sol = mt.monotonic_newton_solver(
+                x0, self.density_fit, tol=atol, xtol=rtol, 
+                max_iter=maxiter, full_return=True, verbose=verbose)
+
+        elif method == 'mle':
+            raise ValueError("Method not implemented.")
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not self.solver_output.converged:
+            warnings.warn('Fit did not converge', UserWarning)
+
+    def expected_num_edges(self, get=False):
+        """ Compute the expected number of edges.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+
+        # It is necessary to select the elements or pickling will fail
+        delta = self.param
+        slflp = self.selfloops
+        p_ij = self.p_ij
+        e_fun = self.exp_edges_layer
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp)))
+                
+        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        if get:
+            return self.exp_num_edges
+
+    def expected_num_edges_label(self, get=False):
+        """ Compute the expected number of edges (per label).
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted before hand.')
+
+        # Initialize each layer
+        e_fun = self.exp_edges_layer
+        p_ij = self.p_ij
+        delta = self.param
+        slflp = self.selfloops
+        tmp_rdd = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, slflp)))
+
+        # Collect and assign results for each layer
+        self.exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
+        tmp = tmp_rdd.collect()
+        for i, v in tmp:
+            # Update results and check convergence
+            self.exp_num_edges_label[i] = v
+
+        if get:
+            return self.exp_num_edges_label
+
+    def density_fit(self, delta):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta when each node exists on a single 
+            layer.
+        """
+        # Initialize each layer
+        f_jac = self.exp_edges_f_jac
+        p_jac = self.p_jac_ij
+        slflp = self.selfloops
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], f_jac(p_jac, delta, x[1].indices, x[2].indices, 
+                                   x[1].data, x[2].data, slflp)))
+        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        f -= self.num_edges
+        return f, jac
 
 
 class StripeInvariantModel(ScaleInvariantModel, StripeFitnessModel):

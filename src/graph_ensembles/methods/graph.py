@@ -26,6 +26,17 @@ def check_unique_labelled_edges(e):
             assert False, 'There are repeated edges.'
 
 
+@jit(nopython=True)
+def check_multi_label_edges(e):
+    """ Check that the edges are not repeated in the sorted edge list."""
+    edges = set()
+    for i in np.arange(len(e)):
+        if (e[i].src, e[i].dst) in edges:
+            return True
+        edges.add((e[i].src, e[i].dst)) 
+    return False
+
+
 def dict_to_array(d):
     arr = np.zeros(len(d.keys()), dtype=int)
     for item in d.items():
