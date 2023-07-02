@@ -1384,7 +1384,86 @@ class _StripeFitnessModel(FitnessModel):
 
         if get:
             return getattr(self, name)
-          
+
+    def log_likelihood(self, g, selfloops=None):
+        """ Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or a list of adjacency matrices one 
+        for each layer.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, list):
+            # Ensure list contains sparse csr matrices
+            for i in range(len(g)):
+                if isinstance(g[i], sp.spmatrix):
+                    g[i] = g[i].asformat('csr')
+                elif isinstance(g[i], np.ndarray):
+                    g[i] = sp.csr_matrix(g[i])
+                else:
+                    raise ValueError('Element {} not a matrix.'.format(i))
+            adj = g
+        elif isinstance(g, np.ndarray):
+            if g.ndim != 3:
+                raise ValueError('Passed adjacency matrix must have three '
+                                 'dimensions: (label, source, destination).')
+            adj = [None, ]*g.shape[0]
+            for i in range(g.shape[0]):
+                adj[i] = sp.csr_matrix(g[i, :, :])
+        else:
+            msg = 'g input not a graph or list of adjacency matrices or ' \
+                  'numpy array.'
+            raise ValueError(msg)
+
+        # Ensure dimensions are correct
+        if len(adj) != self.num_labels:
+            msg = ('Number of passed layers (one per label) in adjacency '
+                   'matrix is {0} instead of {1}.'.format(
+                    len(adj), self.num_labels))
+            raise ValueError(msg)
+
+        for i in range(len(adj)):
+            if adj[i].shape != (self.num_vertices, self.num_vertices):
+                msg = ('Passed layer {0} adjacency matrix has shape {1} '
+                       'instead of {2}'.format(i, adj[i].shape, 
+                                               (self.num_vertices,
+                                                self.num_vertices)))
+                raise ValueError(msg)
+
+        return adj
+
+    def sample(self, selfloops=None):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # Generate uninitialised graph object
+        g = graphs.DirectedLabelGraph.__new__(graphs.DirectedLabelGraph)
+        g.lv = graphs.LabelVertexList()
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        g.id_dtype = self.id_dtype
+        g.num_labels = self.num_labels
+        g.label_dtype = self.label_dtype
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        return g
+
     @staticmethod
     def density_fit(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
                     fit_in, num_e, slflp):
@@ -1547,194 +1626,6 @@ class _StripeFitnessModel(FitnessModel):
 
         return exp_d, exp_d_out, exp_d_in
 
-
-
-
-    def log_likelihood(self, g, selfloops=None):
-        """ Compute the likelihood a graph given the fitted model.
-        Accepts as input either a graph or an adjacency matrix.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted before.')
-
-        if selfloops is None:
-            selfloops = self.selfloops
-
-        if isinstance(g, graphs.DirectedGraph):
-            # Extract binary adjacency matrix from graph
-            adj = g.adjacency_matrix(kind='csr')
-        elif isinstance(g, sp.spmatrix):
-            adj = g.asformat('csr')
-        elif isinstance(g, np.ndarray):
-            adj = sp.csr_matrix(g)
-        else:
-            raise ValueError('g input not a graph or adjacency matrix.')
-
-        # Ensure dimensions are correct
-        if adj.shape != (self.num_vertices, self.num_vertices):
-            msg = ('Passed graph adjacency matrix does not have the correct '
-                   'shape: {0} instead of {1}'.format(
-                    adj.shape, (self.num_vertices, self.num_vertices)))
-            raise ValueError(msg)
-
-        # Compute log likelihood of graph
-        e_fun = self._likelihood
-        p_ij = self.p_ij
-        delta = self.param
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                            x[1], x[2], adj.indptr, adj.indices,
-                            selfloops))
-        like = tmp.fold(0, lambda x, y: x + y)
-
-        return like
-
-    def log_likelihood(self, g, log_space=True):
-        """ Compute the likelihood a graph given the fitted model.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted before.')
-
-        if isinstance(g, graphs.DirectedGraph):
-            # Extract binary adjacency matrix from graph
-            adj = g.adjacency_matrix(kind='csr')
-        elif isinstance(g, list):
-            # Ensure list contains sparse csr matrices
-            for i in range(len(g)):
-                if isinstance(g[i], sp.spmatrix):
-                    g[i] = g[i].asformat('csr')
-                elif isinstance(g[i], np.ndarray):
-                    g[i] = sp.csr_matrix(g[i])
-                else:
-                    raise ValueError('Element {} not a matrix.'.format(i))
-            adj = g
-        elif isinstance(g, np.ndarray):
-            if g.ndim != 3:
-                raise ValueError('Passed adjacency matrix must have three '
-                                 'dimensions: (label, source, destination).')
-            adj = [None, ]*g.shape[0]
-            for i in range(g.shape[0]):
-                adj[i] = sp.csr_matrix(g[i, :, :])
-        else:
-            msg = 'g input not a graph or list of adjacency matrices or ' \
-                  'numpy array.'
-            raise ValueError(msg)
-
-        # Ensure dimensions are correct
-        if len(adj) != self.num_labels:
-            msg = ('Number of passed layers (one per label) in adjacency '
-                   'matrix is {0} instead of {1}.'.format(
-                    len(adj), self.num_labels))
-            raise ValueError(msg)
-
-        for i in range(len(adj)):
-            if adj[i].shape != (self.num_vertices, self.num_vertices):
-                msg = ('Passed layer {0} adjacency matrix has shape {1} '
-                       'instead of {2}'.format(i, adj[i].shape, 
-                                               (self.num_vertices,
-                                                self.num_vertices)))
-                raise ValueError(msg)
-
-        # Get pointer array for layers
-        l_ptr = np.cumsum(np.array([0] + [len(x.indices) for x in adj]))
-        i_ptr = np.stack([x.indptr for x in adj])
-        j_ind = np.concatenate([x.indices for x in adj])
-
-        # Compute log likelihood of graph
-        like = mt.stripe_likelihood(
-            l_ptr, i_ptr, j_ind, self.prob_fun, self.param, self.out_strength,
-            self.in_strength, self.num_labels, self.per_label, log_space)
-
-        return like
-
-    def sample(self, selfloops=None):
-        """ Return a Graph sampled from the ensemble.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted before sampling.')
-
-        if selfloops is None:
-            selfloops = self.selfloops
-
-        # Generate uninitialised graph object
-        g = graphs.DirectedGraph.__new__(graphs.DirectedGraph)
-
-        # Initialise common object attributes
-        g.num_vertices = self.num_vertices
-        g.id_dtype = self.id_dtype
-        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
-            type=np.recarray, dtype=[('id', g.id_dtype)])
-        g.id_dict = {}
-        for x in g.v.id:
-            g.id_dict[x] = x
-
-        # Sample edges and extract properties
-        e_fun = self._sample
-        p_ij = self.p_ij
-        delta = self.param
-        app_fun = self.safe_append
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                            x[1], x[2], selfloops))
-        e = tmp.fold([], lambda x, y: app_fun(x, y))
-        e = np.array(e,
-                     dtype=[('src', 'f8'),
-                            ('dst', 'f8')]).view(type=np.recarray)
-
-        e = e.astype([('src', g.id_dtype),
-                      ('dst', g.id_dtype)])
-        g.sort_ind = np.argsort(e)
-        g.e = e[g.sort_ind]
-        g.num_edges = mt.compute_num_edges(g.e)
-
-        return g
-
-    def sample(self):
-        """ Return a Graph sampled from the ensemble.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted before sampling.')
-
-        # Generate uninitialised graph object
-        g = graphs.WeightedLabelGraph.__new__(graphs.WeightedLabelGraph)
-        g.lv = graphs.LabelVertexList()
-
-        # Initialise common object attributes
-        g.num_vertices = self.num_vertices
-        g.id_dtype = self.id_dtype
-        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
-            type=np.recarray, dtype=[('id', g.id_dtype)])
-        g.id_dict = {}
-        for x in g.v.id:
-            g.id_dict[x] = x
-
-        # Sample edges and extract properties
-        e = mt.stripe_sample(self.prob_fun, self.param, self.out_strength,
-                             self.in_strength, self.num_labels, self.per_label)
-
-        e = e.view(type=np.recarray,
-                   dtype=[('label', 'f8'),
-                          ('src', 'f8'),
-                          ('dst', 'f8'),
-                          ('weight', 'f8')]).reshape((e.shape[0],))
-        g.num_labels = self.num_labels
-        g.label_dtype = self.label_dtype
-        e = e.astype([('label', g.label_dtype),
-                      ('src', g.id_dtype),
-                      ('dst', g.id_dtype),
-                      ('weight', 'f8')])
-        g.sort_ind = np.argsort(e)
-        g.e = e[g.sort_ind]
-        g.num_edges = mt.compute_num_edges(g.e)
-        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
-        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
-        g.num_edges_label = ne_label.astype(dtype)
-        g.total_weight = np.sum(e.weight)
-        g.total_weight_label = mt.compute_tot_weight_by_label(
-                g.e, g.num_labels)
-
-        return g
-
     @staticmethod
     @jit(nopython=True)
     def exp_av_nn_prop(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
@@ -1846,23 +1737,20 @@ class _StripeFitnessModel(FitnessModel):
 
     @staticmethod
     @jit(nopython=True)
-    def _likelihood(p_ij, param, ind_out, ind_in, fit_out, 
-                    fit_in, adj_i, adj_j, selfloops):
+    def _likelihood_layer(p_ij, param, ind_out, ind_in, fit_out, 
+                          fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
         """
         like = 0
-        for i in range(ind_out[1]-ind_out[0]):
-            ind_i = ind_out[0]+i
+        for i, ind_i in enumerate(ind_out):
             f_out_i = fit_out[i]
-            n = adj_i[i]
-            m = adj_i[i+1]
+            n = adj_i[ind_i]
+            m = adj_i[ind_i+1]
             j_list = adj_j[n:m]
-            for j in range(ind_in[1]-ind_in[0]):
-                ind_j = ind_in[0]+j
+            for j, ind_j in enumerate(ind_in):
                 f_in_j = fit_in[j]
                 if (ind_i != ind_j) | selfloops:
-                    p = p_ij(param[0], f_out_i, f_in_j)
-                    # Check if link exists
+                    p = p_ij(param, f_out_i, f_in_j)
                     if ind_j in j_list:
                         like += log(p)
                     else:
@@ -1872,24 +1760,21 @@ class _StripeFitnessModel(FitnessModel):
 
     @staticmethod
     @jit(nopython=True)
-    def _sample(p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
+    def _sample_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in, layer, 
+                      selfloops):
         """ Sample from the ensemble.
         """
         sample = []
-        for i in range(ind_out[1]-ind_out[0]):
-            ind_i = ind_out[0]+i
+        for i, ind_i in enumerate(ind_out):
             f_out_i = fit_out[i]
-            for j in range(ind_in[1]-ind_in[0]):
-                ind_j = ind_in[0]+j
+            for j, ind_j in enumerate(ind_in):
                 f_in_j = fit_in[j]
                 if (ind_i != ind_j) | selfloops:
-                    p = p_ij(param[0], f_out_i, f_in_j)
+                    p = p_ij(param, f_out_i, f_in_j)
                     if rng.random() < p:
-                        sample.append((ind_i, ind_j))
+                        sample.append((layer, ind_i, ind_j))
 
         return sample
-
-###########################################################################
 
 
 class StripeMultiByLabel(_StripeFitnessModel):
@@ -2076,6 +1961,57 @@ class StripeMultiByLabel(_StripeFitnessModel):
         av_nn[ind] = av_nn[ind] / deg[ind]
 
         return av_nn
+
+    def log_likelihood(self, g, selfloops=None):
+        """ Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or a list of adjacency matrices one 
+        for each layer.
+        """
+        adj = super().log_likelihood(g, selfloops=selfloops)
+
+        # Compute log likelihood of graph
+        e_fun = self._likelihood_layer
+        p_ij = self.p_ij
+        delta = self.param
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, adj[x[0]].indptr, 
+                            adj[x[0]].indices, selfloops))
+        like = tmp.fold(0, lambda x, y: x + y)
+
+        return like
+
+    def sample(self, selfloops=None):
+        """ Return a Graph sampled from the ensemble.
+        """
+        g = super().sample(selfloops=selfloops)
+        
+        # Sample edges and extract properties
+        e_fun = self._sample_layer
+        p_ij = self.p_ij
+        delta = self.param
+        app_fun = self.safe_append
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, x[0], selfloops))
+        e = tmp.fold([], lambda x, y: app_fun(x, y))
+
+        e = np.array(e,
+                     dtype=[('label', 'f8'),
+                            ('src', 'f8'),
+                            ('dst', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('label', g.label_dtype),
+                      ('src', g.id_dtype),
+                      ('dst', g.id_dtype)])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        g.num_edges_label = ne_label.astype(dtype)
+
+        return g
 
     @staticmethod
     @jit(nopython=True)
@@ -2350,6 +2286,57 @@ class StripeMulti(_StripeFitnessModel):
         av_nn[ind] = av_nn[ind] / deg[ind]
 
         return av_nn
+
+    def log_likelihood(self, g, selfloops=None):
+        """ Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or a list of adjacency matrices one 
+        for each layer.
+        """
+        adj = super().log_likelihood(g, selfloops=selfloops)
+
+        # Compute log likelihood of graph
+        e_fun = self._likelihood_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta, x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, adj[x[0]].indptr, 
+                            adj[x[0]].indices, selfloops))
+        like = tmp.fold(0, lambda x, y: x + y)
+
+        return like
+
+    def sample(self, selfloops=None):
+        """ Return a Graph sampled from the ensemble.
+        """
+        g = super().sample(selfloops=selfloops)
+        
+        # Sample edges and extract properties
+        e_fun = self._sample_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        app_fun = self.safe_append
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta, x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, x[0], selfloops))
+        e = tmp.fold([], lambda x, y: app_fun(x, y))
+
+        e = np.array(e,
+                     dtype=[('label', 'f8'),
+                            ('src', 'f8'),
+                            ('dst', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('label', g.label_dtype),
+                      ('src', g.id_dtype),
+                      ('dst', g.id_dtype)])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        g.num_edges_label = ne_label.astype(dtype)
+
+        return g
 
     def density_fit(self, delta):
         """ Return the objective function value and the Jacobian
@@ -2631,6 +2618,57 @@ class StripeSingleByLabel(_StripeFitnessModel):
 
         return av_nn
 
+    def log_likelihood(self, g, selfloops=None):
+        """ Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or a list of adjacency matrices one 
+        for each layer.
+        """
+        adj = super().log_likelihood(g, selfloops=selfloops)
+
+        # Compute log likelihood of graph
+        e_fun = self._likelihood_layer
+        p_ij = self.p_ij
+        delta = self.param
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, adj[x[0]].indptr, 
+                            adj[x[0]].indices, selfloops))
+        like = tmp.fold(0, lambda x, y: x + y)
+
+        return like
+
+    def sample(self, selfloops=None):
+        """ Return a Graph sampled from the ensemble.
+        """
+        g = super().sample(selfloops=selfloops)
+        
+        # Sample edges and extract properties
+        e_fun = self._sample_layer
+        p_ij = self.p_ij
+        delta = self.param
+        app_fun = self.safe_append
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, x[0], selfloops))
+        e = tmp.fold([], lambda x, y: app_fun(x, y))
+
+        e = np.array(e,
+                     dtype=[('label', 'f8'),
+                            ('src', 'f8'),
+                            ('dst', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('label', g.label_dtype),
+                      ('src', g.id_dtype),
+                      ('dst', g.id_dtype)])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        g.num_edges_label = ne_label.astype(dtype)
+
+        return g
+
 
 class StripeSingle(_StripeFitnessModel):
     def __init__(self, sc, *args, **kwargs):
@@ -2856,6 +2894,57 @@ class StripeSingle(_StripeFitnessModel):
         av_nn[ind] = av_nn[ind] / deg[ind]
 
         return av_nn
+
+    def log_likelihood(self, g, selfloops=None):
+        """ Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or a list of adjacency matrices one 
+        for each layer.
+        """
+        adj = super().log_likelihood(g, selfloops=selfloops)
+
+        # Compute log likelihood of graph
+        e_fun = self._likelihood_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta, x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, adj[x[0]].indptr, 
+                            adj[x[0]].indices, selfloops))
+        like = tmp.fold(0, lambda x, y: x + y)
+
+        return like
+
+    def sample(self, selfloops=None):
+        """ Return a Graph sampled from the ensemble.
+        """
+        g = super().sample(selfloops=selfloops)
+        
+        # Sample edges and extract properties
+        e_fun = self._sample_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        app_fun = self.safe_append
+        tmp = self.layers_rdd.map(
+            lambda x: e_fun(p_ij, delta, x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, x[0], selfloops))
+        e = tmp.fold([], lambda x, y: app_fun(x, y))
+
+        e = np.array(e,
+                     dtype=[('label', 'f8'),
+                            ('src', 'f8'),
+                            ('dst', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('label', g.label_dtype),
+                      ('src', g.id_dtype),
+                      ('dst', g.id_dtype)])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        g.num_edges_label = ne_label.astype(dtype)
+
+        return g
 
     def density_fit(self, delta):
         """ Return the objective function value and the Jacobian
