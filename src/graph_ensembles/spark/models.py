@@ -1356,6 +1356,34 @@ class _StripeFitnessModel(FitnessModel):
         
         if get:
             return self.exp_in_degree_label
+
+    def expected_av_nn_degree(self, ddir='out', ndir='out', selfloops=False,
+                              deg_recompute=False, get=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ddir == 'out':
+            deg = self.exp_out_degree
+        elif ddir == 'in':
+            deg = self.exp_in_degree
+        elif ddir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # Compute property and set attribute
+        name = ('exp_av_' + ndir.replace('-', '_') + 
+                '_nn_d_' + ddir.replace('-', '_'))
+        res = self.expected_av_nn_property(
+            deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
+        setattr(self, name, res)
+
+        if get:
+            return getattr(self, name)
           
     @staticmethod
     def density_fit(delta, f_jac, p_jac, ind_out, ind_in, fit_out, 
@@ -1520,307 +1548,349 @@ class _StripeFitnessModel(FitnessModel):
         return exp_d, exp_d_out, exp_d_in
 
 
-####################################################################
 
 
-
-    def expected_av_nn_property(self, prop, ndir='out', per_layer=False,
-                                deg_recompute=False, selfloops=False):
-        """ Computes the expected value of the nearest neighbour average of
-        the property array. The array must have the first dimension
-        corresponding to the vertex index.
+    def log_likelihood(self, g, selfloops=None):
+        """ Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or an adjacency matrix.
         """
         if not hasattr(self, 'param'):
-            raise Exception('Model must be fitted before hand.')
+            raise Exception('Ensemble has to be fitted before.')
 
-        # Check first dimension of property array is correct
-        if not prop.shape[0] == self.num_vertices:
-            msg = ('Property array must have first dimension size be equal'
-                   ' to the number of vertices.')
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, sp.spmatrix):
+            adj = g.asformat('csr')
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError('g input not a graph or adjacency matrix.')
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = ('Passed graph adjacency matrix does not have the correct '
+                   'shape: {0} instead of {1}'.format(
+                    adj.shape, (self.num_vertices, self.num_vertices)))
             raise ValueError(msg)
 
-        if per_layer:
-            # Compute correct expected degree
-            if deg_recompute or not hasattr(self, 'exp_out_degree_label'):
-                self.expected_degrees_by_label()
+        # Compute log likelihood of graph
+        e_fun = self._likelihood
+        p_ij = self.p_ij
+        delta = self.param
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
+                            x[1], x[2], adj.indptr, adj.indices,
+                            selfloops))
+        like = tmp.fold(0, lambda x, y: x + y)
 
-            deg = np.zeros(self.num_vertices, dtype=np.float64)
+        return like
 
-            if ndir == 'out':
-                for row in self.exp_out_degree_label:
-                    deg[row.id] += row.value
-            elif ndir == 'in':
-                for row in self.exp_in_degree_label:
-                    deg[row.id] += row.value
-            elif ndir == 'out-in':
-                raise ValueError('Not implemented yet. Sorry :)')
-            else:
-                raise ValueError('Neighbourhood direction not recognised.')
+    def log_likelihood(self, g, log_space=True):
+        """ Compute the likelihood a graph given the fitted model.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before.')
 
-            av_nn = mt.stripe_av_nn_prop_fast(
-                self.prob_fun, self.param, prop, ndir, self.out_strength,
-                self.in_strength, self.num_labels, self.per_label)
-
-        else:
-            # Compute correct expected degree
-            if deg_recompute or not hasattr(self, 'exp_out_degree'):
-                self.expected_degrees()
-
-            if ndir == 'out':
-                deg = self.exp_out_degree
-            elif ndir == 'in':
-                deg = self.exp_in_degree
-            elif ndir == 'out-in':
-                deg = self.exp_degree
-            else:
-                raise ValueError('Neighbourhood direction not recognised.')
-
-            # It is necessary to select the elements or pickling will fail
-            e_fun = self.exp_av_nn_prop
-            p_ij = self.p_ij
-            delta = self.param
-            tmp = self.p_sym_rdd.map(
-                lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                                x[1], x[2], prop, ndir, selfloops))
-            av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
-                             lambda x, y: x + y)
-            
-            # Test that mask is the same
-            ind = deg != 0
-            msg = 'Got a av_nn for an empty neighbourhood.'
-            assert np.all(av_nn[~ind] == 0), msg
-            
-            # Average results
-            av_nn[ind] = av_nn[ind] / deg[ind]
-
-            return av_nn
-            
-            if self.multi_label:
-                if self.per_label:
-                    p_ij = self.p_ij_multi_per_layer
+        if isinstance(g, graphs.DirectedGraph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(kind='csr')
+        elif isinstance(g, list):
+            # Ensure list contains sparse csr matrices
+            for i in range(len(g)):
+                if isinstance(g[i], sp.spmatrix):
+                    g[i] = g[i].asformat('csr')
+                elif isinstance(g[i], np.ndarray):
+                    g[i] = sp.csr_matrix(g[i])
                 else:
-                    p_ij = self.p_ij_multi
-                e_fun = self.exp_degrees
-                tmp = self.p_iter_rdd.map(
-                    lambda x: e_fun(
-                        p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
-                        x[2].indptr, x[1].indices, x[2].indices, 
-                        x[1].data, x[2].data, num_v, slflp))
-            else:
-                p_ij = self.p_ij
-                e_fun = self.exp_degrees_layer
-                if self.per_label:
-                    tmp = self.layers_rdd.map(
-                        lambda x: (x[0], e_fun(
-                            p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                            x[1].data, x[2].data, num_v, slflp)))
-                else:
-                    tmp = self.layers_rdd.map(
-                        lambda x: (x[0], e_fun(
-                            p_ij, delta, x[1].indices, x[2].indices, 
-                            x[1].data, x[2].data, num_v, slflp)))
-
-
-
-        # Test that mask is the same
-        ind = deg != 0
-        msg = 'Got a av_nn for an empty neighbourhood.'
-        assert np.all(av_nn[~ind] == 0), msg
-        
-        # Average results
-        if av_nn.ndim > 1:
-            new_shape = [1, ]*av_nn.ndim
-            new_shape[0] = np.sum(ind)
-            av_nn[ind] = av_nn[ind] / deg[ind].reshape(tuple(new_shape))
+                    raise ValueError('Element {} not a matrix.'.format(i))
+            adj = g
+        elif isinstance(g, np.ndarray):
+            if g.ndim != 3:
+                raise ValueError('Passed adjacency matrix must have three '
+                                 'dimensions: (label, source, destination).')
+            adj = [None, ]*g.shape[0]
+            for i in range(g.shape[0]):
+                adj[i] = sp.csr_matrix(g[i, :, :])
         else:
-            av_nn[ind] = av_nn[ind] / deg[ind]
+            msg = 'g input not a graph or list of adjacency matrices or ' \
+                  'numpy array.'
+            raise ValueError(msg)
+
+        # Ensure dimensions are correct
+        if len(adj) != self.num_labels:
+            msg = ('Number of passed layers (one per label) in adjacency '
+                   'matrix is {0} instead of {1}.'.format(
+                    len(adj), self.num_labels))
+            raise ValueError(msg)
+
+        for i in range(len(adj)):
+            if adj[i].shape != (self.num_vertices, self.num_vertices):
+                msg = ('Passed layer {0} adjacency matrix has shape {1} '
+                       'instead of {2}'.format(i, adj[i].shape, 
+                                               (self.num_vertices,
+                                                self.num_vertices)))
+                raise ValueError(msg)
+
+        # Get pointer array for layers
+        l_ptr = np.cumsum(np.array([0] + [len(x.indices) for x in adj]))
+        i_ptr = np.stack([x.indptr for x in adj])
+        j_ind = np.concatenate([x.indices for x in adj])
+
+        # Compute log likelihood of graph
+        like = mt.stripe_likelihood(
+            l_ptr, i_ptr, j_ind, self.prob_fun, self.param, self.out_strength,
+            self.in_strength, self.num_labels, self.per_label, log_space)
+
+        return like
+
+    def sample(self, selfloops=None):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # Generate uninitialised graph object
+        g = graphs.DirectedGraph.__new__(graphs.DirectedGraph)
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        g.id_dtype = self.id_dtype
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges and extract properties
+        e_fun = self._sample
+        p_ij = self.p_ij
+        delta = self.param
+        app_fun = self.safe_append
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
+                            x[1], x[2], selfloops))
+        e = tmp.fold([], lambda x, y: app_fun(x, y))
+        e = np.array(e,
+                     dtype=[('src', 'f8'),
+                            ('dst', 'f8')]).view(type=np.recarray)
+
+        e = e.astype([('src', g.id_dtype),
+                      ('dst', g.id_dtype)])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+
+        return g
+
+    def sample(self):
+        """ Return a Graph sampled from the ensemble.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Ensemble has to be fitted before sampling.')
+
+        # Generate uninitialised graph object
+        g = graphs.WeightedLabelGraph.__new__(graphs.WeightedLabelGraph)
+        g.lv = graphs.LabelVertexList()
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        g.id_dtype = self.id_dtype
+        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
+            type=np.recarray, dtype=[('id', g.id_dtype)])
+        g.id_dict = {}
+        for x in g.v.id:
+            g.id_dict[x] = x
+
+        # Sample edges and extract properties
+        e = mt.stripe_sample(self.prob_fun, self.param, self.out_strength,
+                             self.in_strength, self.num_labels, self.per_label)
+
+        e = e.view(type=np.recarray,
+                   dtype=[('label', 'f8'),
+                          ('src', 'f8'),
+                          ('dst', 'f8'),
+                          ('weight', 'f8')]).reshape((e.shape[0],))
+        g.num_labels = self.num_labels
+        g.label_dtype = self.label_dtype
+        e = e.astype([('label', g.label_dtype),
+                      ('src', g.id_dtype),
+                      ('dst', g.id_dtype),
+                      ('weight', 'f8')])
+        g.sort_ind = np.argsort(e)
+        g.e = e[g.sort_ind]
+        g.num_edges = mt.compute_num_edges(g.e)
+        ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
+        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        g.num_edges_label = ne_label.astype(dtype)
+        g.total_weight = np.sum(e.weight)
+        g.total_weight_label = mt.compute_tot_weight_by_label(
+                g.e, g.num_labels)
+
+        return g
+
+    @staticmethod
+    @jit(nopython=True)
+    def exp_av_nn_prop(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
+                       lbl_out, lbl_in, fit_out, fit_in, prop, ndir, slflp):
+        """ Compute the expected average nearest neighbour property.
+        """
+        av_nn = np.zeros(prop.shape, dtype=np.float64)
+
+        if ind_out == ind_in:
+            out_range = range(ind_out[1]-ind_out[0])
+            def in_range(x): range(x + 1)
+        else:
+            out_range = range(ind_out[1]-ind_out[0])
+            def in_range(x): range(ind_in[1]-ind_in[0])        
+
+        for i in out_range:
+            ind_i = ind_out[0]+i
+            l_out_i = lbl_out[indptr_out[i]:indptr_out[i+1]]
+            f_out_i = fit_out[indptr_out[i]:indptr_out[i+1]]
+            l_in_i = lbl_in[indptr_in[i]:indptr_in[i+1]]
+            f_in_i = fit_in[indptr_in[i]:indptr_in[i+1]]
+            for j in in_range(i):
+                ind_j = ind_in[0]+j
+                l_out_j = lbl_out[indptr_out[j]:indptr_out[j+1]]
+                f_out_j = fit_out[indptr_out[j]:indptr_out[j+1]]
+                l_in_j = lbl_in[indptr_in[j]:indptr_in[j+1]]
+                f_in_j = fit_in[indptr_in[j]:indptr_in[j+1]]
+            
+                if ind_i != ind_j:
+                    pij = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
+                    pji = p_ij(param, l_out_j, f_out_j, l_in_i, f_in_i)
+                    if ndir == 'out':
+                        av_nn[ind_i] += pij*prop[ind_j]
+                        av_nn[ind_j] += pji*prop[ind_i]
+                    elif ndir == 'in':
+                        av_nn[ind_i] += pji*prop[ind_j]
+                        av_nn[ind_j] += pij*prop[ind_i]
+                    elif ndir == 'out-in':
+                        p = pij + pji - pij*pji
+                        av_nn[ind_i] += p*prop[ind_j]
+                        av_nn[ind_j] += p*prop[ind_i]
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
+                elif slflp:
+                    pii = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
+                    if ndir == 'out':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    elif ndir == 'in':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    elif ndir == 'out-in':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
 
         return av_nn
 
+    @staticmethod
+    @jit(nopython=True)
+    def exp_av_nn_prop_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in, 
+                             prop, ndir, slflp):
+        """ Compute the expected average nearest neighbour property.
+        """
+        av_nn = np.zeros(prop.shape, dtype=np.float64)   
 
+        for i, ind_i in enumerate(ind_out):
+            f_out_i = fit_out[i]
+            for j, ind_j in enumerate(ind_in):
+                f_in_j = fit_in[j]
+                if ind_i != ind_j:
+                    pij = p_ij(param, fit_out[i], fit_in[j])
 
+                    if (ind_i in ind_in) and (ind_j in ind_out):
+                        f_in_i = fit_in[np.where(ind_in == ind_i)]
+                        f_out_j = fit_out[np.where(ind_out == ind_j)]
+                        pji = p_ij(param[0], f_out_j, f_in_i)
+                        p = pij + pji - pij*pji
+                        if ndir == 'out':
+                            av_nn[ind_j] += pji*prop[ind_i]
+                        elif ndir == 'in':
+                            av_nn[ind_i] += pji*prop[ind_j]
+                    else:
+                        p = pij
 
+                    if ndir == 'out':
+                        av_nn[ind_i] += pij*prop[ind_j]
+                    elif ndir == 'in':
+                        av_nn[ind_j] += pij*prop[ind_i]
+                    elif ndir == 'out-in':
+                        av_nn[ind_i] += p*prop[ind_j]
+                        av_nn[ind_j] += p*prop[ind_i]
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
+                elif slflp:
+                    pii = p_ij(param, f_out_i, f_in_j)
+                    if ndir == 'out':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    elif ndir == 'in':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    elif ndir == 'out-in':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
 
+        return av_nn
 
-##########################################################################
+    @staticmethod
+    @jit(nopython=True)
+    def _likelihood(p_ij, param, ind_out, ind_in, fit_out, 
+                    fit_in, adj_i, adj_j, selfloops):
+        """ Compute the binary log likelihood of a graph given the fitted model.
+        """
+        like = 0
+        for i in range(ind_out[1]-ind_out[0]):
+            ind_i = ind_out[0]+i
+            f_out_i = fit_out[i]
+            n = adj_i[i]
+            m = adj_i[i+1]
+            j_list = adj_j[n:m]
+            for j in range(ind_in[1]-ind_in[0]):
+                ind_j = ind_in[0]+j
+                f_in_j = fit_in[j]
+                if (ind_i != ind_j) | selfloops:
+                    p = p_ij(param[0], f_out_i, f_in_j)
+                    # Check if link exists
+                    if ind_j in j_list:
+                        like += log(p)
+                    else:
+                        like += log(1 - p)
+        
+        return like
 
+    @staticmethod
+    @jit(nopython=True)
+    def _sample(p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
+        """ Sample from the ensemble.
+        """
+        sample = []
+        for i in range(ind_out[1]-ind_out[0]):
+            ind_i = ind_out[0]+i
+            f_out_i = fit_out[i]
+            for j in range(ind_in[1]-ind_in[0]):
+                ind_j = ind_in[0]+j
+                f_in_j = fit_in[j]
+                if (ind_i != ind_j) | selfloops:
+                    p = p_ij(param[0], f_out_i, f_in_j)
+                    if rng.random() < p:
+                        sample.append((ind_i, ind_j))
 
-    # def expected_av_nn_degree(self, ddir='out', ndir='out', multi_count=False,
-    #                           deg_recompute=False, get=False):
-    #     """ Computes the expected value of the nearest neighbour average of
-    #     the degree.
-    #     """
-    #     # Compute correct expected degree
-    #     if deg_recompute or not hasattr(self, 'exp_out_degree'):
-    #         self.expected_degrees()
-
-    #     if ddir == 'out':
-    #         deg = self.exp_out_degree
-    #     elif ddir == 'in':
-    #         deg = self.exp_in_degree
-    #     elif ddir == 'out-in':
-    #         deg = self.exp_degree
-    #     else:
-    #         raise ValueError('Neighbourhood direction not recognised.')
-
-    #     # Compute property and set attribute
-    #     name = ('exp_av_' + ndir.replace('-', '_') + 
-    #             '_nn_d_' + ddir.replace('-', '_'))
-    #     res = self.expected_av_nn_property(deg, ndir=ndir, deg_recompute=False,
-    #                                        multi_count=multi_count)
-    #     setattr(self, name, res)
-
-    #     if get:
-    #         return getattr(self, name)
-
-    # def expected_av_nn_strength(self, sdir='out', ndir='out', by_label=False,
-    #                             multi_count=False, deg_recompute=False,
-    #                             get=False):
-    #     """ Computes the expected value of the nearest neighbour average of
-    #     the strength.
-    #     """
-    #     # Select the correct strength
-    #     s_out = lib.to_sparse(self.out_strength,
-    #                           (self.num_vertices, self.num_labels),
-    #                           i_col='id', j_col='label', data_col='value',
-    #                           kind='csr')
-    #     s_in = lib.to_sparse(self.in_strength,
-    #                          (self.num_vertices, self.num_labels),
-    #                          i_col='id', j_col='label', data_col='value',
-    #                          kind='csr')
-
-    #     if sdir == 'out':
-    #         s = s_out
-    #     elif sdir == 'in':
-    #         s = s_in
-    #     elif sdir == 'out-in':
-    #         s = s_out + s_in
-    #     else:
-    #         raise ValueError('Neighbourhood direction not recognised.')
-
-    #     if not by_label:
-    #         s = s.sum(axis=1).A1
-    #     else:
-    #         s = s.toarray()
-
-    #     # Compute property and set attribute
-    #     name = ('exp_av_' + ndir.replace('-', '_') + 
-    #             '_nn_s_' + sdir.replace('-', '_'))
-    #     if by_label:
-    #         name += '_label'
-    #     res = self.expected_av_nn_property(s, ndir=ndir, 
-    #                                        multi_count=multi_count,
-    #                                        deg_recompute=deg_recompute)
-    #     setattr(self, name, res)
-
-    #     if get:
-    #         return getattr(self, name)
-
-    # def log_likelihood(self, g, log_space=True):
-    #     """ Compute the likelihood a graph given the fitted model.
-    #     """
-    #     if not hasattr(self, 'param'):
-    #         raise Exception('Ensemble has to be fitted before.')
-
-    #     if isinstance(g, graphs.DirectedGraph):
-    #         # Extract binary adjacency matrix from graph
-    #         adj = g.adjacency_matrix(kind='csr')
-    #     elif isinstance(g, list):
-    #         # Ensure list contains sparse csr matrices
-    #         for i in range(len(g)):
-    #             if isinstance(g[i], sp.spmatrix):
-    #                 g[i] = g[i].asformat('csr')
-    #             elif isinstance(g[i], np.ndarray):
-    #                 g[i] = sp.csr_matrix(g[i])
-    #             else:
-    #                 raise ValueError('Element {} not a matrix.'.format(i))
-    #         adj = g
-    #     elif isinstance(g, np.ndarray):
-    #         if g.ndim != 3:
-    #             raise ValueError('Passed adjacency matrix must have three '
-    #                              'dimensions: (label, source, destination).')
-    #         adj = [None, ]*g.shape[0]
-    #         for i in range(g.shape[0]):
-    #             adj[i] = sp.csr_matrix(g[i, :, :])
-    #     else:
-    #         msg = 'g input not a graph or list of adjacency matrices or ' \
-    #               'numpy array.'
-    #         raise ValueError(msg)
-
-    #     # Ensure dimensions are correct
-    #     if len(adj) != self.num_labels:
-    #         msg = ('Number of passed layers (one per label) in adjacency '
-    #                'matrix is {0} instead of {1}.'.format(
-    #                 len(adj), self.num_labels))
-    #         raise ValueError(msg)
-
-    #     for i in range(len(adj)):
-    #         if adj[i].shape != (self.num_vertices, self.num_vertices):
-    #             msg = ('Passed layer {0} adjacency matrix has shape {1} '
-    #                    'instead of {2}'.format(i, adj[i].shape, 
-    #                                            (self.num_vertices,
-    #                                             self.num_vertices)))
-    #             raise ValueError(msg)
-
-    #     # Get pointer array for layers
-    #     l_ptr = np.cumsum(np.array([0] + [len(x.indices) for x in adj]))
-    #     i_ptr = np.stack([x.indptr for x in adj])
-    #     j_ind = np.concatenate([x.indices for x in adj])
-
-    #     # Compute log likelihood of graph
-    #     like = mt.stripe_likelihood(
-    #         l_ptr, i_ptr, j_ind, self.prob_fun, self.param, self.out_strength,
-    #         self.in_strength, self.num_labels, self.per_label, log_space)
-
-    #     return like
-
-    # def sample(self):
-    #     """ Return a Graph sampled from the ensemble.
-    #     """
-    #     if not hasattr(self, 'param'):
-    #         raise Exception('Ensemble has to be fitted before sampling.')
-
-    #     # Generate uninitialised graph object
-    #     g = graphs.WeightedLabelGraph.__new__(graphs.WeightedLabelGraph)
-    #     g.lv = graphs.LabelVertexList()
-
-    #     # Initialise common object attributes
-    #     g.num_vertices = self.num_vertices
-    #     g.id_dtype = self.id_dtype
-    #     g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
-    #         type=np.recarray, dtype=[('id', g.id_dtype)])
-    #     g.id_dict = {}
-    #     for x in g.v.id:
-    #         g.id_dict[x] = x
-
-    #     # Sample edges and extract properties
-    #     e = mt.stripe_sample(self.prob_fun, self.param, self.out_strength,
-    #                          self.in_strength, self.num_labels, self.per_label)
-
-    #     e = e.view(type=np.recarray,
-    #                dtype=[('label', 'f8'),
-    #                       ('src', 'f8'),
-    #                       ('dst', 'f8'),
-    #                       ('weight', 'f8')]).reshape((e.shape[0],))
-    #     g.num_labels = self.num_labels
-    #     g.label_dtype = self.label_dtype
-    #     e = e.astype([('label', g.label_dtype),
-    #                   ('src', g.id_dtype),
-    #                   ('dst', g.id_dtype),
-    #                   ('weight', 'f8')])
-    #     g.sort_ind = np.argsort(e)
-    #     g.e = e[g.sort_ind]
-    #     g.num_edges = mt.compute_num_edges(g.e)
-    #     ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
-    #     dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
-    #     g.num_edges_label = ne_label.astype(dtype)
-    #     g.total_weight = np.sum(e.weight)
-    #     g.total_weight_label = mt.compute_tot_weight_by_label(
-    #             g.e, g.num_labels)
-
-    #     return g
+        return sample
 
 ###########################################################################
+
 
 class StripeMultiByLabel(_StripeFitnessModel):
     def __init__(self, sc, *args, **kwargs):
@@ -1959,6 +2029,53 @@ class StripeMultiByLabel(_StripeFitnessModel):
             return (self.exp_degree_label, 
                     self.exp_out_degree_label, 
                     self.exp_in_degree_label)
+
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+                                deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # It is necessary to select the elements or pickling will fail
+        e_fun = self.exp_av_nn_prop
+        p_ij = self.p_ij_multi
+        delta = self.param
+        tmp = self.p_sym_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                x[2].indptr, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, prop, ndir, selfloops))
+        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
+                         lambda x, y: x + y)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
 
     @staticmethod
     @jit(nopython=True)
@@ -2186,6 +2303,53 @@ class StripeMulti(_StripeFitnessModel):
             return (self.exp_degree_label, 
                     self.exp_out_degree_label, 
                     self.exp_in_degree_label)
+
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+                                deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # It is necessary to select the elements or pickling will fail
+        e_fun = self.exp_av_nn_prop
+        p_ij = self.p_ij_multi
+        delta = self.param[0]
+        tmp = self.p_sym_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
+                x[2].indptr, x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, prop, ndir, selfloops))
+        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
+                         lambda x, y: x + y)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
 
     def density_fit(self, delta):
         """ Return the objective function value and the Jacobian
@@ -2421,6 +2585,52 @@ class StripeSingleByLabel(_StripeFitnessModel):
                     self.exp_out_degree_label, 
                     self.exp_in_degree_label)
 
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+                                deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # It is necessary to select the elements or pickling will fail
+        e_fun = self.exp_av_nn_prop_layer
+        p_ij = self.p_ij
+        delta = self.param
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, ndir, selfloops)))
+        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
+                         lambda x, y: x + y)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
 
 class StripeSingle(_StripeFitnessModel):
     def __init__(self, sc, *args, **kwargs):
@@ -2600,6 +2810,52 @@ class StripeSingle(_StripeFitnessModel):
             return (self.exp_degree_label, 
                     self.exp_out_degree_label, 
                     self.exp_in_degree_label)
+
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+                                deg_recompute=False):
+        """ Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = ('Property array must have first dimension size be equal to'
+                   ' the number of vertices.')
+            raise ValueError(msg)
+
+        # Compute correct expected degree
+        if deg_recompute or not hasattr(self, 'exp_out_degree'):
+            self.expected_degrees()
+
+        if ndir == 'out':
+            deg = self.exp_out_degree
+        elif ndir == 'in':
+            deg = self.exp_in_degree
+        elif ndir == 'out-in':
+            deg = self.exp_degree
+        else:
+            raise ValueError('Neighbourhood direction not recognised.')
+
+        # It is necessary to select the elements or pickling will fail
+        e_fun = self.exp_av_nn_prop_layer
+        p_ij = self.p_ij
+        delta = self.param[0]
+        tmp = self.layers_rdd.map(
+            lambda x: (x[0], e_fun(
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                x[1].data, x[2].data, ndir, selfloops)))
+        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
+                         lambda x, y: x + y)
+        
+        # Test that mask is the same
+        ind = deg != 0
+        msg = 'Got a av_nn for an empty neighbourhood.'
+        assert np.all(av_nn[~ind] == 0), msg
+        
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
 
     def density_fit(self, delta):
         """ Return the objective function value and the Jacobian
