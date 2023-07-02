@@ -2,6 +2,10 @@
 History
 =======
 
+0.2.3 (2023-07-03)
+------------------
+* Improved and corrected spark submodule.
+
 0.2.2 (2023-05-11)
 ------------------
 * Created submodule spark for allowing some models to be parallelize computations using spark
