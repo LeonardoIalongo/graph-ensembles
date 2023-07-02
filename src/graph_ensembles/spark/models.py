@@ -1356,7 +1356,7 @@ class _StripeFitnessModel(FitnessModel):
         for i, out_i in enumerate(ind_out):
             for j, in_j in enumerate(ind_in):
                 if (out_i != in_j) | selfloops:
-                    f += p_ij(param[0], fit_out[i], fit_in[j])
+                    f += p_ij(param, fit_out[i], fit_in[j])
 
         return f
 
@@ -2127,7 +2127,7 @@ class StripeMulti(_StripeFitnessModel):
         # Initialize each layer
         e_fun = self.exp_edges_layer
         p_ij = self.p_ij
-        delta = self.param
+        delta = self.param[0]
         slflp = self.selfloops
         tmp_rdd = self.layers_rdd.map(
             lambda x: (x[0], e_fun(
@@ -2316,7 +2316,7 @@ class StripeSingleByLabel(_StripeFitnessModel):
         slflp = self.selfloops
         tmp_rdd = self.layers_rdd.map(
             lambda x: (x[0], e_fun(
-                p_ij, delta, x[1].indices, x[2].indices, 
+                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
                 x[1].data, x[2].data, slflp)))
 
         # Collect and assign results for each layer
@@ -2399,7 +2399,7 @@ class StripeSingle(_StripeFitnessModel):
             raise Exception('Model must be fitted beforehand.')
 
         # It is necessary to select the elements or pickling will fail
-        delta = self.param
+        delta = self.param[0]
         slflp = self.selfloops
         p_ij = self.p_ij
         e_fun = self.exp_edges_layer
@@ -2422,7 +2422,7 @@ class StripeSingle(_StripeFitnessModel):
         # Initialize each layer
         e_fun = self.exp_edges_layer
         p_ij = self.p_ij
-        delta = self.param
+        delta = self.param[0]
         slflp = self.selfloops
         tmp_rdd = self.layers_rdd.map(
             lambda x: (x[0], e_fun(
@@ -2456,7 +2456,68 @@ class StripeSingle(_StripeFitnessModel):
         return f, jac
 
 
-class StripeInvariantModel(ScaleInvariantModel, StripeFitnessModel):
+class StripeInvariantModel():
+    """ A generalized scale invariant model that allows for strengths by label.
+
+    This model allows to take into account labels of the edges and include
+    this information as part of the model. The strength sequence is therefore
+    now subdivided in strength per label. Two quantities can be preserved by
+    the ensemble: either the total number of edges, or the number of edges per
+    label.
+
+    Attributes
+    ----------
+    sc: Spark Context
+        the Spark Context
+    fit_out: np.ndarray
+        the out fitness sequence
+    fit_in: np.ndarray
+        the in fitness sequence
+    num_edges: int (or np.ndarray)
+        the total number of edges (per label)
+    num_vertices: int
+        the total number of nodes
+    num_labels: int
+        the total number of labels by which the vector strengths are computed
+    param: float
+        the free parameters of the model
+    p_blocks: int
+        the number of blocks in which the fitnesses will be
+        divided for parallel computation, note that the number
+        of elements of the rdd will be p_blocks**2
+    selfloops: bool
+        selects if self loops (connections from i to i) are allowed
+    per_label: bool
+        selects if the model will have one parameter per layer or not
+    multi_label: bool
+        selects if the model allows for an edge to exist in multiple layers
+    """
+    def __new__(cls, sc, *args, per_label=True, **kwargs):
+
+        # Check if first argument is a graph
+        if ((len(args) > 0) & isinstance(args[0], graphs.WeightedLabelGraph) &
+                ('multi_label' not in kwargs)):
+            # If multi_label is not given check in graph
+            multi_label = mt.check_multi_label_edges(args[0].e)
+        else:
+            multi_label = True
+
+        # If multi_label is specified then use that 
+
+        if per_label:
+            if multi_label:
+                return StripeInvMultiByLabel(sc, *args, **kwargs)
+            else:
+                return StripeInvMulti(sc, *args, **kwargs)
+
+        else:
+            if multi_label:
+                return StripeInvSingleByLabel(sc, *args, **kwargs)
+            else:
+                return StripeInvSingle(sc, *args, **kwargs)
+
+
+class _StripeInvariantModel(ScaleInvariantModel, _StripeFitnessModel):
     """ The Scale Invariant model takes the fitnesses of each node in order to
     construct a probability distribution over all possible graphs.
 
@@ -2491,6 +2552,42 @@ class StripeInvariantModel(ScaleInvariantModel, StripeFitnessModel):
         """
         super().__init__(sc, *args, **kwargs)
 
+
+class StripeInvMultiByLabel(StripeMultiByLabel, _StripeInvariantModel):
+
+    def __init__(self, sc, *args, **kwargs):
+        super().__init__(sc, *args, **kwargs)
+        
+    @staticmethod
+    @jit(nopython=True)
+    def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+        """ Compute the probability of connection between node i and j in the
+        multi-label case.
+        """
+        i = 0
+        j = 0
+        tmp = 0
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                tmp += d[x_lbl[i]]*x_dat[i] * y_dat[j]
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        if isinf(tmp):
+            return 1.0
+        else:
+            return 1 - exp(-tmp)
+
+
+class StripeInvMulti(StripeMulti, _StripeInvariantModel):
+
+    def __init__(self, sc, *args, **kwargs):
+        super().__init__(sc, *args, **kwargs)
+
     @staticmethod
     @jit(nopython=True)
     def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
@@ -2518,31 +2615,7 @@ class StripeInvariantModel(ScaleInvariantModel, StripeFitnessModel):
 
     @staticmethod
     @jit(nopython=True)
-    def p_ij_multi_per_layer(d, x_lbl, x_dat, y_lbl, y_dat):
-        """ Compute the probability of connection between node i and j in the
-        multi-label case.
-        """
-        i = 0
-        j = 0
-        tmp = 0
-        while i < len(x_lbl) and j < len(y_lbl):
-            if x_lbl[i] == y_lbl[j]:
-                tmp += d[x_lbl[i]]*x_dat[i] * y_dat[j]
-                i += 1
-                j += 1
-            elif x_lbl[i] < y_lbl[j]:
-                i += 1
-            else:
-                j += 1
-
-        if isinf(tmp):
-            return 1.0
-        else:
-            return 1 - exp(-tmp)
-
-    @staticmethod
-    @jit(nopython=True)
-    def p_jac_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
+    def p_jac_ij(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and jin the
         multi-label case.
@@ -2565,3 +2638,15 @@ class StripeInvariantModel(ScaleInvariantModel, StripeFitnessModel):
             return 1.0, 0.0
         else:
             return 1 - exp(-tmp1), tmp*exp(-tmp1)
+
+
+class StripeInvSingleByLabel(StripeSingleByLabel, _StripeInvariantModel):
+
+    def __init__(self, sc, *args, **kwargs):
+        super().__init__(sc, *args, **kwargs)
+
+
+class StripeInvSingle(StripeSingle, _StripeInvariantModel):
+    
+    def __init__(self, sc, *args, **kwargs):
+        super().__init__(sc, *args, **kwargs)
