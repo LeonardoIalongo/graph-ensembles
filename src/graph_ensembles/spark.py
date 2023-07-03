@@ -1640,16 +1640,16 @@ class _StripeFitnessModel(FitnessModel):
 
         for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
-            l_out_i = lbl_out[indptr_out[i]:indptr_out[i+1]]
-            f_out_i = fit_out[indptr_out[i]:indptr_out[i+1]]
-            l_in_i = lbl_in[indptr_in[i]:indptr_in[i+1]]
-            f_in_i = fit_in[indptr_in[i]:indptr_in[i+1]]
+            l_out_i = lbl_out[0][indptr_out[i]:indptr_out[i+1]]
+            f_out_i = fit_out[0][indptr_out[i]:indptr_out[i+1]]
+            l_in_i = lbl_in[1][indptr_in[i]:indptr_in[i+1]]
+            f_in_i = fit_in[1][indptr_in[i]:indptr_in[i+1]]
             for j in in_range(i, ind_in, fold):
                 ind_j = ind_in[0]+j
-                l_out_j = lbl_out[indptr_out[j]:indptr_out[j+1]]
-                f_out_j = fit_out[indptr_out[j]:indptr_out[j+1]]
-                l_in_j = lbl_in[indptr_in[j]:indptr_in[j+1]]
-                f_in_j = fit_in[indptr_in[j]:indptr_in[j+1]]
+                l_out_j = lbl_out[1][indptr_out[j]:indptr_out[j+1]]
+                f_out_j = fit_out[1][indptr_out[j]:indptr_out[j+1]]
+                l_in_j = lbl_in[0][indptr_in[j]:indptr_in[j+1]]
+                f_in_j = fit_in[0][indptr_in[j]:indptr_in[j+1]]
             
                 if ind_i != ind_j:
                     pij = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
@@ -1943,9 +1943,14 @@ class StripeMultiByLabel(_StripeFitnessModel):
         delta = self.param
         tmp = self.p_sym_rdd.map(
             lambda x: e_fun(
-                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
-                x[2].indptr, x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, prop, ndir, selfloops))
+                p_ij, delta, x[0][0], x[0][1], 
+                (x[1][0].indptr, x[1][1].indptr),
+                (x[2][0].indptr, x[2][1].indptr),
+                (x[1][0].indices, x[1][1].indices),
+                (x[2][0].indices, x[2][1].indices),
+                (x[1][0].data, x[1][1].data),
+                (x[2][0].data, x[2][1].data), 
+                prop, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
         
@@ -1985,6 +1990,9 @@ class StripeMultiByLabel(_StripeFitnessModel):
         """ Return a Graph sampled from the ensemble.
         """
         g = super().sample(selfloops=selfloops)
+
+        if selfloops is None:
+            selfloops = self.selfloops
         
         # Sample edges and extract properties
         e_fun = self._sample_layer
@@ -2271,9 +2279,14 @@ class StripeMulti(_StripeFitnessModel):
         delta = self.param[0]
         tmp = self.p_sym_rdd.map(
             lambda x: e_fun(
-                p_ij, delta, x[0][0], x[0][1], x[1].indptr, 
-                x[2].indptr, x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, prop, ndir, selfloops))
+                p_ij, delta, x[0][0], x[0][1], 
+                (x[1][0].indptr, x[1][1].indptr),
+                (x[2][0].indptr, x[2][1].indptr),
+                (x[1][0].indices, x[1][1].indices),
+                (x[2][0].indices, x[2][1].indices),
+                (x[1][0].data, x[1][1].data),
+                (x[2][0].data, x[2][1].data), 
+                prop, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
         
@@ -2313,6 +2326,9 @@ class StripeMulti(_StripeFitnessModel):
         """ Return a Graph sampled from the ensemble.
         """
         g = super().sample(selfloops=selfloops)
+
+        if selfloops is None:
+            selfloops = self.selfloops
         
         # Sample edges and extract properties
         e_fun = self._sample_layer
@@ -2647,6 +2663,9 @@ class StripeSingleByLabel(_StripeFitnessModel):
         """ Return a Graph sampled from the ensemble.
         """
         g = super().sample(selfloops=selfloops)
+
+        if selfloops is None:
+            selfloops = self.selfloops
         
         # Sample edges and extract properties
         e_fun = self._sample_layer
@@ -2927,6 +2946,9 @@ class StripeSingle(_StripeFitnessModel):
         """ Return a Graph sampled from the ensemble.
         """
         g = super().sample(selfloops=selfloops)
+
+        if selfloops is None:
+            selfloops = self.selfloops
         
         # Sample edges and extract properties
         e_fun = self._sample_layer
