@@ -16,6 +16,15 @@ from math import log
 from math import isinf
 
 
+# Global function definitions
+@jit(nopython=True)
+def in_range(i, ind, fold):
+    if fold:
+        return range(i + 1)
+    else:
+        return range(ind[1] - ind[0])
+
+
 class GraphEnsemble():
     """ General class for graph ensembles.
 
@@ -661,17 +670,15 @@ class FitnessModel(GraphEnsemble):
         exp_d_in = np.zeros(num_v, dtype=np.float64)
 
         if ind_out == ind_in:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(x + 1)
+            fold = True
         else:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(ind_in[1]-ind_in[0])
+            fold = False
 
-        for i in out_range:
+        for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
             f_out_i = fit_out[0][i]
             f_in_i = fit_in[1][i]
-            for j in in_range(i):
+            for j in in_range(i, ind_in, fold):
                 ind_j = ind_in[0]+j
                 f_out_j = fit_out[1][j]
                 f_in_j = fit_in[0][j]
@@ -1544,19 +1551,17 @@ class _StripeFitnessModel(FitnessModel):
         exp_d_in = np.zeros(num_v, dtype=np.float64)
 
         if ind_out == ind_in:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(x + 1)
+            fold = True
         else:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(ind_in[1]-ind_in[0])
+            fold = False
 
-        for i in out_range:
+        for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
             l_out_i = lbl_out[indptr_out[i]:indptr_out[i+1]]
             f_out_i = fit_out[indptr_out[i]:indptr_out[i+1]]
             l_in_i = lbl_in[indptr_in[i]:indptr_in[i+1]]
             f_in_i = fit_in[indptr_in[i]:indptr_in[i+1]]
-            for j in in_range(i):
+            for j in in_range(i, ind_in, fold):
                 ind_j = ind_in[0]+j
                 l_out_j = lbl_out[indptr_out[j]:indptr_out[j+1]]
                 f_out_j = fit_out[indptr_out[j]:indptr_out[j+1]]
@@ -1632,19 +1637,17 @@ class _StripeFitnessModel(FitnessModel):
         av_nn = np.zeros(prop.shape, dtype=np.float64)
 
         if ind_out == ind_in:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(x + 1)
+            fold = True
         else:
-            out_range = range(ind_out[1]-ind_out[0])
-            def in_range(x): range(ind_in[1]-ind_in[0])        
+            fold = False
 
-        for i in out_range:
+        for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
             l_out_i = lbl_out[indptr_out[i]:indptr_out[i+1]]
             f_out_i = fit_out[indptr_out[i]:indptr_out[i+1]]
             l_in_i = lbl_in[indptr_in[i]:indptr_in[i+1]]
             f_in_i = fit_in[indptr_in[i]:indptr_in[i+1]]
-            for j in in_range(i):
+            for j in in_range(i, ind_in, fold):
                 ind_j = ind_in[0]+j
                 l_out_j = lbl_out[indptr_out[j]:indptr_out[j+1]]
                 f_out_j = fit_out[indptr_out[j]:indptr_out[j+1]]
