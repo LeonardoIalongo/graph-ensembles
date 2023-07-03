@@ -1397,9 +1397,6 @@ class _StripeFitnessModel(FitnessModel):
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before.')
 
-        if selfloops is None:
-            selfloops = self.selfloops
-
         if isinstance(g, graphs.DirectedGraph):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(kind='csr')
@@ -1452,7 +1449,7 @@ class _StripeFitnessModel(FitnessModel):
             selfloops = self.selfloops
 
         # Generate uninitialised graph object
-        g = graphs.DirectedLabelGraph.__new__(graphs.DirectedLabelGraph)
+        g = graphs.LabelGraph.__new__(graphs.LabelGraph)
         g.lv = graphs.LabelVertexList()
 
         # Initialise common object attributes
@@ -1969,6 +1966,9 @@ class StripeMultiByLabel(_StripeFitnessModel):
         """
         adj = super().log_likelihood(g, selfloops=selfloops)
 
+        if selfloops is None:
+            selfloops = self.selfloops
+
         # Compute log likelihood of graph
         e_fun = self._likelihood_layer
         p_ij = self.p_ij
@@ -2293,6 +2293,9 @@ class StripeMulti(_StripeFitnessModel):
         for each layer.
         """
         adj = super().log_likelihood(g, selfloops=selfloops)
+
+        if selfloops is None:
+            selfloops = self.selfloops
 
         # Compute log likelihood of graph
         e_fun = self._likelihood_layer
@@ -2625,6 +2628,9 @@ class StripeSingleByLabel(_StripeFitnessModel):
         """
         adj = super().log_likelihood(g, selfloops=selfloops)
 
+        if selfloops is None:
+            selfloops = self.selfloops
+
         # Compute log likelihood of graph
         e_fun = self._likelihood_layer
         p_ij = self.p_ij
@@ -2901,6 +2907,9 @@ class StripeSingle(_StripeFitnessModel):
         for each layer.
         """
         adj = super().log_likelihood(g, selfloops=selfloops)
+
+        if selfloops is None:
+            selfloops = self.selfloops
 
         # Compute log likelihood of graph
         e_fun = self._likelihood_layer
