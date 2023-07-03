@@ -1640,16 +1640,16 @@ class _StripeFitnessModel(FitnessModel):
 
         for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
-            l_out_i = lbl_out[0][indptr_out[i]:indptr_out[i+1]]
-            f_out_i = fit_out[0][indptr_out[i]:indptr_out[i+1]]
-            l_in_i = lbl_in[1][indptr_in[i]:indptr_in[i+1]]
-            f_in_i = fit_in[1][indptr_in[i]:indptr_in[i+1]]
+            l_out_i = lbl_out[0][indptr_out[0][i]:indptr_out[0][i+1]]
+            f_out_i = fit_out[0][indptr_out[0][i]:indptr_out[0][i+1]]
+            l_in_i = lbl_in[1][indptr_in[1][i]:indptr_in[1][i+1]]
+            f_in_i = fit_in[1][indptr_in[1][i]:indptr_in[1][i+1]]
             for j in in_range(i, ind_in, fold):
                 ind_j = ind_in[0]+j
-                l_out_j = lbl_out[1][indptr_out[j]:indptr_out[j+1]]
-                f_out_j = fit_out[1][indptr_out[j]:indptr_out[j+1]]
-                l_in_j = lbl_in[0][indptr_in[j]:indptr_in[j+1]]
-                f_in_j = fit_in[0][indptr_in[j]:indptr_in[j+1]]
+                l_out_j = lbl_out[1][indptr_out[1][j]:indptr_out[1][j+1]]
+                f_out_j = fit_out[1][indptr_out[1][j]:indptr_out[1][j+1]]
+                l_in_j = lbl_in[0][indptr_in[0][j]:indptr_in[0][j+1]]
+                f_in_j = fit_in[0][indptr_in[0][j]:indptr_in[0][j+1]]
             
                 if ind_i != ind_j:
                     pij = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j)
