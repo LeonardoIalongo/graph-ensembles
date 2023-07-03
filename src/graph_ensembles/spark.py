@@ -2059,7 +2059,7 @@ class StripeMulti(_StripeFitnessModel):
 
         if hasattr(self, 'num_edges'):
             msg = ('Number of edges must be a single number.')
-            assert len(self.num_edges) == self.num_labels, msg
+            assert len(self.num_edges) == 1, msg
 
         if hasattr(self, 'param'):
             msg = ('Parameter must be a single number.')
@@ -2905,7 +2905,7 @@ class StripeSingle(_StripeFitnessModel):
         delta = self.param[0]
         tmp = self.layers_rdd.map(
             lambda x: e_fun(
-                p_ij, delta[x[0]], x[1].indices, x[2].indices, 
+                p_ij, delta, x[1].indices, x[2].indices, 
                 x[1].data, x[2].data, prop, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
