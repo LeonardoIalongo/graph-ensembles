@@ -2623,10 +2623,10 @@ class StripeSingleByLabel(_StripeFitnessModel):
         tmp = self.layers_rdd.map(
             lambda x: e_fun(
                 p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, ndir, selfloops))
+                x[1].data, x[2].data, prop, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
-        
+
         # Test that mask is the same
         ind = deg != 0
         msg = 'Got a av_nn for an empty neighbourhood.'
@@ -2906,7 +2906,7 @@ class StripeSingle(_StripeFitnessModel):
         tmp = self.layers_rdd.map(
             lambda x: e_fun(
                 p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, ndir, selfloops))
+                x[1].data, x[2].data, prop, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
         
@@ -2987,7 +2987,7 @@ class StripeSingle(_StripeFitnessModel):
         p_jac = self.p_jac_ij
         slflp = self.selfloops
         tmp = self.layers_rdd.map(
-            lambda x: f_jac(p_jac, delta, x[1].indices, x[2].indices, 
+            lambda x: f_jac(p_jac, delta[0], x[1].indices, x[2].indices, 
                             x[1].data, x[2].data, slflp))
         f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
         f -= self.num_edges
