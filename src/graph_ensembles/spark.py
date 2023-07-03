@@ -943,15 +943,16 @@ class StripeFitnessModel():
     multi_label: bool
         selects if the model allows for an edge to exist in multiple layers
     """
-    def __new__(cls, sc, *args, per_label=True, **kwargs):
+    def __new__(cls, sc, *args, per_label=True, multi_label=None, **kwargs):
 
         # Check if first argument is a graph
         if ((len(args) > 0) & isinstance(args[0], graphs.WeightedLabelGraph) &
-                ('multi_label' not in kwargs)):
+                (multi_label is None)):
             # If multi_label is not given check in graph
             multi_label = mt.check_multi_label_edges(args[0].e)
         else:
-            multi_label = True
+            if multi_label is None:
+                multi_label = True
 
         # If multi_label is specified then use that 
 
@@ -1030,10 +1031,6 @@ class _StripeFitnessModel(FitnessModel):
                 self.num_labels = g.num_labels
                 self.id_dtype = g.id_dtype
                 self.label_dtype = g.label_dtype
-                if self.per_label:
-                    self.num_edges = g.num_edges_label
-                else:
-                    self.num_edges = g.num_edges
                 self.fit_out = g.out_strength_by_label(get=True)
                 self.fit_out = lib.to_sparse(
                     self.fit_out, (self.num_vertices, self.num_labels),
@@ -2999,15 +2996,16 @@ class StripeInvariantModel():
     multi_label: bool
         selects if the model allows for an edge to exist in multiple layers
     """
-    def __new__(cls, sc, *args, per_label=True, **kwargs):
+    def __new__(cls, sc, *args, per_label=True, multi_label=None, **kwargs):
 
         # Check if first argument is a graph
         if ((len(args) > 0) & isinstance(args[0], graphs.WeightedLabelGraph) &
-                ('multi_label' not in kwargs)):
+                (multi_label is None)):
             # If multi_label is not given check in graph
             multi_label = mt.check_multi_label_edges(args[0].e)
         else:
-            multi_label = True
+            if multi_label is None:
+                multi_label = True
 
         # If multi_label is specified then use that 
 
