@@ -2679,7 +2679,7 @@ class StripeSingle(_StripeFitnessModel):
 
         if hasattr(self, 'num_edges'):
             msg = ('Number of edges must be a single number.')
-            assert len(self.num_edges) == self.num_labels, msg
+            assert len(self.num_edges) == 1, msg
 
         if hasattr(self, 'param'):
             msg = ('Parameter must be a single number.')
