@@ -1601,11 +1601,11 @@ class _StripeFitnessModel(FitnessModel):
             for j, ind_j in enumerate(ind_in):
                 f_in_j = fit_in[j]
                 if ind_i != ind_j:
-                    pij = p_ij(param, fit_out[i], fit_in[j])
+                    pij = p_ij(param, f_out_i, f_in_j)
 
                     if (ind_i in ind_in) and (ind_j in ind_out):
-                        f_in_i = fit_in[np.where(ind_in == ind_i)]
-                        f_out_j = fit_out[np.where(ind_out == ind_j)]
+                        f_in_i = fit_in[np.where(ind_in == ind_i)][0]
+                        f_out_j = fit_out[np.where(ind_out == ind_j)][0]
                         pji = p_ij(param, f_out_j, f_in_i)
                         p = pij + pji - pij*pji
                         exp_d_out[ind_j] += pji
@@ -1697,11 +1697,11 @@ class _StripeFitnessModel(FitnessModel):
             for j, ind_j in enumerate(ind_in):
                 f_in_j = fit_in[j]
                 if ind_i != ind_j:
-                    pij = p_ij(param, fit_out[i], fit_in[j])
+                    pij = p_ij(param, f_out_i, f_in_j)
 
                     if (ind_i in ind_in) and (ind_j in ind_out):
-                        f_in_i = fit_in[np.where(ind_in == ind_i)]
-                        f_out_j = fit_out[np.where(ind_out == ind_j)]
+                        f_in_i = fit_in[np.where(ind_in == ind_i)][0]
+                        f_out_j = fit_out[np.where(ind_out == ind_j)][0]
                         pji = p_ij(param, f_out_j, f_in_i)
                         p = pij + pji - pij*pji
                         if ndir == 'out':
