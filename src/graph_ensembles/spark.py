@@ -1491,7 +1491,7 @@ class _StripeFitnessModel(FitnessModel):
         for i, out_i in enumerate(ind_out):
             for j, in_j in enumerate(ind_in):
                 if (out_i != in_j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param[0], fit_out[i], fit_in[j])
+                    p_tmp, jac_tmp = p_jac_ij(param, fit_out[i], fit_in[j])
                     f += p_tmp
                     jac += jac_tmp
 
@@ -1601,7 +1601,7 @@ class _StripeFitnessModel(FitnessModel):
                     if (ind_i in ind_in) and (ind_j in ind_out):
                         f_in_i = fit_in[np.where(ind_in == ind_i)]
                         f_out_j = fit_out[np.where(ind_out == ind_j)]
-                        pji = p_ij(param[0], f_out_j, f_in_i)
+                        pji = p_ij(param, f_out_j, f_in_i)
                         p = pij + pji - pij*pji
                         exp_d_out[ind_j] += pji
                         exp_d_in[ind_i] += pji
@@ -1699,7 +1699,7 @@ class _StripeFitnessModel(FitnessModel):
                     if (ind_i in ind_in) and (ind_j in ind_out):
                         f_in_i = fit_in[np.where(ind_in == ind_i)]
                         f_out_j = fit_out[np.where(ind_out == ind_j)]
-                        pji = p_ij(param[0], f_out_j, f_in_i)
+                        pji = p_ij(param, f_out_j, f_in_i)
                         p = pij + pji - pij*pji
                         if ndir == 'out':
                             av_nn[ind_j] += pji*prop[ind_i]
@@ -2464,9 +2464,9 @@ class StripeSingleByLabel(_StripeFitnessModel):
         p_ij = self.p_ij
         e_fun = self.exp_edges_layer
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], e_fun(
+            lambda x: e_fun(
                 p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, slflp)))
+                x[1].data, x[2].data, slflp))
         
         self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
 
@@ -2512,9 +2512,9 @@ class StripeSingleByLabel(_StripeFitnessModel):
         p_ij = self.p_ij
         e_fun = self.exp_degrees_layer
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], e_fun(
+            lambda x: e_fun(
                 p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, num_v, slflp)))
+                x[1].data, x[2].data, num_v, slflp))
 
         # Initialize results
         exp_d = np.zeros(num_v, dtype=np.float64)
@@ -2599,9 +2599,9 @@ class StripeSingleByLabel(_StripeFitnessModel):
         p_ij = self.p_ij
         delta = self.param
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], e_fun(
+            lambda x: e_fun(
                 p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, ndir, selfloops)))
+                x[1].data, x[2].data, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
         
@@ -2741,9 +2741,9 @@ class StripeSingle(_StripeFitnessModel):
         p_ij = self.p_ij
         e_fun = self.exp_edges_layer
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], e_fun(
+            lambda x: e_fun(
                 p_ij, delta, x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, slflp)))
+                x[1].data, x[2].data, slflp))
                 
         self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
 
@@ -2789,9 +2789,9 @@ class StripeSingle(_StripeFitnessModel):
         p_ij = self.p_ij
         e_fun = self.exp_degrees_layer
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], e_fun(
+            lambda x: e_fun(
                 p_ij, delta, x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, num_v, slflp)))
+                x[1].data, x[2].data, num_v, slflp))
 
         # Initialize results
         exp_d = np.zeros(num_v, dtype=np.float64)
@@ -2876,9 +2876,9 @@ class StripeSingle(_StripeFitnessModel):
         p_ij = self.p_ij
         delta = self.param[0]
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], e_fun(
+            lambda x: e_fun(
                 p_ij, delta[x[0]], x[1].indices, x[2].indices, 
-                x[1].data, x[2].data, ndir, selfloops)))
+                x[1].data, x[2].data, ndir, selfloops))
         av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
                          lambda x, y: x + y)
         
@@ -2953,8 +2953,8 @@ class StripeSingle(_StripeFitnessModel):
         p_jac = self.p_jac_ij
         slflp = self.selfloops
         tmp = self.layers_rdd.map(
-            lambda x: (x[0], f_jac(p_jac, delta, x[1].indices, x[2].indices, 
-                                   x[1].data, x[2].data, slflp)))
+            lambda x: f_jac(p_jac, delta, x[1].indices, x[2].indices, 
+                            x[1].data, x[2].data, slflp))
         f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
         f -= self.num_edges
         return f, jac
