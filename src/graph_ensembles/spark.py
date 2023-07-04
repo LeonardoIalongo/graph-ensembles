@@ -962,16 +962,15 @@ class StripeFitnessModel():
                 multi_label = True
 
         # If multi_label is specified then use that 
-
         if per_label:
             if multi_label:
                 return StripeMultiByLabel(sc, *args, **kwargs)
             else:
-                return StripeMulti(sc, *args, **kwargs)
+                return StripeSingleByLabel(sc, *args, **kwargs)
 
         else:
             if multi_label:
-                return StripeSingleByLabel(sc, *args, **kwargs)
+                return StripeMulti(sc, *args, **kwargs)
             else:
                 return StripeSingle(sc, *args, **kwargs)
 
@@ -3047,11 +3046,11 @@ class StripeInvariantModel():
             if multi_label:
                 return StripeInvMultiByLabel(sc, *args, **kwargs)
             else:
-                return StripeInvMulti(sc, *args, **kwargs)
+                return StripeInvSingleByLabel(sc, *args, **kwargs)
 
         else:
             if multi_label:
-                return StripeInvSingleByLabel(sc, *args, **kwargs)
+                return StripeInvMulti(sc, *args, **kwargs)
             else:
                 return StripeInvSingle(sc, *args, **kwargs)
 
