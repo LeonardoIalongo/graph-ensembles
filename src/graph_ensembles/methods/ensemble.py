@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.random as rng
 from numba import jit
-from math import ceil, sqrt, isinf, exp, log
+from math import ceil, sqrt, isinf, exp, expm1, log
 
 
 # --------------- PROBABILITY FUNCTIONALS ---------------
@@ -30,7 +30,7 @@ def p_invariant(param, x_i, x_j):
     if isinf(tmp):
         return 1
     else:
-        return 1 - exp(-tmp)
+        return - expm1(-tmp)
 
 
 @jit(nopython=True)

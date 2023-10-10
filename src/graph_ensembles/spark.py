@@ -12,6 +12,7 @@ import warnings
 from numba import jit
 from math import floor
 from math import exp
+from math import expm1
 from math import log
 from math import isinf
 
@@ -873,7 +874,7 @@ class ScaleInvariantModel(FitnessModel):
         if isinf(tmp):
             return 1.0
         else:
-            return 1 - exp(-tmp)
+            return - expm1(-tmp)
 
     @staticmethod
     @jit(nopython=True)
@@ -886,7 +887,7 @@ class ScaleInvariantModel(FitnessModel):
         if isinf(tmp1):
             return 1.0, 0.0
         else:
-            return 1 - exp(-tmp1), tmp * exp(-tmp1)
+            return - expm1(-tmp1), tmp * exp(-tmp1)
 
     @staticmethod
     @jit(nopython=True)
@@ -3120,7 +3121,7 @@ class StripeInvMultiByLabel(StripeMultiByLabel, _StripeInvariantModel):
         if isinf(tmp):
             return 1.0
         else:
-            return 1 - exp(-tmp)
+            return - expm1(-tmp)
 
 
 class StripeInvMulti(StripeMulti, _StripeInvariantModel):
@@ -3151,7 +3152,7 @@ class StripeInvMulti(StripeMulti, _StripeInvariantModel):
         if isinf(tmp):
             return 1.0
         else:
-            return 1 - exp(-tmp)
+            return - expm1(-tmp)
 
     @staticmethod
     @jit(nopython=True)
@@ -3177,7 +3178,7 @@ class StripeInvMulti(StripeMulti, _StripeInvariantModel):
         if isinf(tmp):
             return 1.0, 0.0
         else:
-            return 1 - exp(-tmp1), tmp*exp(-tmp1)
+            return - expm1(-tmp1), tmp*exp(-tmp1)
 
 
 class StripeInvSingleByLabel(StripeSingleByLabel, _StripeInvariantModel):
