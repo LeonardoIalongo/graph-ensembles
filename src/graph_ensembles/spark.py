@@ -953,10 +953,11 @@ class StripeFitnessModel():
     def __new__(cls, sc, *args, per_label=True, multi_label=None, **kwargs):
 
         # Check if first argument is a graph
-        if ((len(args) > 0) & isinstance(args[0], graphs.WeightedLabelGraph) &
-                (multi_label is None)):
-            # If multi_label is not given check in graph
-            multi_label = mt.check_multi_label_edges(args[0].e)
+        if len(args) > 0:
+            if (isinstance(args[0], graphs.WeightedLabelGraph) &
+                    (multi_label is None)):
+                # If multi_label is not given check in graph
+                multi_label = mt.check_multi_label_edges(args[0].e)
         else:
             if multi_label is None:
                 multi_label = True
@@ -3032,10 +3033,11 @@ class StripeInvariantModel():
     def __new__(cls, sc, *args, per_label=True, multi_label=None, **kwargs):
 
         # Check if first argument is a graph
-        if ((len(args) > 0) & isinstance(args[0], graphs.WeightedLabelGraph) &
-                (multi_label is None)):
-            # If multi_label is not given check in graph
-            multi_label = mt.check_multi_label_edges(args[0].e)
+        if len(args) > 0:
+            if (isinstance(args[0], graphs.WeightedLabelGraph) &
+                    (multi_label is None)):
+                # If multi_label is not given check in graph
+                multi_label = mt.check_multi_label_edges(args[0].e)
         else:
             if multi_label is None:
                 multi_label = True
