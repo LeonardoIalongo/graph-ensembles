@@ -4,7 +4,6 @@ reconstruction, filtering or pattern detection among others. """
 
 from . import graphs
 from . import lib
-from . import methods as mt
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
