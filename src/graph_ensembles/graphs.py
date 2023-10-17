@@ -270,7 +270,7 @@ class sGraph():
     @jit(nopython=True)
     def count_indices_by_group(mat, g_arr):
         # Initialize empty result
-        M = g_arr.max()
+        M = g_arr.max() + 1
         res = np.zeros((mat.shape[0], M), dtype=np.int64)
         
         # Count group occurrences
