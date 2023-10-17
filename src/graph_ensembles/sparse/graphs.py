@@ -208,10 +208,10 @@ class sGraph():
 
         msg = 'Some vertices in e are not in v.'
         try:
-            src_array = e['_src'].apply(lambda x: self.id_dict.get(x)).values
-            src_array = src_array.astype(self.id_dtype)
-            dst_array = e['_dst'].apply(lambda x: self.id_dict.get(x)).values
-            dst_array = dst_array.astype(self.id_dtype)
+            e['_src'] = e['_src'].apply(lambda x: self.id_dict.get(x))
+            src_array = e['_src'].values.astype(self.id_dtype)
+            e['_dst'] = e['_dst'].apply(lambda x: self.id_dict.get(x))
+            dst_array = e['_dst'].values.astype(self.id_dtype)
         except KeyError:
             raise Exception(msg)
         except Exception:
@@ -313,6 +313,14 @@ class DirectedGraph(sGraph):
         compute the out degree sequence
     in_degree:
         compute the in degree sequence
+    out_degree_by_group:
+        compute the out degree sequence by group as a 2D array
+    in_degree_by_group:
+        compute the in degree sequence by group as a 2D array
+    adjacency_matrix:
+        return the directed adjacency matrix of the graph
+    to_networkx:
+        return a networkx DiGraph equivalent
     """
 
     def __init__(self, v, e, v_id, src, dst, v_group=None):
@@ -461,6 +469,12 @@ class WeightedGraph(DirectedGraph):
         compute the out strength sequence
     in_strength:
         compute the in strength sequence
+    strength_by_group:
+        compute the total strength sequence by group as a 2D array
+    out_strength_by_group:
+        compute the out strength sequence by group as a 2D array
+    in_strength_by_group:
+        compute the in strength sequence by group as a 2D array
     """
     def __init__(self, v, e, v_id, src, dst, weight, v_group=None):
         """Return a WeightedGraph object given vertices and edges.
@@ -493,16 +507,88 @@ class WeightedGraph(DirectedGraph):
         if isinstance(weight, list) and len(weight) == 1:
             weight = weight[0]
 
-        # Convert weights to float64 for computations
-        self.e = append_fields(
-            self.e,
-            'weight',
-            e[weight].to_numpy().astype(np.float64)[self.sort_ind],
-            dtypes=np.float64)
+        # Construct weighted adjacency matrix
+        src_array = e['_src'].values.astype(self.id_dtype)
+        dst_array = e['_dst'].values.astype(self.id_dtype)
+        val_array = e[weight].values
+
+        self.adj_mat = sp.coo_array(
+            (val_array, (src_array, dst_array)), 
+            shape=(self.num_vertices, self.num_vertices)).tocsr()
 
         # Ensure all weights are positive
         msg = 'Zero or negative edge weights are not supported.'
-        assert np.all(self.e.weight > 0), msg
+        assert np.all(self.adj_mat.data > 0), msg
 
         # Compute total weight
-        self.total_weight = np.sum(self.e.weight)
+        self.total_weight = np.sum(self.adj_mat.data)
+
+    def strength(self, recompute=False):
+        """ Compute the total strength sequence.
+        """
+        if not hasattr(self, '_strength') or recompute:
+            self._strength = (self.out_strength() + self.in_strength()
+                              - self.adj_mat.diagonal())
+
+        return self._strength
+
+    def out_strength(self, recompute=False):
+        """ Compute the out strength sequence.
+        """
+        if not hasattr(self, '_out_strength') or recompute:
+            self._out_strength = self.adj_mat.sum(axis=1)
+
+        return self._out_strength
+
+    def in_strength(self, recompute=False):
+        """ Compute the in strength sequence.
+        """
+        if not hasattr(self, '_in_strength') or recompute:
+            self._in_strength = self.adj_mat.sum(axis=0)
+
+        return self._in_strength
+
+    def strength_by_group(self, recompute=False):
+        """ Compute the total strength sequence to and from each group.
+        """
+        if not hasattr(self, '_strength_by_group') or recompute:
+            self._strength_by_group = self.out_strength_by_group() 
+            self._strength_by_group += self.in_strength_by_group()
+            diag = self.adj_mat.diagonal()
+            self._strength_by_group = self._strength_by_group.todok()
+            for i, g in enumerate(self.groups):
+                self._strength_by_group[i, g] -= diag[i]
+            self._strength_by_group = self._strength_by_group.tocsr()
+
+        return self._strength_by_group
+
+    def out_strength_by_group(self, recompute=False):
+        """ Compute the out strength sequence to each group.
+        """
+        if not hasattr(self, '_out_strength_by_group') or recompute:
+            id_arr, grp_arr, val_arr = self.sum_by_group(
+                self.adj_mat.indptr, self.adj_mat.indices, 
+                self.adj_mat.data, self.groups)
+            self._out_strength_by_group = sp.coo_array(
+                (val_arr, (id_arr, grp_arr)), 
+                shape=(self.num_vertices, self.num_groups)).tocsr()
+
+        return self._out_strength_by_group
+
+    def in_strength_by_group(self, recompute=False):
+        """ Compute the in strength sequence from each group.
+        """
+        if not hasattr(self, '_in_strength_by_group') or recompute:
+            adj = self.adj_mat.tocsc()
+            id_arr, grp_arr, val_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups)
+            self._in_strength_by_group = sp.coo_array(
+                (val_arr, (id_arr, grp_arr)), 
+                shape=(self.num_vertices, self.num_groups)).tocsr()
+
+        return self._in_strength_by_group
+
+    def weighted_adjacency_matrix(self):
+        """ Return the weighted adjacency matrix.
+        """
+        return self.adj_mat
