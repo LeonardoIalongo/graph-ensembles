@@ -1,13 +1,17 @@
 """ This module defines the classes of graphs that support the creation of
-ensembles and the exploration of their properties. """
+ensembles and the exploration of their properties.
+
+This version stores all properties of the graphs as numpy arrays and is 
+recommended for small or dense graphs. For large sparse graphs consider the 
+sparse module or the spark one. 
+"""
 
 import numpy as np
-from numpy.lib.recfunctions import rec_append_fields as append_fields
 import pandas as pd
-from . import methods as mt
 from . import lib
 import warnings
 import networkx as nx
+from numba import jit
 
 
 class Graph():
@@ -82,12 +86,6 @@ class Graph():
                                      v_group=v_group)
 
 
-class GroupVertexList():
-    """ Class to store results of group-vertex properties.
-    """
-    pass
-
-
 class sGraph():
     """ General class for graphs.
 
@@ -97,12 +95,10 @@ class sGraph():
         number of vertices in the graph
     num_edges: int
         number of distinct directed edges in the graph
-    v: numpy.rec.array
-        array containing the computed properties of the vertices
-    e: numpy.rec.array
-        array containing the edge list in a condensed format
+    adj_mat: numpy.array
+        the adjacency matrix of the graph
     id_dict: dict
-        dictionary to convert original identifiers to positions in v
+        dictionary to convert original identifiers to new position id
     id_dtype: numpy.dtype
         type of the id (e.g. np.uint16)
     num_groups: int  (or None)
@@ -111,8 +107,6 @@ class sGraph():
         dictionary to convert v_group columns into numeric ids
     group_dtype: numpy.dtype
         type of the group id
-    gv: GroupVertexList
-        collector object for all properties of the group vertex pair
 
     Methods
     -------
@@ -156,39 +150,24 @@ class sGraph():
 
         # Determine size of indices
         self.num_vertices = len(v.index)
-        num_bytes = mt.get_num_bytes(self.num_vertices)
+        num_bytes = self.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype('u' + str(num_bytes))
-        self.v = np.arange(self.num_vertices, dtype=self.id_dtype).view(
-                type=np.recarray, dtype=[('id', self.id_dtype)])
-
-        # If v_group is given then create dict and add to v
-        if v_group is not None:
-            self.gv = GroupVertexList()
-            if isinstance(v_group, list) and len(v_group) == 1:
-                v_group = v_group[0]
-
-            self.group_dict = mt.generate_id_dict(v, v_group)
-            self.num_groups = len(self.group_dict)
-            num_bytes = mt.get_num_bytes(self.num_groups)
-            self.group_dtype = np.dtype('u' + str(num_bytes))
-            groups = np.empty(self.num_vertices, dtype=self.group_dtype)
-            i = 0
-            if isinstance(v_group, list):
-                for row in v[v_group].itertuples(index=False):
-                    groups[i] = self.group_dict[row]
-                    i += 1
-            elif isinstance(v_group, str):
-                for row in v[v_group]:
-                    groups[i] = self.group_dict[row]
-                    i += 1
-            else:
-                raise ValueError('v_group must be str or list of str.')
-            self.v = append_fields(self.v, 'group', groups)
 
         # Get dictionary of id to internal id (_id)
         # also checks that no id in v is repeated
         try:
-            self.id_dict = mt.generate_id_dict(v, v_id, no_rep=True)
+            if isinstance(v_id, list):
+                v['_node'] = list(zip(*[v[x] for x in v_id]))
+            else:
+                v['_node'] = v[v_id]
+
+            self.id_dict = self.generate_id_dict(v, '_node', check_unique=True)
+
+            # Create index with new id value and sort
+            v = v.set_index(v['_node'].apply(
+                lambda x: self.id_dict.get(x)).values)
+            v = v.sort_index()
+
         except ValueError as err:
             raise err
         except Exception:
@@ -196,89 +175,109 @@ class sGraph():
                        'dataframe.')
             raise Exception(rep_msg)
 
+        # If v_group is given then create dict and array
+        if v_group is not None:
+            if isinstance(v_group, list) and len(v_group) == 1:
+                v_group = v_group[0]
+
+            if isinstance(v_group, list):
+                v['_group'] = list(zip(*[v[x] for x in v_group]))
+            else:
+                v['_group'] = v[v_group]
+
+            self.group_dict = self.generate_id_dict(v, '_group')
+            self.num_groups = len(self.group_dict)
+            num_bytes = self.get_num_bytes(self.num_groups)
+            self.group_dtype = np.dtype('u' + str(num_bytes))
+            self.groups = v['_group'].apply(
+                lambda x: self.group_dict.get(x)
+                ).values.astype(self.group_dtype)
+
         # Check that no vertex id in e is not present in v
         # and generate optimized edge list
-        smsg = 'Some source vertices are not in v.'
-        dmsg = 'Some destination vertices are not in v.'
-        src_array = np.empty(len(e.index), dtype=self.id_dtype)
-        dst_array = np.empty(len(e.index), dtype=self.id_dtype)
-
         if isinstance(src, list) and isinstance(dst, list):
-            n = len(src)
-            m = len(dst)
-            i = 0
-            for row in e[src + dst].itertuples(index=False):
-                row_src = row[0:n]
-                row_dst = row[n:n+m]
-                if row_src not in self.id_dict:
-                    assert False, smsg
-                if row_dst not in self.id_dict:
-                    assert False, dmsg
-                src_array[i] = self.id_dict[row_src]
-                dst_array[i] = self.id_dict[row_dst]
-                i += 1
-
+            e['_src'] = list(zip(*[e[x] for x in src]))
+            e['_dst'] = list(zip(*[e[x] for x in dst]))
         elif isinstance(src, str) and isinstance(dst, str):
-            i = 0
-            for row in e[[src, dst]].itertuples(index=False):
-                row_src = row[0]
-                row_dst = row[1]
-                if row_src not in self.id_dict:
-                    assert False, smsg
-                if row_dst not in self.id_dict:
-                    assert False, dmsg
-                src_array[i] = self.id_dict[row_src]
-                dst_array[i] = self.id_dict[row_dst]
-                i += 1
-
+            e['_src'] = e[src]
+            e['_dst'] = e[dst]
         else:
             raise ValueError('src and dst can be either both lists or str.')
 
-        self.e = np.rec.array(
-                (src_array, dst_array),
-                dtype=[('src', self.id_dtype), ('dst', self.id_dtype)])
-        self.num_edges = mt.compute_num_edges(self.e)
+        msg = 'Some vertices in e are not in v.'
+        try:
+            src_array = e['_src'].apply(lambda x: self.id_dict.get(x)).values
+            src_array = src_array.astype(self.id_dtype)
+            dst_array = e['_dst'].apply(lambda x: self.id_dict.get(x)).values
+            dst_array = dst_array.astype(self.id_dtype)
+        except KeyError:
+            raise Exception(msg)
+        except Exception:
+            raise Exception()
 
-    def degree(self, get=False):
+        self.adj_mat = np.zeros((self.num_vertices, self.num_vertices), 
+                                dtype=np.uint8)
+        self.adj_mat[src_array, dst_array] = 1
+        self.num_edges = self.adj_mat.sum()
+
+    def get_degree(self, recompute=False):
         """ Compute the undirected degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
         """
-        if 'degree' in self.v.dtype.names:
-            degree = self.v.degree
-        else:
-            degree = mt.compute_degree(self.e, self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(np.max(degree)))
-            self.v = append_fields(self.v, 'degree', degree.astype(dtype),
-                                   dtypes=dtype)
+        if not hasattr(self, 'degree') or recompute:
+            if not hasattr(self, 'sym_adj_mat'):
+                self.sym_adj_mat = self.adj_mat + self.adj_mat.T
+                self.sym_adj_mat[self.sym_adj_mat != 0] = 1
+            self.degree = self.sym_adj_mat.sum(axis=0)
 
-        if get:
-            return degree
+        return self.degree
 
-    def degree_by_group(self, get=False):
+    def get_degree_by_group(self, recompute=False):
         """ Compute the undirected degree sequence to and from each group.
-
-        If get is true it returns the array otherwise it adds the result to v.
         """
-        if not hasattr(self, 'gv'):
-            raise Exception('Graph object does not contain group info.')
+        if not hasattr(self, 'degree_by_group') or recompute:
+            if not hasattr(self, 'sym_adj_mat'):
+                self.sym_adj_mat = self.adj_mat + self.adj_mat.T
+                self.sym_adj_mat[self.sym_adj_mat != 0] = 1
+            
+            self.count_indices_by_group(self.sym_adj_mat, self.groups)
 
-        if not hasattr(self.gv, 'degree'):
-            d, d_dict = mt.compute_degree_by_group(self.e, self.v.group)
-            dtype = 'u' + str(mt.get_num_bytes(np.max(d[:, 2])))
-            self.gv.degree = d.view(
-                type=np.recarray,
-                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
-                ).reshape((d.shape[0],)).astype(
-                [('id', self.id_dtype),
-                 ('group', self.group_dtype),
-                 ('value', dtype)]
-                )
-            self.gv.degree.sort()
-            self.gv.degree_dict = d_dict
+        return self.degree_by_group
 
-        if get:
-            return self.gv.degree
+    @staticmethod
+    def get_num_bytes(num_items):
+        """ Determine the number of bytes needed for storing ids for num_items.
+        """
+        return int(max(2**np.ceil(np.log2(np.log2(num_items + 1)/8)), 1))
+
+    @staticmethod
+    def generate_id_dict(df, id_col, check_unique=False):
+        """ Return id dictionary for given dataframe columns.
+        """
+        id_dict = {}
+
+        if check_unique:
+            ids, counts = np.unique(df[id_col], return_counts=check_unique)
+            assert np.all(counts == 1)
+        else:
+            ids = np.unique(df[id_col])
+
+        for i, x in enumerate(ids):
+            id_dict[x] = i
+
+        return id_dict
+
+    @staticmethod
+    @jit(nopython=True)
+    def count_indices_by_group(mat, g_arr):
+        # Initialize empty result
+        M = g_arr.max()
+        res = np.zeros((mat.shape[0], M), dtype=np.int64)
+        
+        # Count group occurrences
+        for i in range(M):
+            res[:, i] = mat[:, np.where(g_arr == i)[0]].sum(axis=1)
+            
+        return res
 
 
 class DirectedGraph(sGraph):
@@ -355,7 +354,7 @@ class DirectedGraph(sGraph):
         else:
             d_out, d_in = mt.compute_in_out_degree(self.e,
                                                    self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
+            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out),
                                                    np.max(d_in))))
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
@@ -375,7 +374,7 @@ class DirectedGraph(sGraph):
         else:
             d_out, d_in = mt.compute_in_out_degree(self.e,
                                                    self.num_vertices)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out),
+            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out),
                                                    np.max(d_in))))
             self.v = append_fields(self.v,
                                    ['out_degree', 'in_degree'],
@@ -396,7 +395,7 @@ class DirectedGraph(sGraph):
         if not hasattr(self.gv, 'out_degree'):
             d_out, d_in, dout_dict, din_dict = \
                 mt.compute_in_out_degree_by_group(self.e, self.v.group)
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out[:, 2]),
+            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out[:, 2]),
                                                    np.max(d_in[:, 2]))))
             self.gv.out_degree = d_out.view(
                 type=np.recarray,
@@ -771,9 +770,9 @@ class LabelGraph(DirectedGraph):
             edge_label = edge_label[0]
 
         # Get dictionary of label to numeric internal label
-        self.label_dict = mt.generate_id_dict(e, edge_label)
+        self.label_dict = self.generate_id_dict(e, edge_label)
         self.num_labels = len(self.label_dict)
-        num_bytes = mt.get_num_bytes(self.num_labels)
+        num_bytes = self.get_num_bytes(self.num_labels)
         self.label_dtype = np.dtype('u' + str(num_bytes))
 
         # Convert labels
@@ -809,7 +808,7 @@ class LabelGraph(DirectedGraph):
 
         # Compute number of edges by label
         ne_label = mt.compute_num_edges_by_label(self.e, self.num_labels)
-        dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+        dtype = 'u' + str(self.get_num_bytes(np.max(ne_label)))
         self.num_edges_label = ne_label.astype(dtype)
 
         # Compute degree (undirected)
@@ -838,7 +837,7 @@ class LabelGraph(DirectedGraph):
         """
         if not hasattr(self.lv, 'degree'):
             d, d_dict = mt.compute_degree_by_label(self.e)
-            dtype = 'u' + str(mt.get_num_bytes(np.max(d[:, 2])))
+            dtype = 'u' + str(self.get_num_bytes(np.max(d[:, 2])))
             self.lv.degree = d.view(
                 type=np.recarray,
                 dtype=[('label', 'u8'), ('id', 'u8'), ('value', 'u8')]
@@ -863,7 +862,7 @@ class LabelGraph(DirectedGraph):
             d_out, d_in, dout_dict, din_dict = \
                 mt.compute_in_out_degree_by_label(self.e)
 
-            dtype = 'u' + str(mt.get_num_bytes(max(np.max(d_out[:, 2]),
+            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out[:, 2]),
                                                    np.max(d_in[:, 2]))))
             self.lv.out_degree = d_out.view(
                 type=np.recarray,
