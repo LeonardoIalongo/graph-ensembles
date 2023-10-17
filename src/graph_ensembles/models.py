@@ -3,7 +3,6 @@ network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
 from . import graphs
-from . import methods as mt
 from . import lib
 import numpy as np
 import scipy.sparse as sp

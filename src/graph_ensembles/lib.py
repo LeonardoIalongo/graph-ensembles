@@ -3,7 +3,6 @@
 """
 
 from . import graphs
-from . import methods as mt
 import numpy as np
 from numba import jit
 from scipy.sparse import coo_matrix
