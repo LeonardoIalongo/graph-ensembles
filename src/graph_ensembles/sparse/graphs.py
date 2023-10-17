@@ -94,8 +94,8 @@ class sGraph():
         number of vertices in the graph
     num_edges: int
         number of distinct directed edges in the graph
-    e: numpy.rec.array
-        array containing the edge list in a condensed format
+    adj_mat: scipy.sparse array
+        adjacency matrix of the graph
     id_dict: dict
         dictionary to convert original identifiers to new position id
     id_dtype: numpy.dtype
@@ -106,12 +106,15 @@ class sGraph():
         dictionary to convert v_group columns into numeric ids
     group_dtype: numpy.dtype
         type of the group id
+    groups: numpy.array
+        array with the group each node belongs to
 
     Methods
     -------
-
     degree:
         compute the undirected degree sequence
+    degree_by_group:
+        compute the undirected degree sequence by group as a 2D array
     """
     def __init__(self, v, e, v_id, src, dst, v_group=None):
         """Return a sGraph object given vertices and edges.
@@ -224,10 +227,9 @@ class sGraph():
         """ Compute the undirected degree sequence.
         """
         if not hasattr(self, '_degree') or recompute:
-            if not hasattr(self, 'sym_adj_mat'):
-                self.sym_adj_mat = self.adj_mat + self.adj_mat.T
-                self.sym_adj_mat.data = np.ones(self.sym_adj_mat.nnz, np.uint8)
-            self._degree = self.sym_adj_mat.sum(axis=0)
+            sym_adj_mat = self.adj_mat + self.adj_mat.T
+            sym_adj_mat.data = np.ones(sym_adj_mat.nnz, np.uint8)
+            self._degree = sym_adj_mat.sum(axis=0)
 
         return self._degree
 
@@ -235,12 +237,13 @@ class sGraph():
         """ Compute the undirected degree sequence to and from each group.
         """
         if not hasattr(self, '_degree_by_group') or recompute:
-            if not hasattr(self, 'sym_adj_mat'):
-                self.sym_adj_mat = self.adj_mat + self.adj_mat.T
-                self.sym_adj_mat.data = np.ones(self.sym_adj_mat.nnz, np.uint8)
+            sym_adj_mat = self.adj_mat + self.adj_mat.T
+            sym_adj_mat.data = np.ones(sym_adj_mat.nnz, np.uint8)
             
-            id_arr, grp_arr, cnt_arr = self.count_indices_by_group(
-                self.sym_adj_mat.indptr, self.sym_adj_mat.indices, self.groups)
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                sym_adj_mat.indptr, sym_adj_mat.indices, 
+                sym_adj_mat.data, self.groups)
+
             self._degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
@@ -272,7 +275,10 @@ class sGraph():
 
     @staticmethod
     @jit(nopython=True)
-    def count_indices_by_group(indptr, indices, g_arr):
+    def sum_by_group(indptr, indices, values, g_arr):
+        """ Sums the values of the matrix along the indices axis using the 
+        provided grouping.
+        """
         # Get number of index of first dimension
         N = len(indptr)-1
         
@@ -282,29 +288,24 @@ class sGraph():
         # Count group occurrences
         id_arr = []
         grp_arr = []
-        cnt_arr = []
+        sum_arr = []
         for i in range(N):
             m = indptr[i]
             n = indptr[i+1]
             gcnt = {}
-            for x in groups[m:n]:
-                if x in gcnt:
-                    gcnt[x] = gcnt[x] + 1
+            for g, v in zip(groups[m:n], values[m:n]):
+                if g in gcnt:
+                    gcnt[g] = gcnt[g] + v
                 else:
-                    gcnt[x] = 1
+                    gcnt[g] = v
             id_arr.extend([i]*len(gcnt.keys()))
             grp_arr.extend(gcnt.keys())
-            cnt_arr.extend(gcnt.values())
-        return id_arr, grp_arr, cnt_arr
+            sum_arr.extend(gcnt.values())
+        return id_arr, grp_arr, sum_arr
 
 
 class DirectedGraph(sGraph):
     """ General class for directed graphs.
-
-    Attributes
-    ----------
-    sort_ind: numpy.array
-        the index used for sorting e
 
     Methods
     -------
@@ -359,7 +360,10 @@ class DirectedGraph(sGraph):
         """ Compute the out degree sequence.
         """
         if not hasattr(self, '_out_degree') or recompute:
-            self._out_degree = self.adj_mat.sum(axis=1)
+            adj = self.adj_mat.copy()
+            adj.data = np.ones(self.adj_mat.nnz, dtype=np.uint8)
+            self._out_degree = adj.sum(axis=1)
+            self._in_degree = adj.sum(axis=0)
 
         return self._out_degree
 
@@ -367,30 +371,49 @@ class DirectedGraph(sGraph):
         """ Compute the in degree sequence.
         """
         if not hasattr(self, '_in_degree') or recompute:
-            self._in_degree = self.adj_mat.sum(axis=0)
+            adj = self.adj_mat.copy()
+            adj.data = np.ones(self.adj_mat.nnz, dtype=np.uint8)
+            self._out_degree = adj.sum(axis=1)
+            self._in_degree = adj.sum(axis=0)
 
         return self._in_degree
 
     def out_degree_by_group(self, recompute=False):
-        """ Compute the out degree sequence to and from each group.
+        """ Compute the out degree sequence to each group.
         """
-        
         if not hasattr(self, '_out_degree_by_group') or recompute:
-            id_arr, grp_arr, cnt_arr = self.count_indices_by_group(
-                self.adj_mat.indptr, self.adj_mat.indices, self.groups)
+            adj = self.adj_mat.copy()
+            adj.data = np.ones(self.adj_mat.nnz, dtype=np.uint8)
+
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups)
             self._out_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), 
+                shape=(self.num_vertices, self.num_groups)).tocsr()
+            adj = adj.tocsc()
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups)
+            self._in_degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
 
         return self._out_degree_by_group
 
     def in_degree_by_group(self, recompute=False):
-        """ Compute the in degree sequence to and from each group.
+        """ Compute the in degree sequence from each group.
         """
         if not hasattr(self, '_in_degree_by_group') or recompute:
-            adj = self.adj_mat.tocsc()
-            id_arr, grp_arr, cnt_arr = self.count_indices_by_group(
-                adj.indptr, adj.indices, self.groups)
+            adj = self.adj_mat.copy()
+            adj.data = np.ones(self.adj_mat.nnz, dtype=np.uint8)
+
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups)
+            self._out_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), 
+                shape=(self.num_vertices, self.num_groups)).tocsr()
+            adj = adj.tocsc()
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups)
             self._in_degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
@@ -398,11 +421,15 @@ class DirectedGraph(sGraph):
         return self._in_degree_by_group
 
     def adjacency_matrix(self):
-        """ Return the adjacency matrix.
+        """ Return the adjacency matrix of the graph.
         """
-        return self.adj_mat
+        adj = self.adj_mat.copy()
+        adj.data = np.ones(self.adj_mat.nnz, dtype=np.uint8)
+        return adj
 
     def to_networkx(self, original=False):
+        """ Return a networkx DiGraph object for this graph.
+        """
         # Initialize DiGraph object
         G = nx.DiGraph(self.adj_mat)
 
@@ -416,3 +443,66 @@ class DirectedGraph(sGraph):
                 G.add_node(i, group=gr)
 
         return G
+
+
+class WeightedGraph(DirectedGraph):
+    """ General class for directed graphs with weighted edges.
+
+    Attributes
+    ----------
+    total_weight: numpy.float64
+        sum of all the weights of the edges
+
+    Methods
+    -------
+    strength:
+        compute the total strength sequence
+    out_strength:
+        compute the out strength sequence
+    in_strength:
+        compute the in strength sequence
+    """
+    def __init__(self, v, e, v_id, src, dst, weight, v_group=None):
+        """Return a WeightedGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        v_id: str or list of str
+            specifies which column uniquely identifies a vertex
+        src: str (list of str not yet supported)
+            identifier column for the source vertex
+        dst: str (list of str not yet supported)
+            identifier column for the destination vertex
+        weight:
+            identifier column for the weight of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
+
+        Returns
+        -------
+        WeightedGraph
+            the graph object
+        """
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
+
+        # If column names are passed as lists with one elements extract str
+        if isinstance(weight, list) and len(weight) == 1:
+            weight = weight[0]
+
+        # Convert weights to float64 for computations
+        self.e = append_fields(
+            self.e,
+            'weight',
+            e[weight].to_numpy().astype(np.float64)[self.sort_ind],
+            dtypes=np.float64)
+
+        # Ensure all weights are positive
+        msg = 'Zero or negative edge weights are not supported.'
+        assert np.all(self.e.weight > 0), msg
+
+        # Compute total weight
+        self.total_weight = np.sum(self.e.weight)
