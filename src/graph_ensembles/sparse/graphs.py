@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 from numba import jit
+import warnings
+import networkx as nx
 
 
 class Graph():
@@ -218,32 +220,32 @@ class sGraph():
 
         self.num_edges = self.adj_mat.nnz
 
-    def get_degree(self, recompute=False):
+    def degree(self, recompute=False):
         """ Compute the undirected degree sequence.
         """
-        if not hasattr(self, 'degree') or recompute:
+        if not hasattr(self, '_degree') or recompute:
             if not hasattr(self, 'sym_adj_mat'):
                 self.sym_adj_mat = self.adj_mat + self.adj_mat.T
                 self.sym_adj_mat.data = np.ones(self.sym_adj_mat.nnz, np.uint8)
-            self.degree = self.sym_adj_mat.sum(axis=0)
+            self._degree = self.sym_adj_mat.sum(axis=0)
 
-        return self.degree
+        return self._degree
 
-    def get_degree_by_group(self, recompute=False):
+    def degree_by_group(self, recompute=False):
         """ Compute the undirected degree sequence to and from each group.
         """
-        if not hasattr(self, 'degree_by_group') or recompute:
+        if not hasattr(self, '_degree_by_group') or recompute:
             if not hasattr(self, 'sym_adj_mat'):
                 self.sym_adj_mat = self.adj_mat + self.adj_mat.T
                 self.sym_adj_mat.data = np.ones(self.sym_adj_mat.nnz, np.uint8)
             
             id_arr, grp_arr, cnt_arr = self.count_indices_by_group(
-                self.sym_adj_mat.indptr, self.indices, self.groups)
-            self.degree_by_group = sp.coo_array(
+                self.sym_adj_mat.indptr, self.sym_adj_mat.indices, self.groups)
+            self._degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
 
-        return self.degree_by_group
+        return self._degree_by_group
 
     @staticmethod
     def get_num_bytes(num_items):
@@ -294,3 +296,123 @@ class sGraph():
             grp_arr.extend(gcnt.keys())
             cnt_arr.extend(gcnt.values())
         return id_arr, grp_arr, cnt_arr
+
+
+class DirectedGraph(sGraph):
+    """ General class for directed graphs.
+
+    Attributes
+    ----------
+    sort_ind: numpy.array
+        the index used for sorting e
+
+    Methods
+    -------
+    out_degree:
+        compute the out degree sequence
+    in_degree:
+        compute the in degree sequence
+    """
+
+    def __init__(self, v, e, v_id, src, dst, v_group=None):
+        """Return a DirectedGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        v_id: str or list of str
+            specifies which column uniquely identifies a vertex
+        src: str or list of str
+            identifier column for the source vertex
+        dst: str or list of str
+            identifier column for the destination vertex
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
+
+        Returns
+        -------
+        DirectedGraph
+            the graph object
+        """
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
+
+        # Compute degree (undirected)
+        d = self.degree()
+
+        # Warn if vertices have no edges
+        zero_idx = np.nonzero(d == 0)[0]
+        if len(zero_idx) == 1:
+            warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
+                          " vertex has no edges.", UserWarning)
+
+        if len(zero_idx) > 1:
+            names = []
+            for idx in zero_idx:
+                names.append(list(self.id_dict.keys())[idx])
+            warnings.warn(str(names) + " vertices have no edges.",
+                          UserWarning)
+
+    def out_degree(self, recompute=False):
+        """ Compute the out degree sequence.
+        """
+        if not hasattr(self, '_out_degree') or recompute:
+            self._out_degree = self.adj_mat.sum(axis=1)
+
+        return self._out_degree
+
+    def in_degree(self, recompute=False):
+        """ Compute the in degree sequence.
+        """
+        if not hasattr(self, '_in_degree') or recompute:
+            self._in_degree = self.adj_mat.sum(axis=0)
+
+        return self._in_degree
+
+    def out_degree_by_group(self, recompute=False):
+        """ Compute the out degree sequence to and from each group.
+        """
+        
+        if not hasattr(self, '_out_degree_by_group') or recompute:
+            id_arr, grp_arr, cnt_arr = self.count_indices_by_group(
+                self.adj_mat.indptr, self.adj_mat.indices, self.groups)
+            self._out_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), 
+                shape=(self.num_vertices, self.num_groups)).tocsr()
+
+        return self._out_degree_by_group
+
+    def in_degree_by_group(self, recompute=False):
+        """ Compute the in degree sequence to and from each group.
+        """
+        if not hasattr(self, '_in_degree_by_group') or recompute:
+            adj = self.adj_mat.tocsc()
+            id_arr, grp_arr, cnt_arr = self.count_indices_by_group(
+                adj.indptr, adj.indices, self.groups)
+            self._in_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), 
+                shape=(self.num_vertices, self.num_groups)).tocsr()
+
+        return self._in_degree_by_group
+
+    def adjacency_matrix(self):
+        """ Return the adjacency matrix.
+        """
+        return self.adj_mat
+
+    def to_networkx(self, original=False):
+        # Initialize DiGraph object
+        G = nx.DiGraph(self.adj_mat)
+
+        # Add original node ids
+        for node_id, i in self.id_dict.items():
+            G.add_node(i, node_id=node_id)
+
+        # If present add group info
+        if hasattr(self, 'groups'):
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr)
+
+        return G

@@ -220,28 +220,29 @@ class sGraph():
         self.adj_mat[src_array, dst_array] = 1
         self.num_edges = self.adj_mat.sum()
 
-    def get_degree(self, recompute=False):
+    def degree(self, recompute=False):
         """ Compute the undirected degree sequence.
         """
-        if not hasattr(self, 'degree') or recompute:
+        if not hasattr(self, '_degree') or recompute:
             if not hasattr(self, 'sym_adj_mat'):
                 self.sym_adj_mat = self.adj_mat + self.adj_mat.T
                 self.sym_adj_mat[self.sym_adj_mat != 0] = 1
-            self.degree = self.sym_adj_mat.sum(axis=0)
+            self._degree = self.sym_adj_mat.sum(axis=0)
 
-        return self.degree
+        return self._degree
 
-    def get_degree_by_group(self, recompute=False):
+    def degree_by_group(self, recompute=False):
         """ Compute the undirected degree sequence to and from each group.
         """
-        if not hasattr(self, 'degree_by_group') or recompute:
+        if not hasattr(self, '_degree_by_group') or recompute:
             if not hasattr(self, 'sym_adj_mat'):
                 self.sym_adj_mat = self.adj_mat + self.adj_mat.T
                 self.sym_adj_mat[self.sym_adj_mat != 0] = 1
             
-            self.count_indices_by_group(self.sym_adj_mat, self.groups)
+            self._degree_by_group = self.count_indices_by_group(
+                self.sym_adj_mat, self.groups)
 
-        return self.degree_by_group
+        return self._degree_by_group
 
     @staticmethod
     def get_num_bytes(num_items):
@@ -321,18 +322,11 @@ class DirectedGraph(sGraph):
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
 
-        # Sort e
-        self.sort_ind = np.argsort(self.e)
-        self.e = self.e[self.sort_ind]
-
-        # Check that there are no repeated pair in the edge list
-        mt.check_unique_edges(self.e)
-
         # Compute degree (undirected)
-        self.degree()
+        d = self.degree()
 
         # Warn if vertices have no edges
-        zero_idx = np.nonzero(self.v.degree == 0)[0]
+        zero_idx = np.nonzero(d == 0)[0]
         if len(zero_idx) == 1:
             warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
                           " vertex has no edges.", UserWarning)
@@ -344,136 +338,59 @@ class DirectedGraph(sGraph):
             warnings.warn(str(names) + " vertices have no edges.",
                           UserWarning)
 
-    def out_degree(self, get=False):
+    def out_degree(self, recompute=False):
         """ Compute the out degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
         """
-        if 'out_degree' in self.v.dtype.names:
-            d_out = self.v.out_degree
-        else:
-            d_out, d_in = mt.compute_in_out_degree(self.e,
-                                                   self.num_vertices)
-            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out),
-                                                   np.max(d_in))))
-            self.v = append_fields(self.v,
-                                   ['out_degree', 'in_degree'],
-                                   (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype])
+        if not hasattr(self, '_out_degree') or recompute:
+            self._out_degree = self.adj_mat.sum(axis=1)
 
-        if get:
-            return d_out
+        return self._out_degree
 
-    def in_degree(self, get=False):
-        """ Compute the out degree sequence.
-
-        If get is true it returns the array otherwise it adds the result to v.
+    def in_degree(self, recompute=False):
+        """ Compute the in degree sequence.
         """
-        if 'in_degree' in self.v.dtype.names:
-            d_in = self.v.in_degree
-        else:
-            d_out, d_in = mt.compute_in_out_degree(self.e,
-                                                   self.num_vertices)
-            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out),
-                                                   np.max(d_in))))
-            self.v = append_fields(self.v,
-                                   ['out_degree', 'in_degree'],
-                                   (d_out.astype(dtype), d_in.astype(dtype)),
-                                   dtypes=[dtype, dtype])
+        if not hasattr(self, '_in_degree') or recompute:
+            self._in_degree = self.adj_mat.sum(axis=0)
 
-        if get:
-            return d_in
+        return self._in_degree
 
-    def out_degree_by_group(self, get=False):
+    def out_degree_by_group(self, recompute=False):
         """ Compute the out degree sequence to and from each group.
-
-        If get is true it returns the array, else it adds the result to gv.
         """
-        if not hasattr(self, 'gv'):
-            raise Exception('Graph object does not contain group info.')
+        
+        if not hasattr(self, '_out_degree_by_group') or recompute:
+            self._out_degree_by_group = self.count_indices_by_group(
+                self.adj_mat, self.groups)
 
-        if not hasattr(self.gv, 'out_degree'):
-            d_out, d_in, dout_dict, din_dict = \
-                mt.compute_in_out_degree_by_group(self.e, self.v.group)
-            dtype = 'u' + str(self.get_num_bytes(max(np.max(d_out[:, 2]),
-                                                   np.max(d_in[:, 2]))))
-            self.gv.out_degree = d_out.view(
-                type=np.recarray,
-                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
-                ).reshape((d_out.shape[0],)).astype(
-                [('id', self.id_dtype),
-                 ('group', self.group_dtype),
-                 ('value', dtype)]
-                )
-            self.gv.in_degree = d_in.view(
-                type=np.recarray,
-                dtype=[('id', 'u8'), ('group', 'u8'), ('value', 'u8')]
-                ).reshape((d_in.shape[0],)).astype(
-                [('id', self.id_dtype),
-                 ('group', self.group_dtype),
-                 ('value', dtype)]
-                )
-            self.gv.out_degree.sort()
-            self.gv.in_degree.sort()
-            self.gv.out_degree_dict = dout_dict
-            self.gv.in_degree_dict = din_dict
+        return self._out_degree_by_group
 
-        if get:
-            return self.gv.out_degree
-
-    def in_degree_by_group(self, get=False):
+    def in_degree_by_group(self, recompute=False):
         """ Compute the in degree sequence to and from each group.
-
-        If get is true it returns the array, else it adds the result to gv.
         """
-        if not hasattr(self, 'gv'):
-            raise Exception('Graph object does not contain group info.')
+        if not hasattr(self, '_in_degree_by_group') or recompute:
+            adj = self.adj_mat.T
+            self._in_degree_by_group = self.count_indices_by_group(
+                adj, self.groups)
 
-        if not hasattr(self.gv, 'in_degree'):
-            self.out_degree_by_group()
+        return self._in_degree_by_group
 
-        if get:
-            return self.gv.in_degree
-
-    def adjacency_matrix(self, kind='csr'):
-        """ Return the adjacency matrix as a scipy sparse matrix.
+    def adjacency_matrix(self):
+        """ Return the adjacency matrix.
         """
-        return lib.to_sparse(
-            self.e, (self.num_vertices, self.num_vertices), kind=kind,
-            i_col='src', j_col='dst', data_col=np.ones(len(self.e)))
+        return self.adj_mat
 
     def to_networkx(self, original=False):
-        G = nx.DiGraph()
-        if original:
-            id_conv = list(self.id_dict.keys())
+        # Initialize DiGraph object
+        G = nx.DiGraph(self.adj_mat)
 
-            if hasattr(self, 'gv'):
-                group_conv = list(self.group_dict.keys())
-                v_num = mt.id_attr_dict(
-                    self.v, id_col='id', attr_cols=['group'])
-                v = []
-                for row in v_num:
-                    v.append((id_conv[row[0]],
-                             {'group': group_conv[row[1]['group']]}))
-            else:
-                v_num = self.v.id
-                v = []
-                for row in v_num:
-                    v.append(id_conv[row])
+        # Add original node ids
+        for node_id, i in self.id_dict.items():
+            G.add_node(i, node_id=node_id)
 
-            e = []
-            for row in self.e[['src', 'dst']]:
-                e.append((id_conv[row[0]], id_conv[row[1]]))
-        else:
-            if hasattr(self, 'gv'):
-                v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
-            else:
-                v = self.v.id
-
-            e = self.e[['src', 'dst']]
-
-        G.add_nodes_from(v)
-        G.add_edges_from(e)
+        # If present add group info
+        if hasattr(self, 'groups'):
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr)
 
         return G
 
