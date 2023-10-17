@@ -592,3 +592,86 @@ class WeightedGraph(DirectedGraph):
         """ Return the weighted adjacency matrix.
         """
         return self.adj_mat
+
+
+class LabelGraph(DirectedGraph):
+    """ General class for directed graphs with labelled edges.
+
+    Attributes
+    ----------
+    num_labels: int
+        number of distinct edge labels
+    num_edges_label: numpy.array
+        number of edges by label (in order)
+    label_dtype: numpy.dtype
+        the data type of the label internal id
+
+    Methods
+    -------
+    degree_by_label:
+        compute the degree of each vertex by label
+    out_degree_by_label:
+        compute the out degree of each vertex by label
+    in_degree_by_label:
+        compute the in degree of each vertex by label
+    """
+    def __init__(self, v, e, v_id, src, dst, edge_label, v_group=None):
+        """Return a LabelGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        v_id: str or list of str
+            specifies which column uniquely identifies a vertex
+        src: str (list of str not yet supported)
+            identifier column for the source vertex
+        dst: str (list of str not yet supported)
+            identifier column for the destination vertex
+        edge_label:
+            identifier column for label of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
+
+        Returns
+        -------
+        LabelGraph
+            the graph object
+        """
+        super(DirectedGraph, self).__init__(v, e, v_id=v_id, src=src, dst=dst,
+                                            v_group=v_group)
+
+        # If column names are passed as lists with one elements extract str
+        if isinstance(edge_label, list) and len(edge_label) == 1:
+            edge_label = edge_label[0]
+
+        # Get dictionary of label to numeric internal label
+        if isinstance(edge_label, list):
+            e['_label'] = list(zip(*[e[x] for x in edge_label]))
+        else:
+            e['_label'] = e[edge_label]
+
+        self.label_dict = self.generate_id_dict(e, '_label')
+        self.num_labels = len(self.label_dict.keys())
+        num_bytes = self.get_num_bytes(self.num_labels)
+        self.label_dtype = np.dtype('u' + str(num_bytes))
+
+        # Convert labels to construct adjacency matrix by layer
+        e['_label'] = e['_label'].apply(lambda x: self.label_dict.get(x))
+        lbl_array = e['_label'].values.astype(self.label_dtype)
+        src_array = e['_src'].values.astype(self.id_dtype)
+        dst_array = e['_dst'].values.astype(self.id_dtype)
+
+        # Define adjaceny tensor as list of sparse matrices
+        self.adj_tensor = []
+        for lbl in range(self.num_labels):
+            ind = lbl_array == lbl
+            self.adj_tensor.append(sp.coo_array(
+                (np.ones(len(src_array[ind]), np.uint8), 
+                 (src_array[ind], dst_array[ind])), 
+                shape=(self.num_vertices, self.num_vertices)).tocsr())
+
+        # Compute number of edges by label
+        self.num_edges_label = np.array([a.sum() for a in self.adj_tensor])
