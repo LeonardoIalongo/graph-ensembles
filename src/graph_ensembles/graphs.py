@@ -8,7 +8,6 @@ sparse module or the spark one.
 
 import numpy as np
 import pandas as pd
-from . import lib
 import warnings
 import networkx as nx
 from numba import jit
@@ -43,7 +42,7 @@ class Graph():
         type of the group id
     groups: numpy.array
         array with the group each node belongs to
-    total_weight: numpy.float64
+    total_weight: numeric
         sum of all the weights of the edges
 
     Methods
@@ -184,7 +183,23 @@ class Graph():
 
         if weight is not None:
             # Compute total weight
-            self.total_weight = self.get_total_weight
+            self.total_weight = self.get_total_weight()
+
+        # Compute degree
+        d = self.degree()
+
+        # Warn if vertices have no edges
+        zero_idx = np.nonzero(d == 0)[0]
+        if len(zero_idx) == 1:
+            warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
+                          " vertex has no edges.", UserWarning)
+
+        if len(zero_idx) > 1:
+            names = []
+            for idx in zero_idx:
+                names.append(list(self.id_dict.keys())[idx])
+            warnings.warn(str(names) + " vertices have no edges.",
+                          UserWarning)
 
     def adjacency_matrix(self, directed=False, weighted=False):
         """ Return the adjacency matrix of the graph.
@@ -268,9 +283,9 @@ class Graph():
             G.add_node(i, node_id=node_id)
 
         # If present add group info
-        if hasattr(self, 'groups'):
-            for i, gr in enumerate(self.groups):
-                G.add_node(i, group=gr)
+        if hasattr(self, 'group_dict'):
+            for group_id, i in self.group_dict.items():
+                G.add_node(i, group=group_id)
 
         return G
 
@@ -342,7 +357,7 @@ class DiGraph(Graph):
         type of the group id
     groups: numpy.array
         array with the group each node belongs to
-    total_weight: numpy.float64
+    total_weight: numeric
         sum of all the weights of the edges
 
     Methods
@@ -407,22 +422,6 @@ class DiGraph(Graph):
         """
         super().__init__(v, e, v_id=v_id, src=src, dst=dst, weight=weight, 
                          v_group=v_group)
-
-        # Compute degree (undirected)
-        d = self.degree()
-
-        # Warn if vertices have no edges
-        zero_idx = np.nonzero(d == 0)[0]
-        if len(zero_idx) == 1:
-            warnings.warn(str(list(self.id_dict.keys())[zero_idx[0]]) +
-                          " vertex has no edges.", UserWarning)
-
-        if len(zero_idx) > 1:
-            names = []
-            for idx in zero_idx:
-                names.append(list(self.id_dict.keys())[idx])
-            warnings.warn(str(names) + " vertices have no edges.",
-                          UserWarning)
 
     def adjacency_matrix(self, directed=True, weighted=False):
         """ Return the adjacency matrix of the graph.
@@ -551,36 +550,101 @@ class DiGraph(Graph):
             G.add_node(i, node_id=node_id)
 
         # If present add group info
-        if hasattr(self, 'groups'):
-            for i, gr in enumerate(self.groups):
-                G.add_node(i, group=gr)
+        if hasattr(self, 'group_dict'):
+            for group_id, i in self.group_dict.items():
+                G.add_node(i, group=group_id)
 
         return G
 
 
 class MultiGraph(Graph):
-    """ General class for directed graphs with labelled edges.
+    """ General class for multidimensional graphs with parallel edges.
+
+    This class allows to define multiple edges between the same nodes by adding
+    a label to the edges. The labels define a new dimension for adjacency 
+    matrix which is now a 3D tensor. The adjacency_matrix method will return 
+    the projection of the tensor on the 2D space, for the full tensor call the 
+    adjacency_tensor method. A slice of the adjacency tensor along a label is 
+    called a layer. 
+
+    Note that we are adopting here the formalism of the label being on the 
+    edge and not on the vertex. We assume vertex to have a unique identity. 
+    This disallows to consider explicitly edges between layers. Each edge is 
+    therefore defined by the triple (v, u, d) where d is the edge/layer label 
+    and not by the tuple (v, d, u, e) where d and e are the layers of v and u 
+    respectively. This case can be constructed implicitly in two ways: either 
+    by label the edges based on the source and destination layer or by 
+    defining the vertices multiple time one for each layer they belong to in a 
+    single dimension graph. In the second case the grouping option allows to 
+    preserve easily the identity of the node across layers.
+
+    Note that edges can be weighted or not. If they are not, the strengths 
+    will be equal to the degrees. The class does not check for the uniqueness 
+    of the links definitions. If a link is provided multiple times with 
+    weights, they will be summed. This also applies to the case where both the
+    (i, j, weight) and symmetric (j, i, weight) are provided.
 
     Attributes
     ----------
+    num_vertices: int
+        number of vertices in the graph
+    num_edges: int
+        number of distinct directed edges in the graph
     num_labels: int
         number of distinct edge labels
     num_edges_label: numpy.array
         number of edges by label (in order)
+    adj: numpy.array
+        the adjacency tensor of the graph
+    id_dict: dict
+        dictionary to convert original identifiers to new position id
+    id_dtype: numpy.dtype
+        type of the id (e.g. np.uint16)
+    num_groups: int  (or None)
+        number of vertex groups
+    group_dict: dict (or none)
+        dictionary to convert v_group columns into numeric ids
+    group_dtype: numpy.dtype
+        type of the group id
+    groups: numpy.array
+        array with the group each node belongs to
     label_dtype: numpy.dtype
         the data type of the label internal id
+    total_weight: numeric
+        sum of all the weights of the edges
+    total_weight_label: numpy.array
+        sum of all the weights of the edges by label
 
     Methods
     -------
+    get_num_edges:
+        compute the number of edges in the graph
+    get_num_edges_label:
+        compute the number of edges in the graph for each layer
+    get_total_weight:
+        compute the total sum of the weights of the edges
+    get_total_weight_label:
+        compute the number of edges in the graph for each layer
+    degree:
+        compute the undirected degree sequence
+    degree_by_group:
+        compute the undirected degree sequence by group as a 2D array
     degree_by_label:
         compute the degree of each vertex by label
-    out_degree_by_label:
-        compute the out degree of each vertex by label
-    in_degree_by_label:
-        compute the in degree of each vertex by label
+    strength:
+        compute the total strength sequence
+    strength_by_group:
+        compute the total strength sequence by group as a 2D array
+    strength_by_label:
+        compute the strength of each vertex by label
+    adjacency_matrix:
+        return the adjacency matrix of the graph
+    to_networkx:
+        return a Networkx equivalent
     """
-    def __init__(self, v, e, v_id, src, dst, edge_label, v_group=None):
-        """Return a LabelGraph object given vertices and edges.
+    def __init__(self, v, e, v_id, src, dst, edge_label, weight=None, 
+                 v_group=None):
+        """Return a MultiGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -596,16 +660,18 @@ class MultiGraph(Graph):
             identifier column for the destination vertex
         edge_label:
             identifier column for label of the edges
+        weight: str or None
+            identifier column for the weight of the edges
         v_group: str or list of str or None
             identifier of the group id of the vertex
 
         Returns
         -------
-        LabelGraph
+        MultiGraph
             the graph object
         """
-        super(DirectedGraph, self).__init__(v, e, v_id=v_id, src=src, dst=dst,
-                                            v_group=v_group)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, weight=weight, 
+                         v_group=v_group)
 
         # If column names are passed as lists with one elements extract str
         if isinstance(edge_label, list) and len(edge_label) == 1:
@@ -628,24 +694,333 @@ class MultiGraph(Graph):
         src_array = e['_src'].values.astype(self.id_dtype)
         dst_array = e['_dst'].values.astype(self.id_dtype)
 
-        # Define adjaceny tensor as 3D array with dimensions (label, src, dst)
-        self.adj_tensor = np.zeros(
-            (self.num_labels, self.num_vertices, self.num_vertices), 
-            dtype=np.uint8)
-        self.adj_tensor[lbl_array, src_array, dst_array] = 1
+        # Construct adjacency tensor with dimensions (label, src, dst)
+        if weight is not None:            
+            val_array = e[weight].values
+            self.adj = np.zeros(
+                (self.num_labels, self.num_vertices, self.num_vertices), 
+                dtype=val_array.dtype)
+            self.adj[lbl_array, src_array, dst_array] = val_array
+        else:
+            self.adj = np.zeros(
+                (self.num_labels, self.num_vertices, self.num_vertices), 
+                dtype=bool)
+            self.adj[lbl_array, src_array, dst_array] = True
 
         # Compute number of edges by label
-        self.num_edges_label = self.adj_tensor.sum(axis=[1, 2])
+        self.num_edges_label = self.get_num_edges_label()
+
+        if weight is not None:
+            # Compute total weight
+            self.total_weight_label = self.get_total_weight_label()
+
+    def adjacency_matrix(self, directed=False, weighted=False):
+        """ Return the adjacency matrix of the graph.
+        """
+        # Project tensor to two dimensions
+        adj = self.adj.sum(axis=0)
+
+        # Ensure matrix is symmetric as this is undirected
+        if weighted:
+            # Symmetrize
+            sym = adj + adj.T
+
+            # Remove double count diagonal
+            sym.ravel()[::sym.shape[1]+1] = np.diag(adj)
+
+        else:
+            adj = adj != 0
+            adj = adj | adj.T
+
+        return adj
+
+    def adjacency_tensor(self, directed=False, weighted=False):
+        """ Return the adjacency tensor.
+        """
+        # Ensure matrix for each layer is symmetric as this is undirected
+        if weighted:
+            # Symmetrize
+            sym = self.adj + self.adj.transpose((0, 2, 1))
+
+            # Remove double count diagonal
+            diag_index = [i*(sym.shape[1] + 1) - sym.shape[1]*(i//sym.shape[1])
+                          for i in range(sym.shape[0]*sym.shape[1])]
+            sym.ravel()[diag_index] = np.diagonal(self.adj, axis1=1, axis2=2)
+
+        else:
+            adj = self.adj != 0
+            adj = adj | adj.transpose((0, 2, 1))
+
+        return adj
+
+    def get_num_edges_label(self, recompute=False):
+        """ Compute the number of edges.
+        """
+        if not hasattr(self, 'num_edges_label') or recompute:
+            adj = self.adjacency_tensor(directed=False, weighted=False)
+            self.num_edges_label = (adj.sum(axis=(1, 2)) + np.diagonal(
+                adj, axis1=1, axis2=2).sum(axis=1)) / 2
+
+        return self.num_edges_label
+
+    def get_total_weight_label(self, recompute=False):
+        """ Compute the sum of all the weights.
+        """
+        if not hasattr(self, 'total_weight_label') or recompute:
+            adj = self.adjacency_tensor(directed=False, weighted=True)
+            self.total_weight_label = (adj.sum(axis=(1, 2)) + np.diagonal(
+                adj, axis1=1, axis2=2).sum(axis=1)) / 2
+
+        return self.total_weight_label
 
     def degree_by_label(self, recompute=False):
         """ Compute the degree sequence by label.
         """
         if not hasattr(self, '_degree_by_label') or recompute:
-            sym_adj = self.adj_tensor + self.adj_tensor.T
-            sym_adj[sym_adj != 0] = 1
-            self._degree_by_label = sym_adj.sum(axis=2)
+            adj = self.adjacency_tensor(directed=False, weighted=False)
+            self._degree_by_label = adj.sum(axis=2)
 
         return self._degree_by_label
+
+    def strength_by_label(self, recompute=False):
+        """ Compute the strength sequence by label.
+        """
+        if not hasattr(self, '_strength_by_label') or recompute:
+            adj = self.adjacency_tensor(directed=False, weighted=True)
+            self._strength_by_label = adj.sum(axis=2)
+
+        return self._strength_by_label
+
+    def to_networkx(self):
+        """ Return a networkx MultiGraph equivalent object for this graph.
+        """
+        # Initialize object
+        G = nx.MultiGraph()
+
+        # Add original node ids
+        for node_id, i in self.id_dict.items():
+            G.add_node(i, node_id=node_id)
+
+        # If present add group info
+        if hasattr(self, 'group_dict'):
+            for group_id, i in self.group_dict.items():
+                G.add_node(i, group=group_id)
+
+        # Create label list to assign original values
+        lbl_list = [None]*self.num_labels
+        for lbl_id, i in self.label_dict.items():
+            lbl_list[i] = lbl_id
+
+        # Add edges per layer
+        lbl, row, col = np.nonzero(self.adj)
+        G.add_edges_from(
+            zip(row, col, lbl, 
+                [dict(weight=i) for i in self.adj[self.adj != 0].ravel()],
+                [dict(label=lbl_list[i]) for i in lbl]))
+
+        return G
+
+
+class MultiDiGraph(MultiGraph, DiGraph):
+    """ General class for multidimensional directed graphs with parallel edges.
+
+    This class allows to define multiple edges between the same nodes by adding
+    a label to the edges. The labels define a new dimension for adjacency 
+    matrix which is now a 3D tensor. The adjacency_matrix method will return 
+    the projection of the tensor on the 2D space, for the full tensor call the 
+    adjacency_tensor method. A slice of the adjacency tensor along a label is 
+    called a layer. 
+
+    Note that we are adopting here the formalism of the label being on the 
+    edge and not on the vertex. We assume vertex to have a unique identity. 
+    This disallows to consider explicitly edges between layers. Each edge is 
+    therefore defined by the triple (v, u, d) where d is the edge/layer label 
+    and not by the tuple (v, d, u, e) where d and e are the layers of v and u 
+    respectively. This case can be constructed implicitly in two ways: either 
+    by label the edges based on the source and destination layer or by 
+    defining the vertices multiple time one for each layer they belong to in a 
+    single dimension graph. In the second case the grouping option allows to 
+    preserve easily the identity of the node across layers.
+
+    Note that edges can be weighted or not. If they are not, the strengths 
+    will be equal to the degrees. The class does not check for the uniqueness 
+    of the links definitions. If a link is provided multiple times with 
+    weights, they will be summed.
+
+    Attributes
+    ----------
+    num_vertices: int
+        number of vertices in the graph
+    num_edges: int
+        number of distinct directed edges in the graph
+    num_labels: int
+        number of distinct edge labels
+    num_edges_label: numpy.array
+        number of edges by label (in order)
+    adj: numpy.array
+        the adjacency tensor of the graph
+    id_dict: dict
+        dictionary to convert original identifiers to new position id
+    id_dtype: numpy.dtype
+        type of the id (e.g. np.uint16)
+    num_groups: int  (or None)
+        number of vertex groups
+    group_dict: dict (or none)
+        dictionary to convert v_group columns into numeric ids
+    group_dtype: numpy.dtype
+        type of the group id
+    groups: numpy.array
+        array with the group each node belongs to
+    label_dtype: numpy.dtype
+        the data type of the label internal id
+    total_weight: numeric
+        sum of all the weights of the edges
+    total_weight_label: numpy.array
+        sum of all the weights of the edges by label
+
+    Methods
+    -------
+    get_num_edges:
+        compute the number of edges in the graph
+    get_num_edges_label:
+        compute the number of edges in the graph for each layer
+    get_total_weight:
+        compute the total sum of the weights of the edges
+    degree:
+        compute the undirected degree sequence
+    out_degree:
+        compute the out degree sequence
+    in_degree:
+        compute the in degree sequence
+    degree_by_group:
+        compute the undirected degree sequence by group as a 2D array
+    out_degree_by_group:
+        compute the out degree sequence by group as a 2D array
+    in_degree_by_group:
+        compute the in degree sequence by group as a 2D array
+    degree_by_label:
+        compute the degree of each vertex by label
+    out_degree_by_label:
+        compute the out degree of each vertex by label
+    in_degree_by_label:
+        compute the in degree of each vertex by label
+    strength:
+        compute the total strength sequence
+    out_strength:
+        compute the out strength sequence
+    in_strength:
+        compute the in strength sequence
+    strength_by_group:
+        compute the total strength sequence by group as a 2D array
+    out_strength_by_group:
+        compute the out strength sequence by group as a 2D array
+    in_strength_by_group:
+        compute the in strength sequence by group as a 2D array
+    strength_by_label:
+        compute the strength of each vertex by label
+    out_strength_by_label:
+        compute the out strength of each vertex by label
+    in_strength_by_label:
+        compute the in strength of each vertex by label
+    adjacency_matrix:
+        return the adjacency matrix of the graph
+    to_networkx:
+        return a Networkx equivalent
+    """
+    def __init__(self, v, e, v_id, src, dst, edge_label, weight=None, 
+                 v_group=None):
+        """Return a MultiGraph object given vertices and edges.
+
+        Parameters
+        ----------
+        v: pandas.dataframe
+            list of vertices and their properties
+        e: pandas.dataframe
+            list of edges and their properties
+        v_id: str or list of str
+            specifies which column uniquely identifies a vertex
+        src: str (list of str not yet supported)
+            identifier column for the source vertex
+        dst: str (list of str not yet supported)
+            identifier column for the destination vertex
+        edge_label:
+            identifier column for label of the edges
+        weight: str or None
+            identifier column for the weight of the edges
+        v_group: str or list of str or None
+            identifier of the group id of the vertex
+
+        Returns
+        -------
+        MultiDiGraph
+            the graph object
+        """
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, weight=weight, 
+                         v_group=v_group)
+
+    def adjacency_matrix(self, directed=True, weighted=False):
+        """ Return the adjacency matrix of the graph.
+        """
+        # Project tensor to two dimensions
+        adj = self.adj.sum(axis=0)
+
+        if directed and not weighted:
+            adj = self.adj != 0
+
+        elif not directed and weighted:
+            # Symmetrize
+            sym = adj + adj.T
+
+            # Remove double count diagonal
+            sym.ravel()[::sym.shape[1]+1] = np.diag(adj)
+
+        else:
+            adj = adj != 0
+            adj = adj | adj.T
+
+        return adj
+
+    def adjacency_tensor(self, directed=True, weighted=False):
+        """ Return the adjacency tensor.
+        """
+        if directed and weighted:
+            adj = self.adj
+
+        elif directed and not weighted:
+            adj = self.adj != 0
+
+        elif not directed and weighted:
+            # Symmetrize
+            sym = self.adj + self.adj.transpose((0, 2, 1))
+
+            # Remove double count diagonal
+            diag_index = [i*(sym.shape[1] + 1) - sym.shape[1]*(i//sym.shape[1])
+                          for i in range(sym.shape[0]*sym.shape[1])]
+            sym.ravel()[diag_index] = np.diagonal(self.adj, axis1=1, axis2=2)
+
+        else:
+            adj = self.adj != 0
+            adj = adj | adj.transpose((0, 2, 1))
+
+        return adj
+
+    def get_num_edges_label(self, recompute=False):
+        """ Compute the number of edges.
+        """
+        if not hasattr(self, 'num_edges_label') or recompute:
+            adj = self.adjacency_tensor(directed=True, weighted=False)
+            self.num_edges_label = adj.sum(axis=(1, 2))
+
+        return self.num_edges_label
+
+    def get_total_weight_label(self, recompute=False):
+        """ Compute the sum of all the weights.
+        """
+        if not hasattr(self, 'total_weight_label') or recompute:
+            adj = self.adjacency_tensor(directed=True, weighted=True)
+            self.total_weight_label = adj.sum(axis=(1, 2))
+
+        return self.total_weight_label
 
     def out_degree_by_label(self, recompute=False):
         """ Compute the out degree sequence by label.
@@ -669,15 +1044,21 @@ class MultiGraph(Graph):
 
         return self._in_degree_by_label
 
-    def adjacency_matrix(self):
-        """ Return the adjacency matrix.
+    def out_strength_by_label(self, recompute=False):
+        """ Compute the out strength sequence by label.
         """
-        return self.adj
+        if not hasattr(self, '_out_strength_by_label') or recompute:
+            self._out_strength_by_label = self.adj.sum(axis=2)
+            
+        return self._out_strength_by_label
 
-    def adjacency_tensor(self):
-        """ Return the adjacency tensor.
+    def in_strength_by_label(self, recompute=False):
+        """ Compute the in strength sequence by label.
         """
-        return self.adj_tensor
+        if not hasattr(self, '_in_strength_by_label') or recompute:
+            self._in_strength_by_label = self.adj.sum(axis=1)
+            
+        return self._in_strength_by_label
 
     def to_networkx(self):
         """ Return a networkx MultiDiGraph equivalent object for this graph.
@@ -690,285 +1071,95 @@ class MultiGraph(Graph):
             G.add_node(i, node_id=node_id)
 
         # If present add group info
-        if hasattr(self, 'groups'):
-            for i, gr in enumerate(self.groups):
-                G.add_node(i, group=gr)
+        if hasattr(self, 'group_dict'):
+            for group_id, i in self.group_dict.items():
+                G.add_node(i, group=group_id)
+
+        # Create label list to assign original values
+        lbl_list = [None]*self.num_labels
+        for lbl_id, i in self.label_dict.items():
+            lbl_list[i] = lbl_id
 
         # Add edges per layer
-        for lbl in range(self.num_labels):
-            G.add_edges_from(zip(row, col), label=lbl)
+        lbl, row, col = np.nonzero(self.adj)
+        G.add_edges_from(
+            zip(row, col, lbl, 
+                [dict(weight=i) for i in self.adj[self.adj != 0].ravel()],
+                [dict(label=lbl_list[i]) for i in lbl]))
 
         return G
 
 
-class WeightedLabelGraph(WeightedGraph, LabelGraph):
-    """ General class for directed graphs with labelled and weighted edges.
+# class Graph():
+#     """ Generator function for graphs. Returns correct object depending on inputs
+#     passed.
+#     """
+#     def __new__(cls, v, e, **kwargs):
+#         # Ensure passed arguments are accepted
+#         allowed_arguments = ['v_id', 'src', 'dst', 'weight',
+#                              'edge_label', 'v_group']
+#         for name in kwargs:
+#             if name not in allowed_arguments:
+#                 raise ValueError('Illegal argument passed: ' + name)
 
-    Attributes
-    ----------
-    total_weight_label: numpy.array
-        sum of all the weights of the edges by label
+#         if 'v_id' not in kwargs:
+#             id_col = 'id'
+#         else:
+#             id_col = kwargs['v_id']
 
-    Methods
-    -------
-    strength_by_label:
-        compute the strength of each vertex by label
-    out_strength_by_label:
-        compute the out strength of each vertex by label
-    in_strength_by_label:
-        compute the in strength of each vertex by label
-    """
-    def __init__(self, v, e, v_id, src, dst, weight, edge_label, v_group=None):
-        """Return a WeightedLabelGraph object given vertices and edges.
+#         if 'src' not in kwargs:
+#             src_col = 'src'
+#         else:
+#             src_col = kwargs['src']
 
-        Parameters
-        ----------
-        v: pandas.dataframe
-            list of vertices and their properties
-        e: pandas.dataframe
-            list of edges and their properties
-        v_id: str or list of str
-            specifies which column uniquely identifies a vertex
-        src: str (list of str not yet supported)
-            identifier column for the source vertex
-        dst: str (list of str not yet supported)
-            identifier column for the destination vertex
-        weight:
-            identifier column for the weight of the edges
-        edge_label:
-            identifier column for label of the edges
-        v_group: str or list of str or None
-            identifier of the group id of the vertex
+#         if 'dst' not in kwargs:
+#             dst_col = 'dst'
+#         else:
+#             dst_col = kwargs['dst']
 
-        Returns
-        -------
-        sGraph
-            the graph object
-        """
-        LabelGraph.__init__(self, v, e, v_id=v_id, src=src, dst=dst,
-                            edge_label=edge_label, v_group=v_group)
+#         if 'v_group' in kwargs:
+#             v_group = kwargs['v_group']
+#         else:
+#             v_group = None
 
-        if isinstance(weight, list) and len(weight) == 1:
-            weight = weight[0]
+#         if 'weight' in kwargs:
+#             weight_col = kwargs['weight']
+#             if 'edge_label' in kwargs:
+#                 label_col = kwargs['edge_label']
+#                 return WeightedLabelGraph(v,
+#                                           e,
+#                                           v_id=id_col,
+#                                           src=src_col,
+#                                           dst=dst_col,
+#                                           weight=weight_col,
+#                                           edge_label=label_col,
+#                                           v_group=v_group)
+#             else:
+#                 return WeightedGraph(v,
+#                                      e,
+#                                      v_id=id_col,
+#                                      src=src_col,
+#                                      dst=dst_col,
+#                                      weight=weight_col,
+#                                      v_group=v_group)
 
-        # Convert weights to float64 for computations
-        self.e = append_fields(
-            self.e,
-            'weight',
-            e[weight].to_numpy().astype(np.float64)[self.sort_ind],
-            dtypes=np.float64)
-
-        # Ensure all weights are positive
-        msg = 'Zero or negative edge weights are not supported.'
-        assert np.all(self.e.weight > 0), msg
-
-        # Compute total weight
-        self.total_weight = np.sum(self.e.weight)
-
-        # Compute total weight by label
-        self.total_weight_label = mt.compute_tot_weight_by_label(
-            self.e, self.num_labels)
-
-    def strength_by_label(self, get=False):
-        """ Compute the out strength sequence by label.
-
-        If get is true it returns the array. Result is added to lv.
-        """
-        if not hasattr(self.lv, 'strength'):
-            s, s_dict = mt.compute_strength_by_label(self.e)
-
-            self.lv.strength = s.view(
-                type=np.recarray,
-                dtype=[('label', 'f8'), ('id', 'f8'), ('value', 'f8')]
-                ).reshape((s.shape[0],)).astype(
-                [('label', self.label_dtype),
-                 ('id', self.id_dtype),
-                 ('value', 'f8')]
-                )
-
-            self.lv.strength.sort()
-            self.lv.strength_dict = s_dict
-
-        if get:
-            return self.lv.strength
-
-    def out_strength_by_label(self, get=False):
-        """ Compute the out strength sequence by label.
-
-        If get is true it returns the array. Result is added to lv.
-        """
-        if not hasattr(self.lv, 'out_strength'):
-            s_out, s_in, sout_dict, sin_dict = \
-                mt.compute_in_out_strength_by_label(self.e)
-
-            self.lv.out_strength = s_out.view(
-                type=np.recarray,
-                dtype=[('label', 'f8'), ('id', 'f8'), ('value', 'f8')]
-                ).reshape((s_out.shape[0],)).astype(
-                [('label', self.label_dtype),
-                 ('id', self.id_dtype),
-                 ('value', 'f8')]
-                )
-            self.lv.in_strength = s_in.view(
-                type=np.recarray,
-                dtype=[('label', 'f8'), ('id', 'f8'), ('value', 'f8')]
-                ).reshape((s_in.shape[0],)).astype(
-                [('label', self.label_dtype),
-                 ('id', self.id_dtype),
-                 ('value', 'f8')]
-                )
-
-            self.lv.out_strength.sort()
-            self.lv.in_strength.sort()
-            self.lv.out_strength_dict = sout_dict
-            self.lv.in_strength_dict = sin_dict
-
-        if get:
-            return self.lv.out_strength
-
-    def in_strength_by_label(self, get=False):
-        """ Compute the in strength sequence by label.
-
-        If get is true it returns the array. Result is added to lv.
-        """
-        if not hasattr(self.lv, 'in_strength'):
-            self.out_strength_by_label()
-
-        if get:
-            return self.lv.in_strength
-
-    def adjacency_matrix(self, kind='csr', compressed=False):
-        """ Return the adjacency matrices for each label as a list of scipy
-        sparse matrices.
-        """
-        if compressed:
-            adj = lib.to_sparse(
-                    self.e, (self.num_vertices, self.num_vertices), kind=kind,
-                    i_col='src', j_col='dst', data_col='weight')
-        else:
-            adj = []
-            for i in range(self.num_labels):
-                e = self.e[self.e.label == i]
-                adj.append(lib.to_sparse(
-                    e, (self.num_vertices, self.num_vertices), kind=kind,
-                    i_col='src', j_col='dst', data_col='weight'))
-        return adj
-
-    def to_networkx(self, original=False):
-        G = nx.MultiDiGraph()
-        if original:
-            id_conv = list(self.id_dict.keys())
-            label_conv = list(self.label_dict.keys())
-
-            if hasattr(self, 'gv'):
-                group_conv = list(self.group_dict.keys())
-                v_num = mt.id_attr_dict(
-                    self.v, id_col='id', attr_cols=['group'])
-                v = []
-                for row in v_num:
-                    v.append((id_conv[row[0]],
-                             {'group': group_conv[row[1]['group']]}))
-            else:
-                v_num = self.v.id
-                v = []
-                for row in v_num:
-                    v.append(id_conv[row])
-
-            e = []
-            for row in self.e:
-                e.append((id_conv[row.src], id_conv[row.dst],
-                         {'weight': row.weight,
-                          'label': label_conv[row.label]}))
-        else:
-            if hasattr(self, 'gv'):
-                v = mt.id_attr_dict(self.v, id_col='id', attr_cols=['group'])
-            else:
-                v = self.v.id
-
-            e = []
-            for row in self.e:
-                e.append((row.src, row.dst,
-                         {'weight': row.weight,
-                          'label': row.label}))
-
-        G.add_nodes_from(v)
-        G.add_edges_from(e)
-
-        return G
-
-
-
-
-class Graph():
-    """ Generator function for graphs. Returns correct object depending on inputs
-    passed.
-    """
-    def __new__(cls, v, e, **kwargs):
-        # Ensure passed arguments are accepted
-        allowed_arguments = ['v_id', 'src', 'dst', 'weight',
-                             'edge_label', 'v_group']
-        for name in kwargs:
-            if name not in allowed_arguments:
-                raise ValueError('Illegal argument passed: ' + name)
-
-        if 'v_id' not in kwargs:
-            id_col = 'id'
-        else:
-            id_col = kwargs['v_id']
-
-        if 'src' not in kwargs:
-            src_col = 'src'
-        else:
-            src_col = kwargs['src']
-
-        if 'dst' not in kwargs:
-            dst_col = 'dst'
-        else:
-            dst_col = kwargs['dst']
-
-        if 'v_group' in kwargs:
-            v_group = kwargs['v_group']
-        else:
-            v_group = None
-
-        if 'weight' in kwargs:
-            weight_col = kwargs['weight']
-            if 'edge_label' in kwargs:
-                label_col = kwargs['edge_label']
-                return WeightedLabelGraph(v,
-                                          e,
-                                          v_id=id_col,
-                                          src=src_col,
-                                          dst=dst_col,
-                                          weight=weight_col,
-                                          edge_label=label_col,
-                                          v_group=v_group)
-            else:
-                return WeightedGraph(v,
-                                     e,
-                                     v_id=id_col,
-                                     src=src_col,
-                                     dst=dst_col,
-                                     weight=weight_col,
-                                     v_group=v_group)
-
-        else:
-            if 'edge_label' in kwargs:
-                label_col = kwargs['edge_label']
-                return LabelGraph(v,
-                                  e,
-                                  v_id=id_col,
-                                  src=src_col,
-                                  dst=dst_col,
-                                  edge_label=label_col,
-                                  v_group=v_group)
-            else:
-                return DirectedGraph(v,
-                                     e,
-                                     v_id=id_col,
-                                     src=src_col,
-                                     dst=dst_col,
-                                     v_group=v_group)
+#         else:
+#             if 'edge_label' in kwargs:
+#                 label_col = kwargs['edge_label']
+#                 return LabelGraph(v,
+#                                   e,
+#                                   v_id=id_col,
+#                                   src=src_col,
+#                                   dst=dst_col,
+#                                   edge_label=label_col,
+#                                   v_group=v_group)
+#             else:
+#                 return DirectedGraph(v,
+#                                      e,
+#                                      v_id=id_col,
+#                                      src=src_col,
+#                                      dst=dst_col,
+#                                      v_group=v_group)
 
 
 
