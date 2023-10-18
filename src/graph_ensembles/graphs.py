@@ -48,6 +48,10 @@ class Graph():
 
     Methods
     -------
+    get_num_edges:
+        compute the number of edges in the graph
+    get_total_weight:
+        compute the total sum of the weights of the edges
     degree:
         compute the undirected degree sequence
     degree_by_group:
@@ -239,7 +243,7 @@ class Graph():
         """ Compute the total strength sequence.
         """
         if not hasattr(self, '_strength') or recompute:
-            adj = self.adjacency_matrix(directed=False, weighted=False)
+            adj = self.adjacency_matrix(directed=False, weighted=True)
             self._strength = adj.sum(axis=1)
 
         return self._strength
@@ -310,47 +314,74 @@ class Graph():
         return res
 
 
-
-
-
-
-
-
-
-
-
-
-
 class DiGraph(Graph):
     """ General class for directed graphs.
 
+    Note that edges can be weighted or not. If they are not, the strengths 
+    will be equal to the degrees. The class does not check for the uniqueness 
+    of the links definitions. If a link is provided multiple times with 
+    weights, they will be summed.
+
+    Attributes
+    ----------
+    num_vertices: int
+        number of vertices in the graph
+    num_edges: int
+        number of distinct directed edges in the graph
+    adj: numpy.array
+        the adjacency matrix of the graph
+    id_dict: dict
+        dictionary to convert original identifiers to new position id
+    id_dtype: numpy.dtype
+        type of the id (e.g. np.uint16)
+    num_groups: int  (or None)
+        number of vertex groups
+    group_dict: dict (or none)
+        dictionary to convert v_group columns into numeric ids
+    group_dtype: numpy.dtype
+        type of the group id
+    groups: numpy.array
+        array with the group each node belongs to
+    total_weight: numpy.float64
+        sum of all the weights of the edges
+
     Methods
     -------
+    get_num_edges:
+        compute the number of edges in the graph
+    get_total_weight:
+        compute the total sum of the weights of the edges
+    degree:
+        compute the undirected degree sequence
     out_degree:
         compute the out degree sequence
     in_degree:
         compute the in degree sequence
+    degree_by_group:
+        compute the undirected degree sequence by group as a 2D array
     out_degree_by_group:
         compute the out degree sequence by group as a 2D array
     in_degree_by_group:
         compute the in degree sequence by group as a 2D array
-    adjacency_matrix:
-        return the directed adjacency matrix of the graph
-    to_networkx:
-        return a networkx DiGraph equivalent
-
+    strength:
+        compute the total strength sequence
     out_strength:
         compute the out strength sequence
     in_strength:
         compute the in strength sequence
+    strength_by_group:
+        compute the total strength sequence by group as a 2D array
     out_strength_by_group:
         compute the out strength sequence by group as a 2D array
     in_strength_by_group:
         compute the in strength sequence by group as a 2D array
+    adjacency_matrix:
+        return the adjacency matrix of the graph
+    to_networkx:
+        return a Networkx equivalent
     """
-
-    def __init__(self, v, e, v_id, src, dst, v_group=None):
-        """Return a DirectedGraph object given vertices and edges.
+    def __init__(self, v, e, v_id, src, dst, weight=None, v_group=None):
+        """Return a DiGraph object given vertices and edges.
 
         Parameters
         ----------
@@ -364,15 +395,18 @@ class DiGraph(Graph):
             identifier column for the source vertex
         dst: str or list of str
             identifier column for the destination vertex
+        weight: str or None
+            identifier column for the weight of the edges
         v_group: str or list of str or None
             identifier of the group id of the vertex
 
         Returns
         -------
-        DirectedGraph
+        DiGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst, v_group=v_group)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, weight=weight, 
+                         v_group=v_group)
 
         # Compute degree (undirected)
         d = self.degree()
@@ -393,23 +427,48 @@ class DiGraph(Graph):
     def adjacency_matrix(self, directed=True, weighted=False):
         """ Return the adjacency matrix of the graph.
         """
-        if directed:
-            return self.adj
+        if directed and weighted:
+            adj = self.adj
 
-    def degree(self, recompute=False):
-        """ Compute the undirected degree sequence.
+        elif directed and not weighted:
+            adj = self.adj != 0
+
+        elif not directed and weighted:
+            # Symmetrize
+            adj = self.adj + self.adj.T
+
+            # Remove double count diagonal
+            adj.ravel()[::adj.shape[1]+1] = np.diag(self.adj)
+
+        else:
+            adj = self.adj != 0
+            adj = adj | adj.T
+
+        return adj
+
+    def get_num_edges(self, recompute=False):
+        """ Compute the number of edges.
         """
-        if not hasattr(self, '_degree') or recompute:
-            adj = self.adjacency_matrix(undirected=True, weighted=False)
-            self._degree = adj.sum(axis=0)
+        if not hasattr(self, 'num_edges') or recompute:
+            adj = self.adjacency_matrix(directed=True, weighted=False)
+            self.num_edges = adj.sum()
 
-        return self._degree
+        return self.num_edges
+
+    def get_total_weight(self, recompute=False):
+        """ Compute the sum of all the weights.
+        """
+        if not hasattr(self, 'total_weight') or recompute:
+            adj = self.adjacency_matrix(directed=True, weighted=True)
+            self.total_weight = adj.sum()
+
+        return self.total_weight
 
     def out_degree(self, recompute=False):
         """ Compute the out degree sequence.
         """
         if not hasattr(self, '_out_degree') or recompute:
-            adj = (self.adj != 0).astype(np.uint8)
+            adj = self.adjacency_matrix(directed=True, weighted=False)
             self._out_degree = adj.sum(axis=1)
             self._in_degree = adj.sum(axis=0)
 
@@ -419,7 +478,7 @@ class DiGraph(Graph):
         """ Compute the in degree sequence.
         """
         if not hasattr(self, '_in_degree') or recompute:
-            adj = (self.adj != 0).astype(np.uint8)
+            adj = self.adjacency_matrix(directed=True, weighted=False)
             self._out_degree = adj.sum(axis=1)
             self._in_degree = adj.sum(axis=0)
 
@@ -429,8 +488,7 @@ class DiGraph(Graph):
         """ Compute the out degree sequence to each group.
         """
         if not hasattr(self, '_out_degree_by_group') or recompute:
-            adj = self.adj.copy()
-            adj[adj != 0] = 1
+            adj = self.adjacency_matrix(directed=True, weighted=False)
             self._out_degree_by_group = self.sum_by_group(adj, self.groups)
             self._in_degree_by_group = self.sum_by_group(adj.T, self.groups)
 
@@ -440,19 +498,47 @@ class DiGraph(Graph):
         """ Compute the in degree sequence from each group.
         """
         if not hasattr(self, '_in_degree_by_group') or recompute:
-            adj = self.adj.copy()
-            adj[adj != 0] = 1
+            adj = self.adjacency_matrix(directed=True, weighted=False)
             self._out_degree_by_group = self.sum_by_group(adj, self.groups)
             self._in_degree_by_group = self.sum_by_group(adj.T, self.groups)
 
         return self._in_degree_by_group
 
-    def adjacency_matrix(self):
-        """ Return the adjacency matrix of the graph.
+    def out_strength(self, recompute=False):
+        """ Compute the out strength sequence.
         """
-        adj = self.adj.copy()
-        adj[adj != 0] = 1
-        return adj
+        if not hasattr(self, '_out_strength') or recompute:
+            adj = self.adjacency_matrix(directed=True, weighted=True)
+            self._out_strength = adj.sum(axis=1)
+
+        return self._out_strength
+
+    def in_strength(self, recompute=False):
+        """ Compute the in strength sequence.
+        """
+        if not hasattr(self, '_in_strength') or recompute:
+            adj = self.adjacency_matrix(directed=True, weighted=True)
+            self._in_strength = adj.sum(axis=0)
+
+        return self._in_strength
+
+    def out_strength_by_group(self, recompute=False):
+        """ Compute the out strength sequence to each group.
+        """
+        if not hasattr(self, '_out_strength_by_group') or recompute:
+            adj = self.adjacency_matrix(directed=True, weighted=True)
+            self._out_strength_by_group = self.sum_by_group(adj, self.groups)
+
+        return self._out_strength_by_group
+
+    def in_strength_by_group(self, recompute=False):
+        """ Compute the in strength sequence from each group.
+        """
+        if not hasattr(self, '_in_strength_by_group') or recompute:
+            adj = self.adjacency_matrix(directed=True, weighted=True)
+            self._in_strength_by_group = self.sum_by_group(adj.T, self.groups)
+
+        return self._in_strength_by_group
 
     def to_networkx(self, original=False):
         """ Return a networkx DiGraph object for this graph.
@@ -472,49 +558,7 @@ class DiGraph(Graph):
         return G
 
 
-
-    def out_strength(self, recompute=False):
-        """ Compute the out strength sequence.
-        """
-        if not hasattr(self, '_out_strength') or recompute:
-            self._out_strength = self.adj.sum(axis=1)
-
-        return self._out_strength
-
-    def in_strength(self, recompute=False):
-        """ Compute the in strength sequence.
-        """
-        if not hasattr(self, '_in_strength') or recompute:
-            self._in_strength = self.adj.sum(axis=0)
-
-        return self._in_strength
-
-    def out_strength_by_group(self, recompute=False):
-        """ Compute the out strength sequence to each group.
-        """
-        if not hasattr(self, '_out_strength_by_group') or recompute:
-            self._out_strength_by_group = self.sum_by_group(
-                self.adj, self.groups)
-
-        return self._out_strength_by_group
-
-    def in_strength_by_group(self, recompute=False):
-        """ Compute the in strength sequence from each group.
-        """
-        if not hasattr(self, '_in_strength_by_group') or recompute:
-            self._in_strength_by_group = self.sum_by_group(
-                self.adj.T, self.groups)
-
-        return self._in_strength_by_group
-
-    def weighted_adjacency_matrix(self):
-        """ Return the weighted adjacency matrix.
-        """
-        return self.adj
-
-
-
-class LabelGraph(DirectedGraph):
+class MultiGraph(Graph):
     """ General class for directed graphs with labelled edges.
 
     Attributes
