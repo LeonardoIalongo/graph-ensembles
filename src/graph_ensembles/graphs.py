@@ -99,6 +99,10 @@ class Graph():
             src = src[0]
         if isinstance(dst, list) and len(dst) == 1:
             dst = dst[0]
+        if isinstance(v_group, list) and len(v_group) == 1:
+            v_group = v_group[0]
+        if isinstance(weight, list) and len(weight) == 1:
+            weight = weight[0]
 
         # Determine size of indices
         self.num_vertices = len(v.index)
@@ -129,9 +133,6 @@ class Graph():
 
         # If v_group is given then create dict and array
         if v_group is not None:
-            if isinstance(v_group, list) and len(v_group) == 1:
-                v_group = v_group[0]
-
             if isinstance(v_group, list):
                 v['_group'] = list(zip(*[v[x] for x in v_group]))
             else:
@@ -168,8 +169,13 @@ class Graph():
             raise Exception()
 
         # Construct adjacency matrix
-        if weight is not None:            
+        if weight is not None:
             val_array = e[weight].values
+
+            # Ensure all weights are positive
+            msg = 'Zero or negative edge weights are not supported.'
+            assert np.all(val_array > 0), msg
+
             self.adj = np.zeros((self.num_vertices, self.num_vertices), 
                                 dtype=val_array.dtype)
             self.adj[src_array, dst_array] = val_array
@@ -1088,79 +1094,3 @@ class MultiDiGraph(MultiGraph, DiGraph):
                 [dict(label=lbl_list[i]) for i in lbl]))
 
         return G
-
-
-# class Graph():
-#     """ Generator function for graphs. Returns correct object depending on inputs
-#     passed.
-#     """
-#     def __new__(cls, v, e, **kwargs):
-#         # Ensure passed arguments are accepted
-#         allowed_arguments = ['v_id', 'src', 'dst', 'weight',
-#                              'edge_label', 'v_group']
-#         for name in kwargs:
-#             if name not in allowed_arguments:
-#                 raise ValueError('Illegal argument passed: ' + name)
-
-#         if 'v_id' not in kwargs:
-#             id_col = 'id'
-#         else:
-#             id_col = kwargs['v_id']
-
-#         if 'src' not in kwargs:
-#             src_col = 'src'
-#         else:
-#             src_col = kwargs['src']
-
-#         if 'dst' not in kwargs:
-#             dst_col = 'dst'
-#         else:
-#             dst_col = kwargs['dst']
-
-#         if 'v_group' in kwargs:
-#             v_group = kwargs['v_group']
-#         else:
-#             v_group = None
-
-#         if 'weight' in kwargs:
-#             weight_col = kwargs['weight']
-#             if 'edge_label' in kwargs:
-#                 label_col = kwargs['edge_label']
-#                 return WeightedLabelGraph(v,
-#                                           e,
-#                                           v_id=id_col,
-#                                           src=src_col,
-#                                           dst=dst_col,
-#                                           weight=weight_col,
-#                                           edge_label=label_col,
-#                                           v_group=v_group)
-#             else:
-#                 return WeightedGraph(v,
-#                                      e,
-#                                      v_id=id_col,
-#                                      src=src_col,
-#                                      dst=dst_col,
-#                                      weight=weight_col,
-#                                      v_group=v_group)
-
-#         else:
-#             if 'edge_label' in kwargs:
-#                 label_col = kwargs['edge_label']
-#                 return LabelGraph(v,
-#                                   e,
-#                                   v_id=id_col,
-#                                   src=src_col,
-#                                   dst=dst_col,
-#                                   edge_label=label_col,
-#                                   v_group=v_group)
-#             else:
-#                 return DirectedGraph(v,
-#                                      e,
-#                                      v_id=id_col,
-#                                      src=src_col,
-#                                      dst=dst_col,
-#                                      v_group=v_group)
-
-
-
-

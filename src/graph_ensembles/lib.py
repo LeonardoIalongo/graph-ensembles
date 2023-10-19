@@ -1,69 +1,8 @@
 """ This module contains any function that operates on the sGraph or
     GraphEnsemble classes or on its attributes.
 """
-
-from . import graphs
 import numpy as np
 from numba import jit
-from scipy.sparse import coo_matrix
-from numpy.lib.recfunctions import rec_append_fields as append_fields
-import warnings
-
-
-def to_sparse(coo_arr, shape, kind='coo', i_col=0, j_col=1, data_col=2):
-    """ Convert to a sparse matrix the coordinate array passed.
-    """
-    if isinstance(i_col, int):
-        i = coo_arr[coo_arr.dtype.names[i_col]]
-    elif isinstance(i_col, str):
-        i = coo_arr[i_col]
-    elif isinstance(i_col, np.ndarray):
-        i = i_col
-    else:
-        raise ValueError('i_col must be an int or a string.')
-
-    if isinstance(j_col, int):
-        j = coo_arr[coo_arr.dtype.names[j_col]]
-    elif isinstance(j_col, str):
-        j = coo_arr[j_col]
-    elif isinstance(j_col, np.ndarray):
-        j = j_col
-    else:
-        raise ValueError('j_col must be an int or a string.')
-
-    if isinstance(data_col, int):
-        data = coo_arr[coo_arr.dtype.names[data_col]]
-    elif isinstance(data_col, str):
-        data = coo_arr[data_col]
-    elif isinstance(data_col, np.ndarray):
-        data = data_col
-    else:
-        raise ValueError('data_col must be an int or a string.')
-
-    mat = coo_matrix((data, (i, j)), shape=shape)
-
-    if kind == 'coo':
-        return mat
-    else:
-        return mat.asformat(kind)
-
-
-def add_groups(g, group_dict):
-    """ Add group info to a sGraph object, if already presents it raises a warning.
-    """
-    if hasattr(g, 'gv'):
-        msg = 'Group info already present, will overwrite.'
-        warnings.warn(msg, UserWarning)
-
-    g.gv = graphs.GroupVertexList()
-    g.group_dict = group_dict
-    g.num_groups = len(group_dict)
-    num_bytes = mt.get_num_bytes(g.num_groups)
-    g.group_dtype = np.dtype('u' + str(num_bytes))
-    if 'group' in g.v.dtype.names:
-        g.v.group = group_dict
-    else:
-        g.v = append_fields(g.v, 'group', group_dict)
 
 
 @jit(nopython=True)
@@ -113,16 +52,10 @@ def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
     weighted then only one link is considered to exist.
     """
     # Get adj in csr for fast propagation
-    if isinstance(g, graphs.LabelGraph):
-        adj = g.adjacency_matrix(kind='csr', compressed=True)
+    if weighted:
+        adj = g.adjacency_matrix(directed=True, weighted=True)
     else:
-        adj = g.adjacency_matrix(kind='csr')
-
-    if not weighted:
-        adj[adj != 0] = 1
-    elif weighted and not isinstance(g, graphs.WeightedGraph):
-        msg = 'Weighted set to true but graph does not have weights.'
-        warnings.warn(msg, UserWarning)
+        adj = g.adjacency_matrix(directed=True, weighted=False)
 
     # Extract data from csr matrix
     i = adj.indptr
@@ -159,15 +92,8 @@ def trophic_depth(g, final, max_iter=100, tol=1e-3):
     """ Compute the trophic depth of each node, given the weighted graph and
     the size of the connection to the final node (which has depth zero).
     """
-    # Get adj in csr for fast propagation
-    if isinstance(g, graphs.LabelGraph):
-        adj = g.adjacency_matrix(kind='csc', compressed=True)
-    else:
-        adj = g.adjacency_matrix(kind='csc')
-
-    if not isinstance(g, graphs.WeightedGraph):
-        msg = 'Graph does not have weights, will use weights of one.'
-        warnings.warn(msg, UserWarning)
+    # Get adj in csc for fast propagation
+    adj = g.adjacency_matrix(directed=True, weighted=True).tocsc()
 
     # Extract data from csc matrix
     i = adj.indices
