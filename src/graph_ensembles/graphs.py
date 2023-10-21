@@ -158,15 +158,16 @@ class Graph():
             raise ValueError('src and dst can be either both lists or str.')
 
         msg = 'Some vertices in e are not in v.'
-        try:
-            e['_src'] = e['_src'].apply(lambda x: self.id_dict.get(x))
-            src_array = e['_src'].values.astype(self.id_dtype)
-            e['_dst'] = e['_dst'].apply(lambda x: self.id_dict.get(x))
-            dst_array = e['_dst'].values.astype(self.id_dtype)
-        except KeyError:
-            raise Exception(msg)
-        except Exception:
-            raise Exception()
+        e['_src'] = e['_src'].apply(lambda x: self.id_dict.get(x))
+        e['_dst'] = e['_dst'].apply(lambda x: self.id_dict.get(x))
+
+        # Check for nans
+        assert not (np.any(np.isnan(e['_src'])) or 
+                    np.any(np.isnan(e['_dst']))), msg
+
+        # Extract values 
+        src_array = e['_src'].values.astype(self.id_dtype)
+        dst_array = e['_dst'].values.astype(self.id_dtype)
 
         # Construct adjacency matrix
         if weight is not None:
@@ -290,8 +291,12 @@ class Graph():
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         return G
 
@@ -557,8 +562,12 @@ class DiGraph(Graph):
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         return G
 
@@ -809,8 +818,12 @@ class MultiGraph(Graph):
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         # Create label list to assign original values
         lbl_list = [None]*self.num_labels
@@ -1078,8 +1091,12 @@ class MultiDiGraph(MultiGraph, DiGraph):
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         # Create label list to assign original values
         lbl_list = [None]*self.num_labels

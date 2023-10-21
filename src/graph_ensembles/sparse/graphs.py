@@ -158,15 +158,16 @@ class Graph():
             raise ValueError('src and dst can be either both lists or str.')
 
         msg = 'Some vertices in e are not in v.'
-        try:
-            e['_src'] = e['_src'].apply(lambda x: self.id_dict.get(x))
-            src_array = e['_src'].values.astype(self.id_dtype)
-            e['_dst'] = e['_dst'].apply(lambda x: self.id_dict.get(x))
-            dst_array = e['_dst'].values.astype(self.id_dtype)
-        except KeyError:
-            raise Exception(msg)
-        except Exception:
-            raise Exception()
+        e['_src'] = e['_src'].apply(lambda x: self.id_dict.get(x))
+        e['_dst'] = e['_dst'].apply(lambda x: self.id_dict.get(x))
+
+        # Check for nans
+        assert not (np.any(np.isnan(e['_src'])) or 
+                    np.any(np.isnan(e['_dst']))), msg
+
+        # Extract values 
+        src_array = e['_src'].values.astype(self.id_dtype)
+        dst_array = e['_dst'].values.astype(self.id_dtype)
 
         # Construct adjacency matrix
         if weight is not None:
@@ -226,7 +227,7 @@ class Graph():
         """
         if not hasattr(self, 'num_edges') or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=False)
-            self.num_edges = (adj.sum() + np.diagonal(adj).sum()) / 2
+            self.num_edges = (adj.sum() + adj.diagonal().sum()) / 2
 
         return self.num_edges
 
@@ -235,7 +236,7 @@ class Graph():
         """
         if not hasattr(self, 'total_weight') or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=True)
-            self.total_weight = (adj.sum() + np.diagonal(adj).sum()) / 2
+            self.total_weight = (adj.sum() + adj.diagonal().sum()) / 2
 
         return self.total_weight
 
@@ -255,7 +256,7 @@ class Graph():
             adj = self.adjacency_matrix(directed=False, weighted=False)
             
             id_arr, grp_arr, cnt_arr = self.sum_by_group(
-                adj.indptr, adj.indices, adj.data, self.groups)
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64)
 
             self._degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
@@ -299,8 +300,12 @@ class Graph():
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         return G
 
@@ -329,7 +334,7 @@ class Graph():
 
     @staticmethod
     @jit(nopython=True)
-    def sum_by_group(indptr, indices, values, g_arr):
+    def sum_by_group(indptr, indices, values, g_arr, dtype=np.float64):
         """ Sums the values of the matrix along the indices axis using the 
         provided grouping.
         """
@@ -349,9 +354,9 @@ class Graph():
             gcnt = {}
             for g, v in zip(groups[m:n], values[m:n]):
                 if g in gcnt:
-                    gcnt[g] = gcnt[g] + v
+                    gcnt[g] = gcnt[g] + dtype(v)
                 else:
-                    gcnt[g] = v
+                    gcnt[g] = dtype(v)
             id_arr.extend([i]*len(gcnt.keys()))
             grp_arr.extend(gcnt.keys())
             sum_arr.extend(gcnt.values())
@@ -516,13 +521,13 @@ class DiGraph(Graph):
         if not hasattr(self, '_out_degree_by_group') or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
             id_arr, grp_arr, cnt_arr = self.sum_by_group(
-                adj.indptr, adj.indices, adj.data, self.groups)
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64)
             self._out_degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
             adj = adj.tocsc()
             id_arr, grp_arr, cnt_arr = self.sum_by_group(
-                adj.indptr, adj.indices, adj.data, self.groups)
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64)
             self._in_degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
@@ -535,13 +540,13 @@ class DiGraph(Graph):
         if not hasattr(self, '_in_degree_by_group') or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
             id_arr, grp_arr, cnt_arr = self.sum_by_group(
-                adj.indptr, adj.indices, adj.data, self.groups)
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64)
             self._out_degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
             adj = adj.tocsc()
             id_arr, grp_arr, cnt_arr = self.sum_by_group(
-                adj.indptr, adj.indices, adj.data, self.groups)
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64)
             self._in_degree_by_group = sp.coo_array(
                 (cnt_arr, (id_arr, grp_arr)), 
                 shape=(self.num_vertices, self.num_groups)).tocsr()
@@ -604,8 +609,12 @@ class DiGraph(Graph):
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         return G
 
@@ -879,8 +888,12 @@ class MultiGraph(Graph):
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         # Create label list to assign original values
         lbl_list = [None]*self.num_labels
@@ -1167,8 +1180,12 @@ class MultiDiGraph(MultiGraph, DiGraph):
 
         # If present add group info
         if hasattr(self, 'group_dict'):
-            for group_id, i in self.group_dict.items():
-                G.add_node(i, group=group_id)
+            gr_list = [None]*self.num_groups
+            for gr_id, i in self.group_dict.items():
+                gr_list[i] = gr_id
+
+            for i, gr in enumerate(self.groups):
+                G.add_node(i, group=gr_list[gr])
 
         # Create label list to assign original values
         lbl_list = [None]*self.num_labels
