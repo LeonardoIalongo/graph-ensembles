@@ -283,7 +283,7 @@ class Graph():
         """ Return a networkx Graph object for this graph.
         """
         # Initialize Graph object
-        G = nx.Graph(self.adj)
+        G = nx.Graph(self.adjacency_matrix(directed=False, weighted=True))
 
         # Add original node ids
         for node_id, i in self.id_dict.items():
