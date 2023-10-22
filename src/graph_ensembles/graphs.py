@@ -192,8 +192,10 @@ class Graph():
             # Compute total weight
             self.total_weight = self.get_total_weight()
 
-        # Compute degree
-        d = self.degree()
+        # Compute undirected degree
+        adj = self.adj != 0
+        adj = adj | adj.T
+        d = adj.sum(axis=1)
 
         # Warn if vertices have no edges
         zero_idx = np.nonzero(d == 0)[0]
@@ -723,10 +725,11 @@ class MultiGraph(Graph):
             self.adj[lbl_array, src_array, dst_array] = True
 
         # Compute number of edges by label
+        self.num_edges = self.get_num_edges(recompute=True)
         self.num_edges_label = self.get_num_edges_label()
 
         if weight is not None:
-            # Compute total weight
+            self.total_weight = self.get_total_weight(recompute=True)
             self.total_weight_label = self.get_total_weight_label()
 
     def adjacency_matrix(self, directed=False, weighted=False):

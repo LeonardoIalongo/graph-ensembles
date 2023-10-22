@@ -132,7 +132,7 @@ class TestGraph():
         with pytest.warns(UserWarning):
             g = ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
-        assert np.all(g._degree == d), g._degree
+        assert np.all(g.degree() == d), g.degree()
 
     def test_total_weight(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
@@ -361,7 +361,7 @@ class TestDiGraph():
             g = ge.DiGraph(v, self.e, v_id='name', src='creditor', 
                            dst='debtor')
 
-        assert np.all(g._degree == d), g._degree
+        assert np.all(g.degree() == d), g.degree()
 
     def test_total_weight(self):
         g = ge.DiGraph(self.v, self.e, v_id='name', src='creditor',

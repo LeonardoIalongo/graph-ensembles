@@ -129,7 +129,7 @@ class TestGraph():
         with pytest.warns(UserWarning):
             g = ge.Graph(v, self.e, v_id='name', src='creditor', dst='debtor')
 
-        assert np.all(g._degree == d), g._degree
+        assert np.all(g.degree() == d), g.degree()
 
     def test_total_weight(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
@@ -354,7 +354,7 @@ class TestDiGraph():
             g = ge.DiGraph(v, self.e, v_id='name', src='creditor', 
                            dst='debtor')
 
-        assert np.all(g._degree == d), g._degree
+        assert np.all(g.degree() == d), g.degree()
 
     def test_total_weight(self):
         g = ge.DiGraph(self.v, self.e, v_id='name', src='creditor',
@@ -650,16 +650,21 @@ class TestMultiGraph():
         g = ge.MultiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
                           dst='debtor', edge_label='type')
 
-        adj = self.adj != 0
+        adj = self.adj_s.sum(axis=0) != 0
 
         assert np.all(g.adjacency_matrix() == adj), g.adjacency_matrix()
+        assert np.all(
+            g.adjacency_tensor() == (self.adj_s != 0)), g.adjacency_tensor()
 
     def test_init_weights(self):
-        g = ge.Graph(self.v, self.e, v_id='name',
-                     src='creditor', dst='debtor', weight='value')
+        g = ge.MultiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
+                          dst='debtor', edge_label='type')
 
         assert isinstance(g, ge.MultiGraph)
-        assert np.all(g.adjacency_matrix(weighted=True) == self.adj), self.adj
+        adj = self.adj_s.sum(axis=0)
+        assert np.all(g.adjacency_matrix(weighted=True) == adj), adj
+        assert np.all(
+            g.adjacency_tensor(weighted=True) == self.adj_s), self.adj_s
         
     def test_init_id(self):
         g = ge.MultiGraph(self.v_s, self.e_s, v_id='name', src='creditor',

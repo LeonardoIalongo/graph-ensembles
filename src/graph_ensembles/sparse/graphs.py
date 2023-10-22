@@ -192,8 +192,10 @@ class Graph():
             # Compute total weight
             self.total_weight = self.get_total_weight()
 
-        # Compute degree
-        d = self.degree()
+        # Compute undirected degree
+        adj = self.adj != 0
+        adj = adj + adj.T
+        d = adj.sum(axis=1)
 
         # Warn if vertices have no edges
         zero_idx = np.nonzero(d == 0)[0]
