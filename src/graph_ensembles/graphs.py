@@ -790,7 +790,7 @@ class MultiGraph(Graph):
         """
         if not hasattr(self, '_degree_by_label') or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
-            self._degree_by_label = adj.sum(axis=2)
+            self._degree_by_label = adj.sum(axis=2).T
 
         return self._degree_by_label
 
@@ -799,7 +799,7 @@ class MultiGraph(Graph):
         """
         if not hasattr(self, '_strength_by_label') or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
-            self._strength_by_label = adj.sum(axis=2)
+            self._strength_by_label = adj.sum(axis=2).T
 
         return self._strength_by_label
 
@@ -831,8 +831,8 @@ class MultiGraph(Graph):
         lbl, row, col = np.nonzero(self.adj)
         G.add_edges_from(
             zip(row, col, lbl, 
-                [dict(weight=i) for i in self.adj[self.adj != 0].ravel()],
-                [dict(label=lbl_list[i]) for i in lbl]))
+                [dict(weight=i, label=lbl_list[j]) for i, j in zip(
+                    self.adj[self.adj != 0].ravel(), lbl)]))
 
         return G
 
@@ -1044,8 +1044,8 @@ class MultiDiGraph(MultiGraph, DiGraph):
         if not hasattr(self, '_out_degree_by_label') or recompute:
             adj = self.adj_tensor.copy()
             adj[adj != 0] = 1
-            self._out_degree_by_label = adj.sum(axis=2)
-            self._in_degree_by_label = adj.sum(axis=1)
+            self._out_degree_by_label = adj.sum(axis=2).T
+            self._in_degree_by_label = adj.sum(axis=1).T
 
         return self._out_degree_by_label
 
@@ -1055,8 +1055,8 @@ class MultiDiGraph(MultiGraph, DiGraph):
         if not hasattr(self, '_in_degree_by_label') or recompute:
             adj = self.adj_tensor.copy()
             adj[adj != 0] = 1
-            self._out_degree_by_label = adj.sum(axis=2)
-            self._in_degree_by_label = adj.sum(axis=1)
+            self._out_degree_by_label = adj.sum(axis=2).T
+            self._in_degree_by_label = adj.sum(axis=1).T
 
         return self._in_degree_by_label
 
@@ -1064,7 +1064,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """ Compute the out strength sequence by label.
         """
         if not hasattr(self, '_out_strength_by_label') or recompute:
-            self._out_strength_by_label = self.adj.sum(axis=2)
+            self._out_strength_by_label = self.adj.sum(axis=2).T
             
         return self._out_strength_by_label
 
@@ -1072,7 +1072,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """ Compute the in strength sequence by label.
         """
         if not hasattr(self, '_in_strength_by_label') or recompute:
-            self._in_strength_by_label = self.adj.sum(axis=1)
+            self._in_strength_by_label = self.adj.sum(axis=1).T
             
         return self._in_strength_by_label
 
@@ -1104,7 +1104,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         lbl, row, col = np.nonzero(self.adj)
         G.add_edges_from(
             zip(row, col, lbl, 
-                [dict(weight=i) for i in self.adj[self.adj != 0].ravel()],
-                [dict(label=lbl_list[i]) for i in lbl]))
+                [dict(weight=i, label=lbl_list[j]) for i, j in zip(
+                    self.adj[self.adj != 0].ravel(), lbl)]))
 
         return G

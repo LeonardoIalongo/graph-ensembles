@@ -895,8 +895,8 @@ class MultiGraph(Graph):
             lbl = k
             G.add_edges_from(
                 zip(adj.row, adj.col, lbl, 
-                    [dict(weight=i) for i in adj.data],
-                    [dict(label=lbl_list[i]) for i in lbl]))
+                    [dict(weight=i, label=lbl_list[j]) for i, j in zip(
+                        adj.data, lbl)]))
 
         return G
 
@@ -1187,7 +1187,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
             lbl = k
             G.add_edges_from(
                 zip(adj.row, adj.col, lbl, 
-                    [dict(weight=i) for i in adj.data],
-                    [dict(label=lbl_list[i]) for i in lbl]))
+                    [dict(weight=i, label=lbl_list[j]) for i, j in zip(
+                        adj.data, lbl)]))
 
         return G
