@@ -205,8 +205,8 @@ class TestGraph():
                2: {0: {'weight': True}, 1: {'weight': True}}}
 
         gx = g.to_networkx()
-        assert np.all(list(gx.nodes(data=True)) == v)
-        assert np.all(list(gx.edges(data=True)) == e)
+        assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
         assert gx.adj == adj
 
     def test_to_networkx_weights(self):
@@ -227,8 +227,8 @@ class TestGraph():
                2: {0: {'weight': 1e6}, 1: {'weight': 3e3}}}
 
         gx = g.to_networkx()
-        assert np.all(list(gx.nodes(data=True)) == v)
-        assert np.all(list(gx.edges(data=True)) == e)
+        assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
         assert gx.adj == adj
 
 
@@ -552,8 +552,8 @@ class TestDiGraph():
                2: {'weight': True}}, 2: {0: {'weight': True}}}
 
         gx = g.to_networkx()
-        assert np.all(list(gx.nodes(data=True)) == v)
-        assert np.all(list(gx.edges(data=True)) == e)
+        assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
         assert gx.adj == adj
 
     def test_to_networkx_weights(self):
@@ -574,8 +574,8 @@ class TestDiGraph():
                2: {'weight': 3e3}}, 2: {0: {'weight': 1e6}}}
 
         gx = g.to_networkx()
-        assert np.all(list(gx.nodes(data=True)) == v)
-        assert np.all(list(gx.edges(data=True)) == e)
+        assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
         assert gx.adj == adj
 
 
@@ -899,7 +899,7 @@ class TestMultiGraph():
 
         gx = g.to_networkx()
         assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
-        assert np.all(list(gx.edges(data=True)) == e), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
         assert gx.adj == a, gx.adj 
 
     def test_to_networkx_weights(self):
@@ -936,7 +936,7 @@ class TestMultiGraph():
 
         gx = g.to_networkx()
         assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
-        assert np.all(list(gx.edges(data=True)) == e), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
         assert gx.adj == a, gx.adj 
 
 
@@ -1065,134 +1065,328 @@ class TestMultiDiGraph():
         msg = 'There is at least one repeated id in the vertex dataframe.'
         assert e_info.value.args[0] == msg
 
+    def test_vertices_in_e_not_v(self):
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['ABN', 'UK', 'BNP', 'FR', 1e4, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 4e5, 'external', False]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
 
-#     def test_out_degree(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'])
-#         d_out = np.array([1, 2, 1, 1])
-#         d_test = g.out_degree(get=True)
+        with pytest.raises(Exception) as e_info:
+            ge.MultiDiGraph(self.v, e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
 
-#         assert np.all(d_test == d_out), d_test
-#         assert np.all(g.v.out_degree == d_out), g.v.out_degree
+        msg = 'Some vertices in e are not in v.'
+        assert e_info.value.args[0] == msg
 
-#     def test_in_degree(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'])
-#         d_in = np.array([1, 3, 1, 0])
-#         d_test = g.in_degree(get=True)
+        e = pd.DataFrame([['ING', 'NL', 'ABN', 'NL', 1e6, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 2.3e7, 'external', False],
+                         ['BNP', 'IT', 'ABN', 'NL', 7e5, 'interbank', True],
+                         ['ABN', 'NL', 'UBS', 'FR', 1e4, 'interbank', False],
+                         ['BNP', 'FR', 'ABN', 'NL', 4e5, 'external', False]],
+                         columns=['creditor', 'c_country',
+                                  'debtor', 'd_country',
+                                  'value', 'type', 'EUR'])
 
-#         assert np.all(d_test == d_in), d_test
-#         assert np.all(g.v.in_degree == d_in), g.v.in_degree
+        with pytest.raises(Exception) as e_info:
+            ge.MultiDiGraph(self.v, e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
 
+        msg = 'Some vertices in e are not in v.'
+        assert e_info.value.args[0] == msg
 
-#     def test_out_degree_by_label(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'])
+    def test_vertex_group(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            v_group='country')
 
-#         d_out = np.rec.array([(0, 0, 1),
-#                              (0, 1, 1),
-#                              (0, 3, 1),
-#                              (1, 2, 1),
-#                              (2, 3, 1),
-#                              (3, 1, 1)],
-#                              dtype=[('label', np.uint8),
-#                                     ('id', np.uint8),
-#                                     ('value', np.uint8)])
+        test_v = np.array([2, 0, 1, 2], dtype=np.uint8)
 
-#         d_test = g.out_degree_by_label(get=True)
+        assert isinstance(g, ge.Graph)
+        assert isinstance(g, ge.MultiDiGraph)
+        assert np.all(g.groups == test_v), g.groups
 
-#         assert np.all(d_test == d_out), d_test
-#         assert np.all(g.lv.out_degree == d_out), g.lv.out_degree
+    def test_degree(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['BNP', 'IT'],
+                         ['ABN', 'UK'],
+                         ['UBS', 'FR']],
+                         columns=['name', 'country'])
 
-#     def test_in_degree_by_label(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'])
+        d = np.array([3, 0, 1, 1, 1, 0])
 
-#         d_in = np.rec.array([(0, 1, 2),
-#                              (0, 2, 1),
-#                              (1, 1, 1),
-#                              (2, 1, 1),
-#                              (3, 0, 1)],
-#                             dtype=[('label', np.uint8),
-#                                    ('id', np.uint8),
-#                                    ('value', np.uint8)])
+        with pytest.warns(UserWarning):
+            g = ge.MultiDiGraph(v, self.e, v_id=['name', 'country'],
+                                src=['creditor', 'c_country'],
+                                dst=['debtor', 'd_country'],
+                                edge_label=['type', 'EUR'])
 
-#         d_test = g.in_degree_by_label(get=True)
+        assert np.all(g.degree() == d), g.degree()
 
-#         assert np.all(d_test == d_in), d_test
-#         assert np.all(g.lv.in_degree == d_in), g.lv.in_degree
+    def test_out_degree(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
+        d_out = np.array([2, 1, 1, 1])
+        d_test = g.out_degree()
 
-#     def test_out_strength(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'],
-#                      weight='value')
-#         s_out = np.array([1e6, 1e4 + 4e5, 2.3e7, 7e5 + 3e3])
-#         s_test = g.out_strength(get=True)
+        assert np.all(d_test == d_out), d_test
+        assert np.all(g._out_degree == d_out), g._out_degree
 
-#         assert np.all(s_test == s_out), s_test
-#         assert np.all(g.v.out_strength == s_out), g.v.out_strength
+    def test_in_degree(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
+        d_in = np.array([3, 1, 0, 1])
+        d_test = g.in_degree()
 
-#     def test_in_strength(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'],
-#                      weight='value')
-#         s_in = np.array([4e5, 1e6 + 2.3e7 + 7e5 + 3e3, 1e4, 0])
-#         s_test = g.in_strength(get=True)
+        assert np.all(d_test == d_in), d_test
+        assert np.all(g._in_degree == d_in), g._in_degree
 
-#         assert np.all(s_test == s_in), s_test
-#         assert np.all(g.v.in_strength == s_in), g.v.in_strength
+    def test_vertices_with_no_edge(self):
+        v = pd.DataFrame([['ING', 'NL'],
+                         ['ABN', 'NL'],
+                         ['BNP', 'FR'],
+                         ['BNP', 'IT'],
+                         ['ABN', 'UK'],
+                         ['UBS', 'FR']],
+                         columns=['name', 'country'])
 
-#     def test_out_strength_by_label(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'],
-#                      weight='value')
+        with pytest.warns(UserWarning, match=r' vertices have no edges.'):
+            ge.MultiDiGraph(v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
 
-#         s_out = np.rec.array([(0, 0, 1e6),
-#                              (0, 1, 1e4),
-#                              (0, 3, 3e3),
-#                              (1, 2, 2.3e7),
-#                              (2, 3, 7e5),
-#                              (3, 1, 4e5)],
-#                              dtype=[('label', np.uint8),
-#                                     ('id', np.uint8),
-#                                     ('value', np.float64)])
+    def test_degree_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
 
-#         s_test = g.out_strength_by_label(get=True)
+        d = np.array([[1, 1, 3, 1],
+                      [1, 0, 1, 0],
+                      [0, 0, 1, 1],
+                      [0, 1, 1, 0]])
 
-#         assert np.all(s_test == s_out), s_test
-#         assert np.all(g.lv.out_strength == s_out), g.lv.out_strength
+        d_test = g.degree_by_label()
 
-#     def test_in_strength_by_label(self):
-#         g = ge.Graph(self.v, self.e, v_id=['name', 'country'],
-#                      src=['creditor', 'c_country'],
-#                      dst=['debtor', 'd_country'],
-#                      edge_label=['type', 'EUR'],
-#                      weight='value')
+        assert np.all(d_test == d), d_test
+        assert np.all(g._degree_by_label == d), g._degree_by_label
 
-#         s_in = np.rec.array([(0, 1, 1e6 + 3e3),
-#                              (0, 2, 1e4),
-#                              (1, 1, 2.3e7),
-#                              (2, 1, 7e5),
-#                              (3, 0, 4e5)],
-#                             dtype=[('label', np.uint8),
-#                                    ('id', np.uint8),
-#                                    ('value', np.float64)])
+    def test_out_degree_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
 
-#         s_test = g.in_strength_by_label(get=True)
+        d_out = np.array([[0, 1, 1, 0],
+                          [1, 0, 0, 0],
+                          [0, 0, 1, 1],
+                          [0, 0, 1, 0]])
 
-#         assert np.all(s_test == s_in), s_test
-#         assert np.all(g.lv.in_strength == s_in), g.v.in_strength
+        d_test = g.out_degree_by_label()
+
+        assert np.all(d_test == d_out), d_test
+        assert np.all(g._out_degree_by_label == d_out), g._out_degree_by_label
+
+    def test_in_degree_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
+
+        d_in = np.array([[1, 0, 2, 1],
+                         [0, 0, 1, 0],
+                         [0, 0, 0, 0],
+                         [0, 1, 0, 0]])
+
+        d_test = g.in_degree_by_label()
+
+        assert np.all(d_test == d_in), d_test
+        assert np.all(g._in_degree_by_label == d_in), g._in_degree_by_label
+
+    def test_total_weight(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+
+        assert g.total_weight() == 1e6 + 2.3e7 + 7e5 + 3e3 + 1e4 + 4e5
+
+    def test_strength(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+        s = np.array([1e6 + 2.3e7 + 7e5 + 3e3 + 1e4 + 4e5,
+                      2.3e7 + 1e4,
+                      7e5 + 3e3,
+                      1e6 + 4e5])
+        s_test = g.strength()
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g._strength == s), g._strength
+
+    def test_out_strength(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+        s_out = np.array([1e4 + 4e5, 2.3e7, 7e5 + 3e3, 1e6])
+        s_test = g.out_strength()
+
+        assert np.all(s_test == s_out), s_test
+        assert np.all(g._out_strength == s_out), g._out_strength
+
+    def test_in_strength(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+        s_in = np.array([1e6 + 2.3e7 + 7e5 + 3e3, 1e4, 0, 4e5])
+        s_test = g.in_strength()
+
+        assert np.all(s_test == s_in), s_test
+        assert np.all(g._in_strength == s_in), g._in_strength
+
+    def test_total_weight_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+
+        w_by_l = np.array([2.3e7, 4e5, 1e6 + 3e3 + 1e4, 7e5], dtype='f8')
+        test = g.total_weight_label()
+        assert np.all(test == w_by_l), test
+
+    def test_strength_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+
+        s = np.array([[2.3e7, 4e5, 1e4 + 3e3 + 1e6, 7e5],
+                      [2.3e7, 0, 1e4, 0],
+                      [0, 0, 3e3, 7e5],
+                      [0, 4e5, 1e6, 0]])
+
+        s_test = g.strength_by_label()
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g._strength_by_label == s), g._strength_by_label
+
+    def test_out_strength_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+
+        s = np.array([[0, 4e5, 1e4, 0],
+                      [2.3e7, 0, 0, 0],
+                      [0, 0, 3e3, 7e5],
+                      [0, 0, 1e6, 0]])
+
+        s_test = g.out_strength_by_label()
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g._out_strength_by_label == s), s_test
+
+    def test_in_strength_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+
+        s = np.array([[2.3e7, 0, 3e3 + 1e6, 7e5],
+                      [0, 0, 1e4, 0],
+                      [0, 0, 0, 0],
+                      [0, 4e5, 0, 0]])
+
+        s_test = g.in_strength_by_label()
+
+        assert np.all(s_test == s), s_test
+        assert np.all(g._in_strength_by_label == s), s_test
+
+    def test_to_networkx(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            v_group='country')
+
+        v = [(0, {'node_id': ('ABN', 'NL'), 'group': 'NL'}), 
+             (1, {'node_id': ('BNP', 'FR'), 'group': 'FR'}), 
+             (2, {'node_id': ('BNP', 'IT'), 'group': 'IT'}), 
+             (3, {'node_id': ('ING', 'NL'), 'group': 'NL'})]
+
+        e = [(0, 3, {'weight': True, 'label': ('external', True)}),
+             (0, 1, {'weight': True, 'label': ('interbank', False)}),
+             (1, 0, {'weight': True, 'label': ('external', False)}),
+             (2, 0, {'weight': True, 'label': ('interbank', False)}),
+             (2, 0, {'weight': True, 'label': ('interbank', True)}),
+             (3, 0, {'weight': True, 'label': ('interbank', False)})]
+
+        a = {0: {1: {2: {'weight': True, 'label': ('interbank', False)}},
+                 3: {1: {'weight': True, 'label': ('external', True)}}}, 
+             1: {0: {0: {'weight': True, 'label': ('external', False)}}}, 
+             2: {0: {2: {'weight': True, 'label': ('interbank', False)}, 
+                     3: {'weight': True, 'label': ('interbank', True)}}}, 
+             3: {0: {2: {'weight': True, 'label': ('interbank', False)}}}}
+
+        gx = g.to_networkx()
+        assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
+        assert gx.adj == a, gx.adj 
+
+    def test_to_networkx_weights(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            v_group='country', weight='value')
+
+        v = [(0, {'node_id': ('ABN', 'NL'), 'group': 'NL'}), 
+             (1, {'node_id': ('BNP', 'FR'), 'group': 'FR'}), 
+             (2, {'node_id': ('BNP', 'IT'), 'group': 'IT'}), 
+             (3, {'node_id': ('ING', 'NL'), 'group': 'NL'})]
+
+        e = [(0, 3, {'weight': 4e5, 'label': ('external', True)}),
+             (0, 1, {'weight': 1e4, 'label': ('interbank', False)}),
+             (1, 0, {'weight': 2.3e7, 'label': ('external', False)}),
+             (2, 0, {'weight': 3e3, 'label': ('interbank', False)}),
+             (2, 0, {'weight': 7e5, 'label': ('interbank', True)}),
+             (3, 0, {'weight': 1e6, 'label': ('interbank', False)})]
+
+        a = {0: {1: {2: {'weight': 10000.0, 'label': ('interbank', False)}},
+                 3: {1: {'weight': 400000.0, 'label': ('external', True)}}}, 
+             1: {0: {0: {'weight': 23000000.0, 'label': ('external', False)}}},
+             2: {0: {2: {'weight': 3000.0, 'label': ('interbank', False)}, 
+                     3: {'weight': 700000.0, 'label': ('interbank', True)}}}, 
+             3: {0: {2: {'weight': 1000000.0, 'label': ('interbank', False)}}}}
+
+        gx = g.to_networkx()
+        assert np.all(list(gx.nodes(data=True)) == v), gx.nodes(data=True)
+        assert np.all(list(gx.edges(data=True)) == e), gx.edges(data=True)
+        assert gx.adj == a, gx.adj 

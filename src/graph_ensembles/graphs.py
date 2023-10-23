@@ -1007,12 +1007,13 @@ class MultiDiGraph(MultiGraph, DiGraph):
 
         elif not directed and weighted:
             # Symmetrize
-            sym = self.adj + self.adj.transpose((0, 2, 1))
+            adj = self.adj + self.adj.transpose((0, 2, 1))
 
             # Remove double count diagonal
-            diag_index = [i*(sym.shape[1] + 1) - sym.shape[1]*(i//sym.shape[1])
-                          for i in range(sym.shape[0]*sym.shape[1])]
-            sym.ravel()[diag_index] = np.diagonal(self.adj, axis1=1, axis2=2)
+            diag_index = [i*(adj.shape[1] + 1) - adj.shape[1]*(i//adj.shape[1])
+                          for i in range(adj.shape[0]*adj.shape[1])]
+            adj.ravel()[diag_index] = np.diagonal(
+                self.adj, axis1=1, axis2=2).ravel()
 
         else:
             adj = self.adj != 0
@@ -1042,8 +1043,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """ Compute the out degree sequence by label.
         """
         if not hasattr(self, '_out_degree_by_label') or recompute:
-            adj = self.adj_tensor.copy()
-            adj[adj != 0] = 1
+            adj = self.adjacency_tensor(directed=True, weighted=False)
             self._out_degree_by_label = adj.sum(axis=2).T
             self._in_degree_by_label = adj.sum(axis=1).T
 
@@ -1053,8 +1053,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """ Compute the in degree sequence by label.
         """
         if not hasattr(self, '_in_degree_by_label') or recompute:
-            adj = self.adj_tensor.copy()
-            adj[adj != 0] = 1
+            adj = self.adjacency_tensor(directed=True, weighted=False)
             self._out_degree_by_label = adj.sum(axis=2).T
             self._in_degree_by_label = adj.sum(axis=1).T
 
