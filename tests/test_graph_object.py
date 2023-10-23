@@ -119,7 +119,7 @@ class TestGraph():
     def test_num_edges(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor', dst='debtor')
 
-        assert g.num_edges == 3
+        assert g.num_edges() == 3
 
     def test_degree_init(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
@@ -135,7 +135,7 @@ class TestGraph():
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
                      dst='debtor', weight='value')
 
-        assert g.total_weight == 1e6 + 1.7e5 + 1e4 + 3e3
+        assert g.total_weight() == 1e6 + 1.7e5 + 1e4 + 3e3
  
     def test_strength(self):
         g = ge.Graph(self.v, self.e, v_id='name', src='creditor',
@@ -343,7 +343,7 @@ class TestDiGraph():
         g = ge.DiGraph(self.v, self.e, v_id='name', src='creditor', 
                        dst='debtor')
 
-        assert g.num_edges == 4
+        assert g.num_edges() == 4
 
     def test_degree_init(self):
         v = pd.DataFrame([['ING'], ['ABN'], ['BNP'], ['RAB'], ['UBS']],
@@ -360,7 +360,7 @@ class TestDiGraph():
         g = ge.DiGraph(self.v, self.e, v_id='name', src='creditor',
                        dst='debtor', weight='value')
 
-        assert g.total_weight == 1e6 + 1.7e5 + 1e4 + 3e3
+        assert g.total_weight() == 1e6 + 1.7e5 + 1e4 + 3e3
  
     def test_strength(self):
         g = ge.DiGraph(self.v, self.e, v_id='name', src='creditor',
@@ -636,7 +636,7 @@ class TestMultiGraph():
                           dst='debtor', edge_label='type')
 
         assert isinstance(g, ge.MultiGraph)
-        assert g.num_edges == 2
+        assert g.num_edges() == 2
 
     def test_num_edges_by_label(self):
         g = ge.MultiGraph(self.v, self.e, v_id=['name', 'country'],
@@ -644,7 +644,7 @@ class TestMultiGraph():
                           dst=['debtor', 'd_country'],
                           edge_label=['type', 'EUR'])
         test_num = np.array([1, 1, 3, 1])
-        assert np.all(g.num_edges_label == test_num)
+        assert np.all(g.num_edges_label() == test_num)
 
     def test_init_edges(self):
         g = ge.MultiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
@@ -658,7 +658,7 @@ class TestMultiGraph():
 
     def test_init_weights(self):
         g = ge.MultiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
-                          dst='debtor', edge_label='type')
+                          dst='debtor', weight='value', edge_label='type')
 
         assert isinstance(g, ge.MultiGraph)
         adj = self.adj_s.sum(axis=0)
@@ -682,14 +682,17 @@ class TestMultiGraph():
         g = ge.MultiGraph(self.v, self.e, v_id=['name', 'country'],
                           src=['creditor', 'c_country'],
                           dst=['debtor', 'd_country'],
-                          edge_label=['type', 'EUR'])
+                          edge_label=['type', 'EUR'],
+                          weight='value')
 
         test_dict = {('ABN', 'NL'): 0, ('BNP', 'FR'): 1, 
                      ('BNP', 'IT'): 2, ('ING', 'NL'): 3}
         test_label = {('external', False): 0, ('external', True): 1,
                       ('interbank', False): 2, ('interbank', True): 3}
 
-        assert np.all(g.adjacency_tensor() == self.adj), self.adj
+        adj = (self.adj != 0)
+        assert np.all(g.adjacency_tensor() == adj), adj
+        assert np.all(g.adjacency_tensor(weighted=True) == self.adj), self.adj
         assert test_dict == g.id_dict, g.id_dict
         assert test_label == g.label_dict, g.label_dict
 
@@ -736,3 +739,68 @@ class TestMultiDiGraph():
     adj_s[1, 0, 1] = 1e4
     adj_s[1, 1, 0] = 1.7e5
     adj_s[1, 2, 0] = 1e6
+
+    def test_init_class(self):
+        g = ge.MultiDiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
+                            dst='debtor', edge_label='type')
+
+        assert isinstance(g, ge.MultiGraph)
+        assert g.num_edges() == 4
+
+    def test_num_edges_by_label(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'])
+        test_num = np.array([1, 1, 3, 1])
+        assert np.all(g.num_edges_label() == test_num)
+
+    def test_init_edges(self):
+        g = ge.MultiDiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
+                            dst='debtor', edge_label='type')
+
+        adj = self.adj_s.sum(axis=0) != 0
+
+        assert np.all(g.adjacency_matrix() == adj), g.adjacency_matrix()
+        assert np.all(
+            g.adjacency_tensor() == (self.adj_s != 0)), g.adjacency_tensor()
+
+    def test_init_weights(self):
+        g = ge.MultiDiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
+                            dst='debtor', weight='value', edge_label='type')
+
+        assert isinstance(g, ge.MultiDiGraph)
+        adj = self.adj_s.sum(axis=0)
+        assert np.all(g.adjacency_matrix(weighted=True) == adj), adj
+        assert np.all(
+            g.adjacency_tensor(weighted=True) == self.adj_s), self.adj_s
+        
+    def test_init_id(self):
+        g = ge.MultiDiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
+                            dst='debtor', edge_label='type')
+        test_dict = {'ABN': 0, 'BNP': 1, 'ING': 2}
+        assert test_dict == g.id_dict
+
+    def test_init_label(self):
+        g = ge.MultiDiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
+                            dst='debtor', edge_label='type')
+        test_dict = {'external': 0, 'interbank': 1}
+        assert test_dict == g.label_dict
+
+    def test_multi_id_init(self):
+        g = ge.MultiDiGraph(self.v, self.e, v_id=['name', 'country'],
+                            src=['creditor', 'c_country'],
+                            dst=['debtor', 'd_country'],
+                            edge_label=['type', 'EUR'],
+                            weight='value')
+
+        test_dict = {('ABN', 'NL'): 0, ('BNP', 'FR'): 1, 
+                     ('BNP', 'IT'): 2, ('ING', 'NL'): 3}
+        test_label = {('external', False): 0, ('external', True): 1,
+                      ('interbank', False): 2, ('interbank', True): 3}
+
+        adj = (self.adj != 0)
+        assert np.all(g.adjacency_tensor() == adj), adj
+        assert np.all(g.adjacency_tensor(weighted=True) == self.adj), self.adj
+        assert test_dict == g.id_dict, g.id_dict
+        assert test_label == g.label_dict, g.label_dict

@@ -185,13 +185,6 @@ class Graph():
                 (np.ones(src_array.shape[0], bool), (src_array, dst_array)), 
                 shape=(self.num_vertices, self.num_vertices)).tocsr()
 
-        # Compute number of edges considering self loop
-        self.num_edges = self.get_num_edges()
-
-        if weight is not None:
-            # Compute total weight
-            self.total_weight = self.get_total_weight()
-
         # Compute undirected degree
         adj = self.adj != 0
         adj = adj + adj.T
@@ -224,23 +217,23 @@ class Graph():
 
         return adj.tocsr()
 
-    def get_num_edges(self, recompute=False):
+    def num_edges(self, recompute=False):
         """ Compute the number of edges.
         """
-        if not hasattr(self, 'num_edges') or recompute:
+        if not hasattr(self, '_num_edges') or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=False)
-            self.num_edges = (adj.sum() + adj.diagonal().sum()) / 2
+            self._num_edges = (adj.sum() + adj.diagonal().sum()) / 2
 
-        return self.num_edges
+        return self._num_edges
 
-    def get_total_weight(self, recompute=False):
+    def total_weight(self, recompute=False):
         """ Compute the sum of all the weights.
         """
-        if not hasattr(self, 'total_weight') or recompute:
+        if not hasattr(self, '_total_weight') or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=True)
-            self.total_weight = (adj.sum() + adj.diagonal().sum()) / 2
+            self._total_weight = (adj.sum() + adj.diagonal().sum()) / 2
 
-        return self.total_weight
+        return self._total_weight
 
     def degree(self, recompute=False):
         """ Compute the undirected degree sequence.
@@ -479,23 +472,23 @@ class DiGraph(Graph):
 
         return adj.tocsr()
 
-    def get_num_edges(self, recompute=False):
+    def num_edges(self, recompute=False):
         """ Compute the number of edges.
         """
-        if not hasattr(self, 'num_edges') or recompute:
+        if not hasattr(self, '_num_edges') or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
-            self.num_edges = adj.sum()
+            self._num_edges = adj.sum()
 
-        return self.num_edges
+        return self._num_edges
 
-    def get_total_weight(self, recompute=False):
+    def total_weight(self, recompute=False):
         """ Compute the sum of all the weights.
         """
-        if not hasattr(self, 'total_weight') or recompute:
+        if not hasattr(self, '_total_weight') or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=True)
-            self.total_weight = adj.sum()
+            self._total_weight = adj.sum()
 
-        return self.total_weight
+        return self._total_weight
 
     def out_degree(self, recompute=False):
         """ Compute the out degree sequence.
@@ -780,13 +773,6 @@ class MultiGraph(Graph):
                      (src_array[ind], dst_array[ind])), 
                     shape=(self.num_vertices, self.num_vertices)).tocsr())
 
-        # Compute number of edges by label
-        self.num_edges_label = self.get_num_edges_label()
-
-        if weight is not None:
-            # Compute total weight
-            self.total_weight_label = self.get_total_weight_label()
-
     def adjacency_matrix(self, directed=False, weighted=False):
         """ Return the adjacency matrix of the graph.
         """
@@ -826,31 +812,31 @@ class MultiGraph(Graph):
 
         return sym
 
-    def get_num_edges_label(self, recompute=False):
+    def num_edges_label(self, recompute=False):
         """ Compute the number of edges.
         """
-        if not hasattr(self, 'num_edges_label') or recompute:
+        if not hasattr(self, '_num_edges_label') or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
             ne_label = []
             for lbl in range(self.num_labels):
                 ne_label.append((adj[lbl].nnz + adj.diagonal().sum()) / 2)
 
-            self.num_edges_label = np.array(ne_label)
+            self._num_edges_label = np.array(ne_label)
 
-        return self.num_edges_label
+        return self._num_edges_label
 
-    def get_total_weight_label(self, recompute=False):
+    def total_weight_label(self, recompute=False):
         """ Compute the sum of all the weights.
         """
-        if not hasattr(self, 'total_weight_label') or recompute:
+        if not hasattr(self, '_total_weight_label') or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
             w_label = []
             for lbl in range(self.num_labels):
                 w_label.append((adj[lbl].sum() + adj.diagonal().sum()) / 2)
 
-            self.total_weight_label = np.array(w_label)
+            self._total_weight_label = np.array(w_label)
 
-        return self.total_weight_label
+        return self._total_weight_label
 
     def degree_by_label(self, recompute=False):
         """ Compute the degree sequence by label.
@@ -1049,8 +1035,8 @@ class MultiDiGraph(MultiGraph, DiGraph):
         MultiDiGraph
             the graph object
         """
-        super().__init__(v, e, v_id=v_id, src=src, dst=dst, weight=weight, 
-                         v_group=v_group)
+        super().__init__(v, e, v_id=v_id, src=src, dst=dst, 
+                         edge_label=edge_label, weight=weight, v_group=v_group)
 
     def adjacency_matrix(self, directed=True, weighted=False):
         """ Return the adjacency matrix of the graph.
@@ -1067,7 +1053,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
             # Symmetrize
             adj = adj + adj.T - sp.spdiags(adj.diagonal(), 0, m=adj.shape)
 
-        else:
+        elif not directed and not weighted:
             adj = adj != 0
             adj = adj | adj.T
 
@@ -1100,23 +1086,23 @@ class MultiDiGraph(MultiGraph, DiGraph):
 
         return adj
 
-    def get_num_edges_label(self, recompute=False):
+    def num_edges_label(self, recompute=False):
         """ Compute the number of edges.
         """
-        if not hasattr(self, 'num_edges_label') or recompute:
+        if not hasattr(self, '_num_edges_label') or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            self.num_edges_label = np.array([a.nnz for a in adj])
+            self._num_edges_label = np.array([a.nnz for a in adj])
 
-        return self.num_edges_label
+        return self._num_edges_label
 
-    def get_total_weight_label(self, recompute=False):
+    def total_weight_label(self, recompute=False):
         """ Compute the sum of all the weights.
         """
-        if not hasattr(self, 'total_weight_label') or recompute:
+        if not hasattr(self, '_total_weight_label') or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=True)
-            self.total_weight_label = np.array([a.sum() for a in adj])
+            self._total_weight_label = np.array([a.sum() for a in adj])
 
-        return self.total_weight_label
+        return self._total_weight_label
 
     def out_degree_by_label(self, recompute=False):
         """ Compute the out degree sequence by label.
