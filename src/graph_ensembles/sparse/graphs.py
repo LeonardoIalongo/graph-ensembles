@@ -26,8 +26,6 @@ class Graph():
     ----------
     num_vertices: int
         number of vertices in the graph
-    num_edges: int
-        number of distinct directed edges in the graph
     adj: numpy.array
         the adjacency matrix of the graph
     id_dict: dict
@@ -42,14 +40,12 @@ class Graph():
         type of the group id
     groups: numpy.array
         array with the group each node belongs to
-    total_weight: numeric
-        sum of all the weights of the edges
 
     Methods
     -------
-    get_num_edges:
+    num_edges:
         compute the number of edges in the graph
-    get_total_weight:
+    total_weight:
         compute the total sum of the weights of the edges
     degree:
         compute the undirected degree sequence
@@ -370,8 +366,6 @@ class DiGraph(Graph):
     ----------
     num_vertices: int
         number of vertices in the graph
-    num_edges: int
-        number of distinct directed edges in the graph
     adj: numpy.array
         the adjacency matrix of the graph
     id_dict: dict
@@ -386,14 +380,12 @@ class DiGraph(Graph):
         type of the group id
     groups: numpy.array
         array with the group each node belongs to
-    total_weight: numeric
-        sum of all the weights of the edges
 
     Methods
     -------
-    get_num_edges:
+    num_edges:
         compute the number of edges in the graph
-    get_total_weight:
+    total_weight:
         compute the total sum of the weights of the edges
     degree:
         compute the undirected degree sequence
@@ -667,21 +659,17 @@ class MultiGraph(Graph):
         array with the group each node belongs to
     label_dtype: numpy.dtype
         the data type of the label internal id
-    total_weight: numeric
-        sum of all the weights of the edges
-    total_weight_label: numpy.array
-        sum of all the weights of the edges by label
 
     Methods
     -------
-    get_num_edges:
+    num_edges:
         compute the number of edges in the graph
-    get_num_edges_label:
+    num_edges_label:
         compute the number of edges in the graph for each layer
-    get_total_weight:
+    total_weight:
         compute the total sum of the weights of the edges
-    get_total_weight_label:
-        compute the number of edges in the graph for each layer
+    total_weight_label:
+        compute the total sum of the weights by label
     degree:
         compute the undirected degree sequence
     degree_by_group:
@@ -817,11 +805,11 @@ class MultiGraph(Graph):
         """
         if not hasattr(self, '_num_edges_label') or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
-            ne_label = []
+            ne_lbl = []
             for lbl in range(self.num_labels):
-                ne_label.append((adj[lbl].nnz + adj.diagonal().sum()) / 2)
+                ne_lbl.append((adj[lbl].nnz + adj[lbl].diagonal().sum()) / 2)
 
-            self._num_edges_label = np.array(ne_label)
+            self._num_edges_label = np.array(ne_lbl)
 
         return self._num_edges_label
 
@@ -830,11 +818,11 @@ class MultiGraph(Graph):
         """
         if not hasattr(self, '_total_weight_label') or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
-            w_label = []
+            w_lbl = []
             for lbl in range(self.num_labels):
-                w_label.append((adj[lbl].sum() + adj.diagonal().sum()) / 2)
+                w_lbl.append((adj[lbl].sum() + adj[lbl].diagonal().sum()) / 2)
 
-            self._total_weight_label = np.array(w_label)
+            self._total_weight_label = np.array(w_lbl)
 
         return self._total_weight_label
 
@@ -892,11 +880,10 @@ class MultiGraph(Graph):
         for k in range(self.num_labels):
             adj = self.adj[k].tocoo()
             lbl = np.empty(adj.nnz)
-            lbl = k
+            lbl[:] = k
             G.add_edges_from(
                 zip(adj.row, adj.col, lbl, 
-                    [dict(weight=i, label=lbl_list[j]) for i, j in zip(
-                        adj.data, lbl)]))
+                    [dict(weight=i, label=lbl_list[k]) for i in adj.data]))
 
         return G
 
@@ -931,12 +918,8 @@ class MultiDiGraph(MultiGraph, DiGraph):
     ----------
     num_vertices: int
         number of vertices in the graph
-    num_edges: int
-        number of distinct directed edges in the graph
     num_labels: int
         number of distinct edge labels
-    num_edges_label: numpy.array
-        number of edges by label (in order)
     adj: numpy.array
         the adjacency tensor of the graph
     id_dict: dict
@@ -953,19 +936,17 @@ class MultiDiGraph(MultiGraph, DiGraph):
         array with the group each node belongs to
     label_dtype: numpy.dtype
         the data type of the label internal id
-    total_weight: numeric
-        sum of all the weights of the edges
-    total_weight_label: numpy.array
-        sum of all the weights of the edges by label
 
     Methods
     -------
-    get_num_edges:
+    num_edges:
         compute the number of edges in the graph
-    get_num_edges_label:
+    num_edges_label:
         compute the number of edges in the graph for each layer
-    get_total_weight:
+    total_weight:
         compute the total sum of the weights of the edges
+    total_weight_label:
+        compute the total sum of the weights by label
     degree:
         compute the undirected degree sequence
     out_degree:
@@ -1047,7 +1028,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
             adj += self.adj[lbl]
 
         if directed and not weighted:
-            adj = self.adj != 0
+            adj = adj != 0
 
         elif not directed and weighted:
             # Symmetrize
@@ -1055,7 +1036,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
 
         elif not directed and not weighted:
             adj = adj != 0
-            adj = adj | adj.T
+            adj = adj + adj.T
 
         return adj
 
@@ -1068,7 +1049,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         elif directed and not weighted:
             adj = []
             for lbl in range(self.num_labels):
-                adj = self.adj[lbl] != 0
+                adj.append(self.adj[lbl] != 0)
 
         elif not directed and weighted:
             # Symmetrize
@@ -1184,10 +1165,9 @@ class MultiDiGraph(MultiGraph, DiGraph):
         for k in range(self.num_labels):
             adj = self.adj[k].tocoo()
             lbl = np.empty(adj.nnz)
-            lbl = k
+            lbl[:] = k
             G.add_edges_from(
                 zip(adj.row, adj.col, lbl, 
-                    [dict(weight=i, label=lbl_list[j]) for i, j in zip(
-                        adj.data, lbl)]))
+                    [dict(weight=i, label=lbl_list[k]) for i in adj.data]))
 
         return G

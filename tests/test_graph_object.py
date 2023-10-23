@@ -987,7 +987,7 @@ class TestMultiDiGraph():
         g = ge.MultiDiGraph(self.v_s, self.e_s, v_id='name', src='creditor',
                             dst='debtor', edge_label='type')
 
-        assert isinstance(g, ge.MultiGraph)
+        assert isinstance(g, ge.MultiDiGraph)
         assert g.num_edges() == 4
 
     def test_num_edges_by_label(self):
