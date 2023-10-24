@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.optimize import minimize
 import scipy
 
 
@@ -56,8 +55,9 @@ class Solution():
                 raise ValueError('xtol or diff_seq not set.')
 
 
-def monotonic_newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
-                            full_return=False, verbose=False):
+def monotonic_newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100, 
+                            x_l=0, x_u=np.infty, full_return=False, 
+                            verbose=False):
     """Find roots of eq. f(x) = 0, using the newton method.
     This implementation assumes that the function is monotonic in x:
     it identifies a bracket within which the root must be and uses a 
@@ -115,10 +115,10 @@ def monotonic_newton_solver(x0, fun, tol=1e-6, xtol=1e-6, max_iter=100,
     elif f > 0:
         x_u = x
         f_u = f
-        x_l = 0
+        x_l = x_l
         f_l = -np.infty
     else:
-        x_u = +np.infty
+        x_u = x_u
         f_u = +np.infty
         x_l = x
         f_l = f
@@ -622,67 +622,3 @@ def fixed_point_solver(x0, fun, xtol=1e-6, max_iter=100, full_return=False,
                         xtol=xtol)
     else:
         return x
-
-
-def alpha_solver(x0, fun, jac, min_d, jac_min_d, tol=1e-6,
-                 max_iter=100, full_return=False, verbose=False):
-    """Find the optimal z and alpha that satisfy the constraints:
-        - Expected number of links == empirical number of links
-        - Mininum non-zero expected degree is at least one
-        - z > 0 and alpha > 0
-
-    Note alpha will be chosen to be the minimum deviation from one that
-    satisfies the constraints.
-
-    Parameters
-    ----------
-    x0: float or np.ndarray
-        starting points of the method
-    fun: function (z, a)
-        function that returns both the value of the function and the Jacobian
-    min_d: function (z, a)
-        function for the minimum degree value
-    method: 'SLSQP' or 'trust-constr'
-        optimization method
-    tol: float
-        tolerance for the exit condition on the norm
-    xtol: float
-        relative tol for the exit condition on difference between iterations
-    max_iter: int or float
-        maximum number of iteration
-    full_return: boolean
-        if true return all info on convergence
-    verbose: boolean
-        if true print debug info while iterating
-    Returns
-    -------
-    Solution
-        Returns a Solution object.
-    """
-
-    constraints = [{'type': 'eq',
-                    'fun': fun,
-                    'jac': jac},
-                   {'type': 'ineq',
-                    'fun': min_d,
-                    'jac': jac_min_d}]
-
-    res = minimize(lambda x: (x[1] - 1)**2,
-                   x0,
-                   method='SLSQP',
-                   jac=lambda x: np.array([0, 2*(x[1]-1)],
-                                          dtype=np.float64),
-                   bounds=[(0, None), (0, None)],
-                   constraints=constraints,
-                   tol=tol,
-                   options={'maxiter': max_iter, 'disp': verbose})
-
-    if full_return:
-        sol = Solution(res.x, res.nit, max_iter, 'SLSQP', tol=tol)
-        sol.converged = res.success
-        sol.status = res.status
-        sol.message = res.message
-        sol.alpha_seq = res.fun
-        return sol
-    else:
-        return res.x
