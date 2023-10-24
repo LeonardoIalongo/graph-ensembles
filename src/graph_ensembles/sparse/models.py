@@ -4,7 +4,14 @@ reconstruction, filtering or pattern detection among others. """
 from . import graphs
 from ..solver import monotonic_newton_solver
 import numpy as np
+import numpy.random as rng
 import scipy.sparse as sp
+from numba import jit
+from math import floor
+from math import exp
+from math import expm1
+from math import log
+from math import isinf
 import warnings
 
 
@@ -78,7 +85,6 @@ class FitnessModel(GraphEnsemble):
                 g = args[0]
                 self.num_vertices = g.num_vertices
                 self.num_edges = g.num_edges
-                self.id_dtype = g.id_dtype
                 self.fit_out = g.out_strength()
                 self.fit_in = g.in_strength()
             else:
@@ -176,7 +182,7 @@ class FitnessModel(GraphEnsemble):
             if np.any(self.param < 0):
                 raise ValueError('Parameters must be positive.')
 
-    def fit(self, x0=None, method='density', solver='Newton-CG', atol=1e-18, 
+    def fit(self, x0=None, method='density', atol=1e-18, 
             rtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
@@ -221,8 +227,9 @@ class FitnessModel(GraphEnsemble):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
             sol = monotonic_newton_solver(
-                x0, self.density_fit_fun, tol=atol, xtol=rtol, 
-                max_iter=maxiter, full_return=True, verbose=verbose)
+                x0, self.density_fit_fun, tol=atol, xtol=rtol, x_l=0, 
+                x_u=np.infty, max_iter=maxiter, full_return=True, 
+                verbose=verbose)
 
         elif method == 'mle':
             raise ValueError("Method not implemented.")
@@ -237,74 +244,57 @@ class FitnessModel(GraphEnsemble):
         if not self.solver_output.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
-    def expected_num_edges(self, get=False):
+    def expected_num_edges(self, recompute=False):
         """ Compute the expected number of edges.
         """
         if not hasattr(self, 'param'):
             raise Exception('Model must be fitted beforehand.')
         
-        # It is necessary to select the elements or pickling will fail
-        e_fun = self.exp_edges
-        p_ij = self.p_ij
-        delta = self.param
-        slflp = self.selfloops
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], x[1], x[2], slflp))
-        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+        if not hasattr(self, '_exp_num_edges') or recompute:
+            self._exp_num_edges = self.exp_edges(
+                self.p_ij, self.param, self.fit_out, self.fit_in, 
+                self.selfloops)
 
-        if get:
-            return self.exp_num_edges
-
-    def expected_degrees(self, get=False):
-        """ Compute the expected undirected/out/in degree.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted beforehand.')
+        return self._exp_num_edges
         
-        # It is necessary to select the elements or pickling will fail
-        e_fun = self.exp_degrees
-        p_ij = self.p_ij
-        delta = self.param
-        slflp = self.selfloops
-        num_v = self.num_vertices
-        tmp = self.p_sym_rdd.map(
-            lambda x: e_fun(
-                p_ij, delta, x[0][0], x[0][1], x[1], x[2], num_v, slflp))
-        exp_d = np.zeros(num_v, dtype=np.float64)
-        exp_d_out = np.zeros(num_v, dtype=np.float64)
-        exp_d_in = np.zeros(num_v, dtype=np.float64)
-        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
-                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
-        self.exp_degree = res[0] 
-        self.exp_out_degree = res[1]
-        self.exp_in_degree = res[2]
+    def expected_degree(self, recompute=False):
+        """ Compute the expected undirected degree.
+        """
+        if not hasattr(self, '_exp_degree') or recompute:
+            res = self.exp_degrees(
+                self.p_ij, self.param, self.fit_out, self.fit_in, 
+                self.num_vertices, self.selfloops)
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
 
-        if get:
-            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+        return self._exp_degree
+
+    def expected_out_degree(self, recompute=False):
+        """ Compute the expected out degree.
+        """
+        if not hasattr(self, '_exp_out_degree') or recompute:
+            res = self.exp_degrees(
+                self.p_ij, self.param, self.fit_out, self.fit_in, 
+                self.num_vertices, self.selfloops)
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
+
+        return self._exp_out_degree
+
+    def expected_in_degree(self, recompute=False):
+        """ Compute the expected in degree.
+        """
+        if not hasattr(self, '_exp_in_degree') or recompute:
+            res = self.exp_degrees(
+                self.p_ij, self.param, self.fit_out, self.fit_in, 
+                self.num_vertices, self.selfloops)
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
         
-    def expected_degree(self, get=False):
-        """ Compute the expected undirected degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_degree
-
-    def expected_out_degree(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_out_degree
-
-    def expected_in_degree(self, get=False):
-        """ Compute the expected in degree for a given z.
-        """
-        self.expected_degrees()
-        
-        if get:
-            return self.exp_in_degree
+        return self._exp_in_degree
 
     def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
                                 deg_recompute=False):
@@ -319,27 +309,19 @@ class FitnessModel(GraphEnsemble):
             raise ValueError(msg)
 
         # Compute correct expected degree
-        if deg_recompute or not hasattr(self, 'exp_out_degree'):
-            self.expected_degrees()
-
         if ndir == 'out':
-            deg = self.exp_out_degree
+            deg = self.exp_out_degree(recompute=deg_recompute)
         elif ndir == 'in':
-            deg = self.exp_in_degree
+            deg = self.exp_in_degree(recompute=deg_recompute)
         elif ndir == 'out-in':
-            deg = self.exp_degree
+            deg = self.exp_degree(recompute=deg_recompute)
         else:
             raise ValueError('Neighbourhood direction not recognised.')
 
         # It is necessary to select the elements or pickling will fail
-        e_fun = self.exp_av_nn_prop
-        p_ij = self.p_ij
-        delta = self.param
-        tmp = self.p_sym_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                            x[1], x[2], prop, ndir, selfloops))
-        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), 
-                         lambda x, y: x + y)
+        av_nn = self.exp_av_nn_prop(
+            self.p_ij, self.param, self.fit_out, self.fit_in, prop, ndir, 
+            self.selfloops)
         
         # Test that mask is the same
         ind = deg != 0
@@ -352,32 +334,33 @@ class FitnessModel(GraphEnsemble):
         return av_nn
 
     def expected_av_nn_degree(self, ddir='out', ndir='out', selfloops=False,
-                              deg_recompute=False, get=False):
+                              deg_recompute=False, recompute=False):
         """ Computes the expected value of the nearest neighbour average of
         the degree.
         """
-        # Compute correct expected degree
-        if deg_recompute or not hasattr(self, 'exp_out_degree'):
-            self.expected_degrees()
-
-        if ddir == 'out':
-            deg = self.exp_out_degree
-        elif ddir == 'in':
-            deg = self.exp_in_degree
-        elif ddir == 'out-in':
-            deg = self.exp_degree
-        else:
-            raise ValueError('Neighbourhood direction not recognised.')
-
-        # Compute property and set attribute
+        # Compute property name
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_d_' + ddir.replace('-', '_'))
-        res = self.expected_av_nn_property(
-            deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
-        setattr(self, name, res)
 
-        if get:
-            return getattr(self, name)
+        if not hasattr(self, name) or recompute:
+            # Compute correct expected degree
+            if ndir == 'out':
+                deg = self.exp_out_degree(recompute=deg_recompute)
+            elif ndir == 'in':
+                deg = self.exp_in_degree(recompute=deg_recompute)
+            elif ndir == 'out-in':
+                deg = self.exp_degree(recompute=deg_recompute)
+            else:
+                raise ValueError('Degree type not recognised.')
+
+            # Compute property and set attribute
+            name = ('exp_av_' + ndir.replace('-', '_') + 
+                    '_nn_d_' + ddir.replace('-', '_'))
+            res = self.expected_av_nn_property(
+                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
+            setattr(self, name, res)
+
+        return getattr(self, name)
 
     def log_likelihood(self, g, selfloops=None):
         """ Compute the likelihood a graph given the fitted model.
@@ -389,9 +372,9 @@ class FitnessModel(GraphEnsemble):
         if selfloops is None:
             selfloops = self.selfloops
 
-        if isinstance(g, graphs.DirectedGraph):
+        if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
-            adj = g.adjacency_matrix(kind='csr')
+            adj = g.adjacency_matrix(directed=True, weighted=False)
         elif isinstance(g, sp.spmatrix):
             adj = g.asformat('csr')
         elif isinstance(g, np.ndarray):
@@ -407,19 +390,18 @@ class FitnessModel(GraphEnsemble):
             raise ValueError(msg)
 
         # Compute log likelihood of graph
-        e_fun = self._likelihood
-        p_ij = self.p_ij
-        delta = self.param
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                            x[1], x[2], adj.indptr, adj.indices,
-                            selfloops))
-        like = tmp.fold(0, lambda x, y: x + y)
+        like = self._likelihood(
+            self.p_ij, self.param, self.fit_out, self.fit_in, 
+            adj.indptr, adj.indices, self.selfloops)
 
         return like
 
-    def sample(self, selfloops=None):
+    def sample(self, ref_g=None, weights=None, out_strength=None, 
+               in_strength=None, selfloops=None):
         """ Return a Graph sampled from the ensemble.
+
+        If a reference graph is passed (ref_g) then the properties of the graph
+        will be copied to the new samples.
         """
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
@@ -428,35 +410,47 @@ class FitnessModel(GraphEnsemble):
             selfloops = self.selfloops
 
         # Generate uninitialised graph object
-        g = graphs.DirectedGraph.__new__(graphs.DirectedGraph)
+        g = graphs.DiGraph.__new__(graphs.DiGraph)
 
         # Initialise common object attributes
         g.num_vertices = self.num_vertices
-        g.id_dtype = self.id_dtype
-        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
-            type=np.recarray, dtype=[('id', g.id_dtype)])
-        g.id_dict = {}
-        for x in g.v.id:
-            g.id_dict[x] = x
+        num_bytes = g.get_num_bytes(g.num_vertices)
+        g.id_dtype = np.dtype('u' + str(num_bytes))
 
-        # Sample edges and extract properties
-        e_fun = self._sample
-        p_ij = self.p_ij
-        delta = self.param
-        app_fun = self.safe_append
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                            x[1], x[2], selfloops))
-        e = tmp.fold([], lambda x, y: app_fun(x, y))
-        e = np.array(e,
-                     dtype=[('src', 'f8'),
-                            ('dst', 'f8')]).view(type=np.recarray)
+        # Check if reference graph is available
+        if ref_g is not None:
+            if hasattr(ref_g, 'num_groups'):
+                g.num_groups = ref_g.num_groups
+                g.group_dict = ref_g.group_dict
+                g.group_dtype = ref_g.group_dtype
+                g.groups = ref_g.groups
 
-        e = e.astype([('src', g.id_dtype),
-                      ('dst', g.id_dtype)])
-        g.sort_ind = np.argsort(e)
-        g.e = e[g.sort_ind]
-        g.num_edges = mt.compute_num_edges(g.e)
+            g.id_dict = ref_g.id_dict
+        else:
+            g.id_dict = {}
+            for x in g.v.id:
+                g.id_dict[x] = x
+
+        # Sample edges
+        if weights is None:
+            rows, cols = self._binary_sample(
+                self.p_ij, self.param, self.fit_out, self.fit_in, 
+                self.selfloops)
+            vals = np.ones(len(rows), dtype=bool)
+        elif weights == 'cremb':
+            if out_strength is None:
+                s_out = self.fit_out
+            if in_strength is None:
+                s_in = self.fit_in
+            rows, cols, vals = self._cremb_sample(
+                self.p_ij, self.param, self.fit_out, self.fit_in, 
+                s_out, s_in, self.selfloops)
+        else:
+            raise ValueError('Weights method not recognised or implemented.')
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_matrix((vals, (rows, cols)), 
+                              shape=(g.num_vertices, g.num_vertices))
 
         return g
 
@@ -464,54 +458,29 @@ class FitnessModel(GraphEnsemble):
         """ Return the objective function value and the Jacobian
             for a given value of delta.
         """
-        f_jac = self.exp_edges_f_jac
-        p_jac_ij = self.p_jac_ij
-        slflp = self.selfloops
-        tmp = self.p_iter_rdd.map(
-            lambda x: f_jac(
-                p_jac_ij, delta, x[0][0], x[0][1], x[1], x[2], slflp))
-        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
+        f, jac = self.exp_edges_f_jac(
+            self.p_jac_ij, delta, self.fit_out, self.fit_in, self.selfloops)
         f -= self.num_edges
         return f, jac
 
-    @staticmethod
-    def safe_append(x, y):
-        res = []
-        res.extend(x)
-        res.extend(y)
-        return res
-
-    @staticmethod
-    def fit_map(ind, x, y):
-        """ Assigns to each partition the correct values of strengths to allow
-            computations in parallel over the pij matrix.
-
-            Note that this is done to ensure that each partition can compute
-            pij and pji in the same loop to be able to compute undirected 
-            properties of the ensemble.
-
-            Parameters
-            ----------
-            ind: tuple
-                a tuple containing the slices of the index of fit_out (ind[0])
-                and of fit_in (ind[1]) to iterate over
-            x: numpy.ndarray
-                the out fitness
-            y: numpy.ndarray
-                the in fitness
-
-            Output
-            ------
-            ind: tuple
-                as input
-            x: tuple
-                the relevant slices of x for the iteration over ind
-            y: tuple
-                the relevant slices of y for the iteration over ind
+    @staticmethod              
+    @jit(nopython=True)
+    def exp_edges_f_jac(p_jac_ij, param, fit_out, fit_in, selfloops):
+        """ Compute the objective function of the density solver and its
+        derivative.
         """
-        il, iu = ind[0]
-        jl, ju = ind[1]
-        return ind, (x[il:iu], x[jl:ju]), (y[jl:ju], y[il:iu])
+        f = 0.0
+        jac = 0.0
+        for i in range(len(fit_out)):
+            f_out_i = fit_out[i]
+            for j in range(len(fit_in)):
+                f_in_j = fit_in[j]
+                if (i != j) | selfloops:
+                    p_tmp, jac_tmp = p_jac_ij(param[0], f_out_i, f_in_j)
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
 
     @staticmethod
     @jit(nopython=True)
@@ -537,185 +506,112 @@ class FitnessModel(GraphEnsemble):
         else:
             return tmp1 / (1 + tmp1), tmp / (1 + tmp1)**2
 
-    @staticmethod              
-    @jit(nopython=True)
-    def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, fit_out, fit_in, 
-                        selfloops):
-        """ Compute the objective function of the density solver and its
-        derivative.
-        """
-        f = 0.0
-        jac = 0.0
-        for i in range(ind_out[1]-ind_out[0]):
-            f_out_i = fit_out[i]
-            for j in range(ind_in[1]-ind_in[0]):
-                f_in_j = fit_in[j]
-                if (ind_out[0]+i != ind_in[0]+j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param[0], f_out_i, f_in_j)
-                    f += p_tmp
-                    jac += jac_tmp
-
-        return f, jac
-
     @staticmethod
     @jit(nopython=True)
-    def exp_edges(p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
+    def exp_edges(p_ij, param, fit_out, fit_in, selfloops):
         """ Compute the expected number of edges.
         """
         exp_e = 0.0
-        for i in range(ind_out[1]-ind_out[0]):
+        for i in range(len(fit_out)):
             f_out_i = fit_out[i]
-            for j in range(ind_in[1]-ind_in[0]):
+            for j in range(len(fit_in)):
                 f_in_j = fit_in[j]
-                if (ind_out[0]+i != ind_in[0]+j) | selfloops:
+                if (i != j) | selfloops:
                     exp_e += p_ij(param[0], f_out_i, f_in_j)
 
         return exp_e
 
     @staticmethod
     @jit(nopython=True)
-    def exp_degrees(p_ij, param, ind_out, ind_in, fit_out, fit_in, num_v, 
-                    selfloops):
+    def exp_degrees(p_ij, param, fit_out, fit_in, num_v, selfloops):
         """ Compute the expected undirected, in and out degree sequences.
         """
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
         exp_d_in = np.zeros(num_v, dtype=np.float64)
 
-        if ind_out == ind_in:
-            fold = True
-        else:
-            fold = False
-
-        for i in range(ind_out[1]-ind_out[0]):
-            ind_i = ind_out[0]+i
-            f_out_i = fit_out[0][i]
-            f_in_i = fit_in[1][i]
-            for j in in_range(i, ind_in, fold):
-                ind_j = ind_in[0]+j
-                f_out_j = fit_out[1][j]
-                f_in_j = fit_in[0][j]
-                if ind_i != ind_j:
+        for i in range(len(fit_out)):
+            f_out_i = fit_out[i]
+            f_in_i = fit_in[i]
+            for j in range(i + 1):
+                f_out_j = fit_out[j]
+                f_in_j = fit_in[j]
+                if i != j:
                     pij = p_ij(param[0], f_out_i, f_in_j)
                     pji = p_ij(param[0], f_out_j, f_in_i)
                     p = pij + pji - pij*pji
-                    exp_d[ind_i] += p
-                    exp_d[ind_j] += p
-                    exp_d_out[ind_i] += pij
-                    exp_d_out[ind_j] += pji
-                    exp_d_in[ind_j] += pij
-                    exp_d_in[ind_i] += pji
+                    exp_d[i] += p
+                    exp_d[j] += p
+                    exp_d_out[i] += pij
+                    exp_d_out[j] += pji
+                    exp_d_in[j] += pij
+                    exp_d_in[i] += pji
                 elif selfloops:
                     pii = p_ij(param[0], f_out_i, f_in_j)
-                    exp_d[ind_i] += pii
-                    exp_d_out[ind_i] += pii
-                    exp_d_in[ind_j] += pii
+                    exp_d[i] += pii
+                    exp_d_out[i] += pii
+                    exp_d_in[j] += pii
 
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
     @jit(nopython=True)
-    def exp_av_nn_prop(p_ij, param, ind_out, ind_in, fit_out, fit_in, prop, 
-                       ndir, selfloops):
+    def exp_av_nn_prop(p_ij, param, fit_out, fit_in, prop, ndir, selfloops):
         """ Compute the expected average nearest neighbour property.
         """
         av_nn = np.zeros(prop.shape, dtype=np.float64)
-        if ind_out == ind_in:
-            for i in range(ind_out[1]-ind_out[0]):
-                ind_i = ind_out[0]+i
-                f_out_i = fit_out[0][i]
-                f_in_i = fit_in[1][i]
-                for j in range(i+1):
-                    ind_j = ind_in[0]+j
-                    f_out_j = fit_out[1][j]
-                    f_in_j = fit_in[0][j]
-                    if ind_i != ind_j:
-                        pij = p_ij(param[0], f_out_i, f_in_j)
-                        pji = p_ij(param[0], f_out_j, f_in_i)
-                        if ndir == 'out':
-                            av_nn[ind_i] += pij*prop[ind_j]
-                            av_nn[ind_j] += pji*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pji*prop[ind_j]
-                            av_nn[ind_j] += pij*prop[ind_i]
-                        elif ndir == 'out-in':
-                            p = pij + pji - pij*pji
-                            av_nn[ind_i] += p*prop[ind_j]
-                            av_nn[ind_j] += p*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
-                    elif selfloops:
-                        pii = p_ij(param[0], f_out_i, f_in_j)
-                        if ndir == 'out':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'out-in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
+        for i in range(len(fit_out)):
+            f_out_i = fit_out[i]
+            f_in_i = fit_in[i]
+            for j in range(i):
+                f_out_j = fit_out[j]
+                f_in_j = fit_in[j]
+                pij = p_ij(param[0], f_out_i, f_in_j)
+                pji = p_ij(param[0], f_out_j, f_in_i)
+                if ndir == 'out':
+                    av_nn[i] += pij*prop[j]
+                    av_nn[j] += pji*prop[i]
+                elif ndir == 'in':
+                    av_nn[i] += pji*prop[j]
+                    av_nn[j] += pij*prop[i]
+                elif ndir == 'out-in':
+                    p = 1 - (1 - pij)*(1 - pji)
+                    av_nn[i] += p*prop[j]
+                    av_nn[j] += p*prop[i]
+                else:
+                    raise ValueError('Direction of neighbourhood not right.')
 
-        else:
-            for i in range(ind_out[1]-ind_out[0]):
-                ind_i = ind_out[0]+i
-                f_out_i = fit_out[0][i]
-                f_in_i = fit_in[1][i]
-                for j in range(ind_in[1]-ind_in[0]):
-                    ind_j = ind_in[0]+j
-                    f_out_j = fit_out[1][j]
-                    f_in_j = fit_in[0][j]
-                    if ind_i != ind_j:
-                        pij = p_ij(param[0], f_out_i, f_in_j)
-                        pji = p_ij(param[0], f_out_j, f_in_i)
-                        if ndir == 'out':
-                            av_nn[ind_i] += pij*prop[ind_j]
-                            av_nn[ind_j] += pji*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pji*prop[ind_j]
-                            av_nn[ind_j] += pij*prop[ind_i]
-                        elif ndir == 'out-in':
-                            p = pij + pji - pij*pji
-                            av_nn[ind_i] += p*prop[ind_j]
-                            av_nn[ind_j] += p*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
-                    elif selfloops:
-                        pii = p_ij(param[0], f_out_i, f_in_j)
-                        if ndir == 'out':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'out-in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
+        if selfloops:
+            for i in range(len(fit_out)):
+                pii = p_ij(param[0], fit_out[i], fit_in[i])
+                if ndir == 'out':
+                    av_nn[i] += pii*prop[i]
+                elif ndir == 'in':
+                    av_nn[i] += pii*prop[i]
+                elif ndir == 'out-in':
+                    av_nn[i] += pii*prop[i]
+                else:
+                    raise ValueError('Direction of neighbourhood not right.')
 
         return av_nn
 
     @staticmethod
     @jit(nopython=True)
-    def _likelihood(p_ij, param, ind_out, ind_in, fit_out, 
-                    fit_in, adj_i, adj_j, selfloops):
+    def _likelihood(p_ij, param, fit_out, fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
         """
         like = 0
-        for i in range(ind_out[1]-ind_out[0]):
-            ind_i = ind_out[0]+i
+        for i in range(len(fit_out)):
             f_out_i = fit_out[i]
             n = adj_i[i]
             m = adj_i[i+1]
             j_list = adj_j[n:m]
-            for j in range(ind_in[1]-ind_in[0]):
-                ind_j = ind_in[0]+j
+            for j in range(len(fit_in)):
                 f_in_j = fit_in[j]
-                if (ind_i != ind_j) | selfloops:
+                if (i != j) | selfloops:
                     p = p_ij(param[0], f_out_i, f_in_j)
                     # Check if link exists
-                    if ind_j in j_list:
+                    if j in j_list:
                         like += log(p)
                     else:
                         like += log(1 - p)
@@ -724,19 +620,40 @@ class FitnessModel(GraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)
-    def _sample(p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
+    def _binary_sample(p_ij, param, fit_out, fit_in, selfloops):
         """ Sample from the ensemble.
         """
-        sample = []
-        for i in range(ind_out[1]-ind_out[0]):
-            ind_i = ind_out[0]+i
-            f_out_i = fit_out[i]
-            for j in range(ind_in[1]-ind_in[0]):
-                ind_j = ind_in[0]+j
-                f_in_j = fit_in[j]
-                if (ind_i != ind_j) | selfloops:
+        rows = []
+        cols = []
+        for i, f_out_i in enumerate(fit_out):
+            for j, f_in_j in enumerate(fit_in):
+                if (i != j) | selfloops:
                     p = p_ij(param[0], f_out_i, f_in_j)
                     if rng.random() < p:
-                        sample.append((ind_i, ind_j))
+                        rows.append(i)
+                        cols.append(j)
 
-        return sample
+        return rows, cols
+
+    @staticmethod
+    @jit(nopython=True)
+    def _cremb_sample(p_ij, param, fit_out, fit_in, s_out, s_in, selfloops):
+        """ Sample from the ensemble with weights from the CremB model.
+        """
+        s_tot = np.sum(s_out)
+        msg = 'Sum of in/out strengths not the same.'
+        assert np.abs(1 - np.sum(s_in)/s_tot) < 1e-6, msg
+        rows = []
+        cols = []
+        vals = []
+        for i, f_out_i in enumerate(fit_out):
+            for j, f_in_j in enumerate(fit_in):
+                if (i != j) | selfloops:
+                    p = p_ij(param[0], f_out_i, f_in_j)
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
+                        vals.append(rng.exponential(
+                            s_out[i]*s_in[j]/(s_tot*p)))
+
+        return rows, cols, vals
