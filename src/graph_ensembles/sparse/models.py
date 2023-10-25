@@ -489,6 +489,9 @@ class FitnessModel(GraphEnsemble):
     def p_ij(d, x_i, y_j):
         """ Compute the probability of connection between node i and j.
         """
+        if (x_i == 0) or (y_j == 0) or (d == 0):
+            return 0
+
         tmp = d*x_i*y_j
         if isinf(tmp):
             return 1.0
@@ -501,6 +504,12 @@ class FitnessModel(GraphEnsemble):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
         """
+        if ((x_i == 0) or (y_j == 0)):
+            return 0, 0
+
+        if d == 0:
+            return 0, x_i*y_j
+
         tmp = x_i*y_j
         tmp1 = d*tmp
         if isinf(tmp1):
@@ -659,3 +668,94 @@ class FitnessModel(GraphEnsemble):
                             s_out[i]*s_in[j]/(s_tot*p)))
 
         return rows, cols, vals
+
+
+class ScaleInvariantModel(FitnessModel):
+    """ The Scale Invariant model takes the fitnesses of each node in order to
+    construct a probability distribution over all possible graphs.
+
+    Attributes
+    ----------
+    sc: Spark Context
+        the Spark Context
+    fit_out: np.ndarray
+        the out fitness sequence
+    fit_in: np.ndarray
+        the in fitness sequence
+    num_edges: int
+        the total number of edges
+    num_vertices: int
+        the total number of nodes
+    param: float
+        the free parameters of the model
+    p_blocks: int
+        the number of blocks in which the fitnesses will be
+        divided for parallel computation, note that the number
+        of elements of the rdd will be p_blocks**2
+    selfloops: bool
+        selects if self loops (connections from i to i) are allowed
+    """
+
+    def __init__(self, *args, **kwargs):
+        """ Return a ScaleInvariantModel for the given graph data.
+        The model accepts as arguments either: a WeightedGraph,
+        in which case the strengths are used as fitnesses, or
+        directly the fitness sequences (in and out).
+        The model accepts the fitness sequences as numpy arrays.
+        """
+        super().__init__(*args, **kwargs)
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_ij(d, x_i, y_j):
+        """ Compute the probability of connection between node i and j.
+        """
+        if (x_i == 0) or (y_j == 0) or (d == 0):
+            return 0
+
+        tmp = d*x_i*y_j
+        if isinf(tmp):
+            return 1.0
+        else:
+            return - expm1(-tmp)
+
+    @staticmethod
+    @jit(nopython=True)
+    def p_jac_ij(d, x_i, y_j):
+        """ Compute the probability of connection and the jacobian 
+            contribution of node i and j.
+        """
+        if ((x_i == 0) or (y_j == 0)):
+            return 0, 0
+
+        if d == 0:
+            return 0, x_i*y_j
+
+        tmp = x_i*y_j
+        tmp1 = d*tmp
+        if isinf(tmp1):
+            return 1.0, 0.0
+        else:
+            return - expm1(-tmp1), tmp * exp(-tmp1)
+
+    @staticmethod
+    @jit(nopython=True)
+    def _likelihood(p_ij, param, fit_out, fit_in, adj_i, adj_j, selfloops):
+        """ Compute the binary log likelihood of a graph given the fitted model.
+        """
+        like = 0
+        for i in range(len(fit_out)):
+            f_out_i = fit_out[i]
+            n = adj_i[i]
+            m = adj_i[i+1]
+            j_list = adj_j[n:m]
+            for j in range(len(fit_in)):
+                f_in_j = fit_in[j]
+                if (i != j) | selfloops:
+                    # Check if link exists
+                    if j in j_list:
+                        like += log(p_ij(param[0], f_out_i, f_in_j))
+                    else:
+                        like += param[0]*f_out_i*f_in_j
+        
+        return like

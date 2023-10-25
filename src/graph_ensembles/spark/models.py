@@ -665,6 +665,9 @@ class FitnessModel(GraphEnsemble):
     def p_ij(d, x_i, y_j):
         """ Compute the probability of connection between node i and j.
         """
+        if (x_i == 0) or (y_j == 0) or (d == 0):
+            return 0
+            
         tmp = d*x_i*y_j
         if isinf(tmp):
             return 1.0
@@ -677,6 +680,12 @@ class FitnessModel(GraphEnsemble):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
         """
+        if ((x_i == 0) or (y_j == 0)):
+            return 0, 0
+
+        if d == 0:
+            return 0, x_i*y_j
+
         tmp = x_i*y_j
         tmp1 = d*tmp
         if isinf(tmp1):
@@ -946,14 +955,14 @@ class ScaleInvariantModel(FitnessModel):
         selects if self loops (connections from i to i) are allowed
     """
 
-    def __init__(self, sc, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """ Return a ScaleInvariantModel for the given graph data.
         The model accepts as arguments either: a WeightedGraph,
         in which case the strengths are used as fitnesses, or
         directly the fitness sequences (in and out).
         The model accepts the fitness sequences as numpy arrays.
         """
-        super().__init__(sc, *args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     @staticmethod
     @jit(nopython=True)

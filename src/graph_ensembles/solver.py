@@ -128,6 +128,8 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
     elif (f < 0) & (f_p < 0) & (x <= x_u):
         x_u = x
         f_u = f
+    elif f_p == 0:
+        pass
     else:
         msg = 'The function does not respect the expected monotonicity.'
         assert False, msg
@@ -141,10 +143,12 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
         x_old = x
 
         # Compute update
-        if f_p > atol:
+        if np.abs(f_p) > atol:
             dx = - f/f_p
-        else:
+        elif f_p != 0:
             dx = - f/(np.sign(f_p)*atol) 
+        else:
+            dx = - f/atol 
 
         # Check that new x exists within the bound (x_u, x_l)
         # otherwise use secant method
@@ -172,13 +176,18 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
         elif (f < 0) & (f_p < 0) & (x <= x_u):
             x_u = x
             f_u = f
+        elif f_p == 0:
+            if x == x_u:
+                f_u = f
+            elif x == x_l:
+                f_l = f
         else:
             msg = 'The function does not respect the expected monotonicity.'
             assert False, msg
         
         # Compute stopping condition
         norm = np.abs(f)
-        if x_old != 0:
+        if (x_old != 0) and not np.any(np.isinf(x_old)):
             diff = np.abs((x - x_old)/x_old)
         else:
             diff = 1
