@@ -4,6 +4,7 @@ reconstruction, filtering or pattern detection among others. """
 
 from . import graphs
 from . import lib
+from ..solver import monotonic_newton_solver
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
@@ -101,9 +102,8 @@ class FitnessModel(GraphEnsemble):
                 g = args[0]
                 self.num_vertices = g.num_vertices
                 self.num_edges = g.num_edges
-                self.id_dtype = g.id_dtype
-                self.fit_out = g.out_strength(get=True)
-                self.fit_in = g.in_strength(get=True)
+                self.fit_out = g.out_strength()
+                self.fit_in = g.in_strength()
             else:
                 raise ValueError('First argument passed must be a '
                                  'WeightedGraph.')
@@ -144,10 +144,6 @@ class FitnessModel(GraphEnsemble):
 
         if not hasattr(self, 'selfloops'):
             self.selfloops = True
-
-        if not hasattr(self, 'id_dtype'):
-            num_bytes = mt.get_num_bytes(self.num_vertices)
-            self.id_dtype = np.dtype('u' + str(num_bytes))
 
         # Ensure that fitnesses passed adhere to format (ndarray)
         msg = ("Out fitness must be a numpy array of length " +
@@ -202,6 +198,9 @@ class FitnessModel(GraphEnsemble):
 
             if np.any(self.param < 0):
                 raise ValueError('Parameters must be positive.')
+
+        if not (hasattr(self, 'num_edges') or hasattr(self, 'param')):
+            raise ValueError('Either num_edges or param must be set.')
         
         # Ensure that the number of blocks is a positive integer
         if not hasattr(self, 'p_blocks'):
@@ -263,8 +262,8 @@ class FitnessModel(GraphEnsemble):
         fmap = self.fit_map
         self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
 
-    def fit(self, x0=None, method='density', solver='Newton-CG', atol=1e-18, 
-            rtol=1e-9, maxiter=100, verbose=False):
+    def fit(self, x0=None, method='density', atol=1e-18, 
+            xtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
 
@@ -279,8 +278,8 @@ class FitnessModel(GraphEnsemble):
             selects which scipy solver is used for the mle method
         atol : float
             absolute tolerance for the exit condition
-        rtol : float
-            relative tolerance for the exit condition
+        xtol : float
+            relative tolerance for the exit condition on consecutive x values
         max_iter : int or float
             maximum number of iteration
         verbose: boolean
@@ -294,7 +293,7 @@ class FitnessModel(GraphEnsemble):
 
         if not (len(x0) == 1):
             raise ValueError(
-                'The ScaleInvariantModel requires one parameter.')
+                'The FitnessModel requires one parameter.')
 
         if not np.issubdtype(x0.dtype, np.number):
             raise ValueError('x0 must be numeric.')
@@ -307,9 +306,10 @@ class FitnessModel(GraphEnsemble):
             if not hasattr(self, 'num_edges'):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
-            sol = mt.monotonic_newton_solver(
-                x0, self.density_fit_fun, tol=atol, xtol=rtol, 
-                max_iter=maxiter, full_return=True, verbose=verbose)
+            sol = monotonic_newton_solver(
+                x0, self.density_fit_fun, atol=atol, xtol=xtol, x_l=0, 
+                x_u=np.infty, max_iter=maxiter, full_return=True, 
+                verbose=verbose)
 
         elif method == 'mle':
             raise ValueError("Method not implemented.")
@@ -505,8 +505,12 @@ class FitnessModel(GraphEnsemble):
 
         return like
 
-    def sample(self, selfloops=None):
+    def sample(self, ref_g=None, weights=None, out_strength=None, 
+               in_strength=None, selfloops=None):
         """ Return a Graph sampled from the ensemble.
+
+        If a reference graph is passed (ref_g) then the properties of the graph
+        will be copied to the new samples.
         """
         if not hasattr(self, 'param'):
             raise Exception('Ensemble has to be fitted before sampling.')
@@ -515,35 +519,60 @@ class FitnessModel(GraphEnsemble):
             selfloops = self.selfloops
 
         # Generate uninitialised graph object
-        g = graphs.DirectedGraph.__new__(graphs.DirectedGraph)
+        g = graphs.DiGraph.__new__(graphs.DiGraph)
 
         # Initialise common object attributes
         g.num_vertices = self.num_vertices
-        g.id_dtype = self.id_dtype
-        g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
-            type=np.recarray, dtype=[('id', g.id_dtype)])
-        g.id_dict = {}
-        for x in g.v.id:
-            g.id_dict[x] = x
+        num_bytes = g.get_num_bytes(g.num_vertices)
+        g.id_dtype = np.dtype('u' + str(num_bytes))
 
-        # Sample edges and extract properties
-        e_fun = self._sample
-        p_ij = self.p_ij
-        delta = self.param
-        app_fun = self.safe_append
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
-                            x[1], x[2], selfloops))
-        e = tmp.fold([], lambda x, y: app_fun(x, y))
-        e = np.array(e,
-                     dtype=[('src', 'f8'),
-                            ('dst', 'f8')]).view(type=np.recarray)
+        # Check if reference graph is available
+        if ref_g is not None:
+            if hasattr(ref_g, 'num_groups'):
+                g.num_groups = ref_g.num_groups
+                g.group_dict = ref_g.group_dict
+                g.group_dtype = ref_g.group_dtype
+                g.groups = ref_g.groups
 
-        e = e.astype([('src', g.id_dtype),
-                      ('dst', g.id_dtype)])
-        g.sort_ind = np.argsort(e)
-        g.e = e[g.sort_ind]
-        g.num_edges = mt.compute_num_edges(g.e)
+            g.id_dict = ref_g.id_dict
+        else:
+            g.id_dict = {}
+            for x in g.v.id:
+                g.id_dict[x] = x
+
+        # Sample edges
+        if weights is None:
+            e_fun = self._binary_sample
+            p_ij = self.p_ij
+            delta = self.param
+            app_fun = self.tuple_of_lists_append
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
+                                x[1], x[2], selfloops))
+            rows, cols = tmp.fold(([], []), lambda x, y: app_fun(x, y))
+            vals = np.ones(len(rows), dtype=bool)
+
+        elif weights == 'cremb':
+            if out_strength is None:
+                s_out = self.fit_out
+            if in_strength is None:
+                s_in = self.fit_in
+            e_fun = self._cremb_sample
+            p_ij = self.p_ij
+            delta = self.param
+            app_fun = self.tuple_of_lists_append
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], 
+                                x[1], x[2], s_out, s_in, selfloops))
+            rows, cols, vals = tmp.fold(([], [], []), 
+                                        lambda x, y: app_fun(x, y))
+
+        else:
+            raise ValueError('Weights method not recognised or implemented.')
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_matrix((vals, (rows, cols)), 
+                              shape=(g.num_vertices, g.num_vertices))
 
         return g
 
@@ -562,11 +591,10 @@ class FitnessModel(GraphEnsemble):
         return f, jac
 
     @staticmethod
-    def safe_append(x, y):
-        res = []
-        res.extend(x)
-        res.extend(y)
-        return res
+    def tuple_of_lists_append(x, y):
+        for i in len(x):
+            x[i].extend(y[i])
+        return x
 
     @staticmethod
     def fit_map(ind, x, y):
@@ -811,10 +839,12 @@ class FitnessModel(GraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)
-    def _sample(p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
+    def _binary_sample(
+            p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
         """ Sample from the ensemble.
         """
-        sample = []
+        rows = []
+        cols = []
         for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
             f_out_i = fit_out[i]
@@ -824,9 +854,38 @@ class FitnessModel(GraphEnsemble):
                 if (ind_i != ind_j) | selfloops:
                     p = p_ij(param[0], f_out_i, f_in_j)
                     if rng.random() < p:
-                        sample.append((ind_i, ind_j))
+                        rows.append(ind_i)
+                        cols.append(ind_j)
 
-        return sample
+        return rows, cols
+
+    @staticmethod
+    @jit(nopython=True)
+    def _cremb_sample(p_ij, param, ind_out, ind_in, fit_out, fit_in, 
+                      s_out, s_in, selfloops):
+        """ Sample from the ensemble with weights from the CremB model.
+        """
+        s_tot = np.sum(s_out)
+        msg = 'Sum of in/out strengths not the same.'
+        assert np.abs(1 - np.sum(s_in)/s_tot) < 1e-6, msg
+        rows = []
+        cols = []
+        vals = []
+        for i in range(ind_out[1]-ind_out[0]):
+            ind_i = ind_out[0]+i
+            f_out_i = fit_out[i]
+            for j in range(ind_in[1]-ind_in[0]):
+                ind_j = ind_in[0]+j
+                f_in_j = fit_in[j]
+                if (ind_i != ind_j) | selfloops:
+                    p = p_ij(param[0], f_out_i, f_in_j)
+                    if rng.random() < p:
+                        rows.append(ind_i)
+                        cols.append(ind_j)
+                        vals.append(rng.exponential(
+                            s_out[ind_i]*s_in[ind_j]/(s_tot*p)))
+
+        return rows, cols, vals
 
 
 class ScaleInvariantModel(FitnessModel):

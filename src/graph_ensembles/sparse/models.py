@@ -84,7 +84,7 @@ class FitnessModel(GraphEnsemble):
             if isinstance(args[0], graphs.DiGraph):
                 g = args[0]
                 self.num_vertices = g.num_vertices
-                self.num_edges = g.num_edges
+                self.num_edges = g.num_edges()
                 self.fit_out = g.out_strength()
                 self.fit_in = g.in_strength()
             else:
@@ -126,7 +126,7 @@ class FitnessModel(GraphEnsemble):
             raise ValueError('fit_in not set.')
 
         if not hasattr(self, 'selfloops'):
-            self.selfloops = True
+            self.selfloops = False
 
         # Ensure that fitnesses passed adhere to format (ndarray)
         msg = ("Out fitness must be a numpy array of length " +
@@ -182,8 +182,11 @@ class FitnessModel(GraphEnsemble):
             if np.any(self.param < 0):
                 raise ValueError('Parameters must be positive.')
 
-    def fit(self, x0=None, method='density', atol=1e-18, 
-            rtol=1e-9, maxiter=100, verbose=False):
+        if not (hasattr(self, 'num_edges') or hasattr(self, 'param')):
+            raise ValueError('Either num_edges or param must be set.')
+
+    def fit(self, x0=None, method='density', atol=1e-9, 
+            xtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
 
@@ -198,8 +201,8 @@ class FitnessModel(GraphEnsemble):
             selects which scipy solver is used for the mle method
         atol : float
             absolute tolerance for the exit condition
-        rtol : float
-            relative tolerance for the exit condition
+        xtol : float
+            relative tolerance for the exit condition on consecutive x values
         max_iter : int or float
             maximum number of iteration
         verbose: boolean
@@ -213,7 +216,7 @@ class FitnessModel(GraphEnsemble):
 
         if not (len(x0) == 1):
             raise ValueError(
-                'The ScaleInvariantModel requires one parameter.')
+                'The FitnessModel requires one parameter.')
 
         if not np.issubdtype(x0.dtype, np.number):
             raise ValueError('x0 must be numeric.')
@@ -227,7 +230,7 @@ class FitnessModel(GraphEnsemble):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
             sol = monotonic_newton_solver(
-                x0, self.density_fit_fun, tol=atol, xtol=rtol, x_l=0, 
+                x0, self.density_fit_fun, atol=atol, xtol=xtol, x_l=0, 
                 x_u=np.infty, max_iter=maxiter, full_return=True, 
                 verbose=verbose)
 
