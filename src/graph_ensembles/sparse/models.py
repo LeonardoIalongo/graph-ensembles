@@ -6,13 +6,13 @@ from ..solver import monotonic_newton_solver
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
+import warnings
 from numba import jit
 from math import floor
 from math import exp
 from math import expm1
 from math import log
 from math import isinf
-import warnings
 
 
 class GraphEnsemble():
@@ -313,11 +313,11 @@ class FitnessModel(GraphEnsemble):
 
         # Compute correct expected degree
         if ndir == 'out':
-            deg = self.exp_out_degree(recompute=deg_recompute)
+            deg = self.expected_out_degree(recompute=deg_recompute)
         elif ndir == 'in':
-            deg = self.exp_in_degree(recompute=deg_recompute)
+            deg = self.expected_in_degree(recompute=deg_recompute)
         elif ndir == 'out-in':
-            deg = self.exp_degree(recompute=deg_recompute)
+            deg = self.expected_degree(recompute=deg_recompute)
         else:
             raise ValueError('Neighbourhood direction not recognised.')
 
@@ -347,20 +347,19 @@ class FitnessModel(GraphEnsemble):
 
         if not hasattr(self, name) or recompute:
             # Compute correct expected degree
-            if ndir == 'out':
-                deg = self.exp_out_degree(recompute=deg_recompute)
-            elif ndir == 'in':
-                deg = self.exp_in_degree(recompute=deg_recompute)
-            elif ndir == 'out-in':
-                deg = self.exp_degree(recompute=deg_recompute)
+            if ddir == 'out':
+                deg = self.expected_out_degree(recompute=deg_recompute)
+            elif ddir == 'in':
+                deg = self.expected_in_degree(recompute=deg_recompute)
+            elif ddir == 'out-in':
+                deg = self.expected_degree(recompute=deg_recompute)
             else:
                 raise ValueError('Degree type not recognised.')
 
             # Compute property and set attribute
-            name = ('exp_av_' + ndir.replace('-', '_') + 
-                    '_nn_d_' + ddir.replace('-', '_'))
             res = self.expected_av_nn_property(
-                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
+                deg, ndir=ndir, selfloops=selfloops, 
+                deg_recompute=deg_recompute)
             setattr(self, name, res)
 
         return getattr(self, name)
@@ -431,8 +430,8 @@ class FitnessModel(GraphEnsemble):
             g.id_dict = ref_g.id_dict
         else:
             g.id_dict = {}
-            for x in g.v.id:
-                g.id_dict[x] = x
+            for i in range(g.num_vertices):
+                g.id_dict[i] = i
 
         # Sample edges
         if weights is None:
@@ -467,7 +466,7 @@ class FitnessModel(GraphEnsemble):
         return f, jac
 
     @staticmethod              
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac(p_jac_ij, param, fit_out, fit_in, selfloops):
         """ Compute the objective function of the density solver and its
         derivative.
@@ -486,7 +485,7 @@ class FitnessModel(GraphEnsemble):
         return f, jac
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij(d, x_i, y_j):
         """ Compute the probability of connection between node i and j.
         """
@@ -497,7 +496,7 @@ class FitnessModel(GraphEnsemble):
             return tmp / (1 + tmp)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_i, y_j):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
@@ -510,8 +509,8 @@ class FitnessModel(GraphEnsemble):
             return tmp1 / (1 + tmp1), tmp / (1 + tmp1)**2
 
     @staticmethod
-    @jit(nopython=True)
-    def exp_edges(p_ij, param, fit_out, fit_in, selfloops):
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges(p_ij, param, fit_out, fit_in, selfloops): 
         """ Compute the expected number of edges.
         """
         exp_e = 0.0
@@ -525,7 +524,7 @@ class FitnessModel(GraphEnsemble):
         return exp_e
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_degrees(p_ij, param, fit_out, fit_in, num_v, selfloops):
         """ Compute the expected undirected, in and out degree sequences.
         """
@@ -558,7 +557,7 @@ class FitnessModel(GraphEnsemble):
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_av_nn_prop(p_ij, param, fit_out, fit_in, prop, ndir, selfloops):
         """ Compute the expected average nearest neighbour property.
         """
@@ -599,7 +598,7 @@ class FitnessModel(GraphEnsemble):
         return av_nn
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _likelihood(p_ij, param, fit_out, fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
         """
@@ -622,7 +621,7 @@ class FitnessModel(GraphEnsemble):
         return like
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _binary_sample(p_ij, param, fit_out, fit_in, selfloops):
         """ Sample from the ensemble.
         """
@@ -639,7 +638,7 @@ class FitnessModel(GraphEnsemble):
         return rows, cols
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _cremb_sample(p_ij, param, fit_out, fit_in, s_out, s_in, selfloops):
         """ Sample from the ensemble with weights from the CremB model.
         """

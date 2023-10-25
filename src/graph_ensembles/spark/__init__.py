@@ -1,2 +1,2 @@
-from .graphs import *
+from ..sparse.graphs import *
 from .models import *

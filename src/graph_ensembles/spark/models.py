@@ -2,8 +2,7 @@
 network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 
-from . import graphs
-from . import lib
+from ..sparse import graphs
 from ..solver import monotonic_newton_solver
 import numpy as np
 import numpy.random as rng
@@ -15,6 +14,7 @@ from math import exp
 from math import expm1
 from math import log
 from math import isinf
+from pyspark import SparkContext
 
 
 # Global function definitions
@@ -89,29 +89,40 @@ class FitnessModel(GraphEnsemble):
         selects if self loops (connections from i to i) are allowed
     """
 
-    def __init__(self, sc, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """ Return a FitnessModel for the given graph data.
         The model accepts as arguments either: a WeightedGraph,
         in which case the strengths are used as fitnesses, or
         directly the fitness sequences (in and out).
         The model accepts the fitness sequences as numpy arrays.
         """
-        # If an argument is passed then it must be a graph
+        # First argument must be a SparkContext
         if len(args) > 0:
-            if isinstance(args[0], graphs.WeightedGraph):
-                g = args[0]
-                self.num_vertices = g.num_vertices
-                self.num_edges = g.num_edges
-                self.fit_out = g.out_strength()
-                self.fit_in = g.in_strength()
+            if isinstance(args[0], SparkContext):
+                self.sc = args[0]
             else:
-                raise ValueError('First argument passed must be a '
-                                 'WeightedGraph.')
+                raise ValueError('First argument must be a SparkContext.')
 
+            # If an argument is passed then it must be a graph
             if len(args) > 1:
+                if isinstance(args[1], graphs.DiGraph):
+                    g = args[1]
+                    self.num_vertices = g.num_vertices
+                    self.num_edges = g.num_edges()
+                    self.fit_out = g.out_strength()
+                    self.fit_in = g.in_strength()
+                else:
+                    raise ValueError(
+                        'Second argument passed must be a DiGraph.')
+
+            if len(args) > 2:
                 msg = ('Unnamed arguments other than the Graph have been '
                        'ignored.')
                 warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError(
+                'A SparkContext must be passed as the first argument.')
 
         # Get options from keyword arguments
         allowed_arguments = ['num_vertices', 'num_edges', 'fit_out',
@@ -143,7 +154,7 @@ class FitnessModel(GraphEnsemble):
             raise ValueError('fit_in not set.')
 
         if not hasattr(self, 'selfloops'):
-            self.selfloops = True
+            self.selfloops = False
 
         # Ensure that fitnesses passed adhere to format (ndarray)
         msg = ("Out fitness must be a numpy array of length " +
@@ -234,7 +245,7 @@ class FitnessModel(GraphEnsemble):
                 elements.append(((x, y), self.fit_out[x[0]:x[1]], 
                                 self.fit_in[y[0]:y[1]]))
 
-        self.p_iter_rdd = sc.parallelize(
+        self.p_iter_rdd = self.sc.parallelize(
             elements, numSlices=len(elements)).cache()
 
         # the second has a triangular structure allowing
@@ -253,7 +264,7 @@ class FitnessModel(GraphEnsemble):
                     y = (j*step, (j+1)*step)
                 elements.append((x, y))
 
-        self.p_sym_rdd = sc.parallelize(
+        self.p_sym_rdd = self.sc.parallelize(
             elements, numSlices=len(elements)).cache()
 
         # Assign to each parallel partition the correct fitness values
@@ -262,7 +273,7 @@ class FitnessModel(GraphEnsemble):
         fmap = self.fit_map
         self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
 
-    def fit(self, x0=None, method='density', atol=1e-18, 
+    def fit(self, x0=None, method='density', atol=1e-9, 
             xtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
@@ -324,74 +335,99 @@ class FitnessModel(GraphEnsemble):
         if not self.solver_output.converged:
             warnings.warn('Fit did not converge', UserWarning)
 
-    def expected_num_edges(self, get=False):
+    def expected_num_edges(self, recompute=False):
         """ Compute the expected number of edges.
         """
         if not hasattr(self, 'param'):
             raise Exception('Model must be fitted beforehand.')
         
-        # It is necessary to select the elements or pickling will fail
-        e_fun = self.exp_edges
-        p_ij = self.p_ij
-        delta = self.param
-        slflp = self.selfloops
-        tmp = self.p_iter_rdd.map(
-            lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], x[1], x[2], slflp))
-        self.exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+        if not hasattr(self, '_exp_num_edges') or recompute:
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_edges
+            p_ij = self.p_ij
+            delta = self.param
+            slflp = self.selfloops
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], x[1], x[2], 
+                                slflp))
+            self._exp_num_edges = tmp.fold(0, lambda x, y: x + y)
 
-        if get:
-            return self.exp_num_edges
-
-    def expected_degrees(self, get=False):
-        """ Compute the expected undirected/out/in degree.
-        """
-        if not hasattr(self, 'param'):
-            raise Exception('Ensemble has to be fitted beforehand.')
+        return self._exp_num_edges
         
-        # It is necessary to select the elements or pickling will fail
-        e_fun = self.exp_degrees
-        p_ij = self.p_ij
-        delta = self.param
-        slflp = self.selfloops
-        num_v = self.num_vertices
-        tmp = self.p_sym_rdd.map(
-            lambda x: e_fun(
-                p_ij, delta, x[0][0], x[0][1], x[1], x[2], num_v, slflp))
-        exp_d = np.zeros(num_v, dtype=np.float64)
-        exp_d_out = np.zeros(num_v, dtype=np.float64)
-        exp_d_in = np.zeros(num_v, dtype=np.float64)
-        res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
-                       lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
-        self.exp_degree = res[0] 
-        self.exp_out_degree = res[1]
-        self.exp_in_degree = res[2]
+    def expected_degree(self, recompute=False):
+        """ Compute the expected undirected degree.
+        """
+        if not hasattr(self, '_exp_degree') or recompute:
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_degrees
+            p_ij = self.p_ij
+            delta = self.param
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], num_v, slflp))
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                           lambda x, y: 
+                               (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
 
-        if get:
-            return self.exp_degree, self.exp_out_degree, self.exp_in_degree
+        return self._exp_degree
+
+    def expected_out_degree(self, recompute=False):
+        """ Compute the expected out degree.
+        """
+        if not hasattr(self, '_exp_out_degree') or recompute:
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_degrees
+            p_ij = self.p_ij
+            delta = self.param
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], num_v, slflp))
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                           lambda x, y: 
+                               (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
+
+        return self._exp_out_degree
+
+    def expected_in_degree(self, recompute=False):
+        """ Compute the expected in degree.
+        """
+        if not hasattr(self, '_exp_in_degree') or recompute:
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_degrees
+            p_ij = self.p_ij
+            delta = self.param
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], num_v, slflp))
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold((exp_d, exp_d_out, exp_d_in), 
+                           lambda x, y: 
+                               (x[0] + y[0], x[1] + y[1], x[2] + y[2]))
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
         
-    def expected_degree(self, get=False):
-        """ Compute the expected undirected degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_degree
-
-    def expected_out_degree(self, get=False):
-        """ Compute the expected out degree for a given z.
-        """
-        self.expected_degrees()
-
-        if get:
-            return self.exp_out_degree
-
-    def expected_in_degree(self, get=False):
-        """ Compute the expected in degree for a given z.
-        """
-        self.expected_degrees()
-        
-        if get:
-            return self.exp_in_degree
+        return self._exp_in_degree
 
     def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
                                 deg_recompute=False):
@@ -406,15 +442,12 @@ class FitnessModel(GraphEnsemble):
             raise ValueError(msg)
 
         # Compute correct expected degree
-        if deg_recompute or not hasattr(self, 'exp_out_degree'):
-            self.expected_degrees()
-
         if ndir == 'out':
-            deg = self.exp_out_degree
+            deg = self.expected_out_degree(recompute=deg_recompute)
         elif ndir == 'in':
-            deg = self.exp_in_degree
+            deg = self.expected_in_degree(recompute=deg_recompute)
         elif ndir == 'out-in':
-            deg = self.exp_degree
+            deg = self.expected_degree(recompute=deg_recompute)
         else:
             raise ValueError('Neighbourhood direction not recognised.')
 
@@ -439,32 +472,31 @@ class FitnessModel(GraphEnsemble):
         return av_nn
 
     def expected_av_nn_degree(self, ddir='out', ndir='out', selfloops=False,
-                              deg_recompute=False, get=False):
+                              deg_recompute=False, recompute=False):
         """ Computes the expected value of the nearest neighbour average of
         the degree.
         """
-        # Compute correct expected degree
-        if deg_recompute or not hasattr(self, 'exp_out_degree'):
-            self.expected_degrees()
-
-        if ddir == 'out':
-            deg = self.exp_out_degree
-        elif ddir == 'in':
-            deg = self.exp_in_degree
-        elif ddir == 'out-in':
-            deg = self.exp_degree
-        else:
-            raise ValueError('Neighbourhood direction not recognised.')
-
-        # Compute property and set attribute
+        # Compute property name
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_d_' + ddir.replace('-', '_'))
-        res = self.expected_av_nn_property(
-            deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
-        setattr(self, name, res)
 
-        if get:
-            return getattr(self, name)
+        if not hasattr(self, name) or recompute:
+            # Compute correct expected degree
+            if ddir == 'out':
+                deg = self.expected_out_degree(recompute=deg_recompute)
+            elif ddir == 'in':
+                deg = self.expected_in_degree(recompute=deg_recompute)
+            elif ddir == 'out-in':
+                deg = self.expected_degree(recompute=deg_recompute)
+            else:
+                raise ValueError('Degree type not recognised.')
+
+            # Compute property and set attribute
+            res = self.expected_av_nn_property(
+                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
+            setattr(self, name, res)
+
+        return getattr(self, name)
 
     def log_likelihood(self, g, selfloops=None):
         """ Compute the likelihood a graph given the fitted model.
@@ -476,9 +508,9 @@ class FitnessModel(GraphEnsemble):
         if selfloops is None:
             selfloops = self.selfloops
 
-        if isinstance(g, graphs.DirectedGraph):
+        if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
-            adj = g.adjacency_matrix(kind='csr')
+            adj = g.adjacency_matrix(directed=True, weighted=False)
         elif isinstance(g, sp.spmatrix):
             adj = g.asformat('csr')
         elif isinstance(g, np.ndarray):
@@ -537,8 +569,8 @@ class FitnessModel(GraphEnsemble):
             g.id_dict = ref_g.id_dict
         else:
             g.id_dict = {}
-            for x in g.v.id:
-                g.id_dict[x] = x
+            for i in range(g.num_vertices):
+                g.id_dict[i] = i
 
         # Sample edges
         if weights is None:
@@ -592,7 +624,7 @@ class FitnessModel(GraphEnsemble):
 
     @staticmethod
     def tuple_of_lists_append(x, y):
-        for i in len(x):
+        for i in range(len(x)):
             x[i].extend(y[i])
         return x
 
@@ -1519,8 +1551,8 @@ class _StripeFitnessModel(FitnessModel):
         g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
             type=np.recarray, dtype=[('id', g.id_dtype)])
         g.id_dict = {}
-        for x in g.v.id:
-            g.id_dict[x] = x
+        for i in range(g.num_vertices):
+            g.id_dict[i] = i
 
         return g
 

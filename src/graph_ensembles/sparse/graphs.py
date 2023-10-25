@@ -324,7 +324,7 @@ class Graph():
         return id_dict
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def sum_by_group(indptr, indices, values, g_arr, dtype=np.float64):
         """ Sums the values of the matrix along the indices axis using the 
         provided grouping.

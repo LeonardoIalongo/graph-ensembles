@@ -319,7 +319,7 @@ class Graph():
         return id_dict
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def construct_adj(src, dst, val, shape):
         adj = np.zeros(shape, dtype=val.dtype)
         for i, j, v in zip(src, dst, val):
@@ -327,7 +327,7 @@ class Graph():
         return adj
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def sum_by_group(mat, g_arr):
         """ Sums the values of the matrix along the second axis using the 
         provided grouping.
