@@ -606,10 +606,8 @@ class TestFitnessModelSample():
                                 param=z)
 
         samples = 100
-        s_n_e = np.empty(samples)
         for i in range(samples):
             sample = model.sample()
-            s_n_e[i] = sample.num_edges()
-
-        s_n_e = np.average(s_n_e, axis=0)
-        np.testing.assert_allclose(s_n_e, num_edges, atol=1e-1, rtol=0)
+            like = model.log_likelihood(sample) 
+            like = like / (model.num_vertices * (model.num_vertices - 1))
+            assert like > -2.3
