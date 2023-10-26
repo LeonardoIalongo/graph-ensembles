@@ -13,12 +13,13 @@ from math import floor
 from math import exp
 from math import expm1
 from math import log
+from math import log1p
 from math import isinf
 from pyspark import SparkContext
 
 
 # Global function definitions
-@jit(nopython=True)
+@jit(nopython=True)  # pragma: no cover
 def in_range(i, ind, fold):
     if fold:
         return range(i + 1)
@@ -202,7 +203,7 @@ class FitnessModel(GraphEnsemble):
             else:
                 if not (len(self.param) == 1):
                     raise ValueError(
-                        'The FitnessModel requires one parameter.')
+                        'The model requires one parameter.')
             
             if not np.issubdtype(self.param.dtype, np.number):
                 raise ValueError('Parameters must be numeric.')
@@ -227,6 +228,14 @@ class FitnessModel(GraphEnsemble):
             if self.p_blocks <= 0:
                 raise ValueError(
                     'Number of parallel blocks must be a positive number.')
+
+        # Ensure number of blocks is smaller than dimensions of graphs
+        # it is in general inefficient too have too few elements per partition
+        if self.p_blocks > self.num_vertices / 10:
+            if floor(self.num_vertices / 10) < 2:
+                self.p_blocks = 2
+            else:
+                self.p_blocks = self.num_vertices
 
         # Create two RDDs to parallelize computations
         # The first simply divides the pij matrix in blocks
@@ -304,7 +313,7 @@ class FitnessModel(GraphEnsemble):
 
         if not (len(x0) == 1):
             raise ValueError(
-                'The FitnessModel requires one parameter.')
+                'The model requires one parameter.')
 
         if not np.issubdtype(x0.dtype, np.number):
             raise ValueError('x0 must be numeric.')
@@ -661,13 +670,13 @@ class FitnessModel(GraphEnsemble):
         return ind, (x[il:iu], x[jl:ju]), (y[jl:ju], y[il:iu])
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij(d, x_i, y_j):
         """ Compute the probability of connection between node i and j.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return 0
-            
+            return 0.0
+
         tmp = d*x_i*y_j
         if isinf(tmp):
             return 1.0
@@ -675,16 +684,16 @@ class FitnessModel(GraphEnsemble):
             return tmp / (1 + tmp)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_i, y_j):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
         """
         if ((x_i == 0) or (y_j == 0)):
-            return 0, 0
+            return 0.0, 0.0
 
         if d == 0:
-            return 0, x_i*y_j
+            return 0.0, x_i*y_j
 
         tmp = x_i*y_j
         tmp1 = d*tmp
@@ -694,7 +703,7 @@ class FitnessModel(GraphEnsemble):
             return tmp1 / (1 + tmp1), tmp / (1 + tmp1)**2
 
     @staticmethod              
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, fit_out, fit_in, 
                         selfloops):
         """ Compute the objective function of the density solver and its
@@ -714,7 +723,7 @@ class FitnessModel(GraphEnsemble):
         return f, jac
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges(p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
         """ Compute the expected number of edges.
         """
@@ -729,7 +738,7 @@ class FitnessModel(GraphEnsemble):
         return exp_e
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_degrees(p_ij, param, ind_out, ind_in, fit_out, fit_in, num_v, 
                     selfloops):
         """ Compute the expected undirected, in and out degree sequences.
@@ -770,7 +779,7 @@ class FitnessModel(GraphEnsemble):
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_av_nn_prop(p_ij, param, ind_out, ind_in, fit_out, fit_in, prop, 
                        ndir, selfloops):
         """ Compute the expected average nearest neighbour property.
@@ -853,7 +862,7 @@ class FitnessModel(GraphEnsemble):
         return av_nn
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _likelihood(p_ij, param, ind_out, ind_in, fit_out, 
                     fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
@@ -862,8 +871,8 @@ class FitnessModel(GraphEnsemble):
         for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
             f_out_i = fit_out[i]
-            n = adj_i[i]
-            m = adj_i[i+1]
+            n = adj_i[ind_i]
+            m = adj_i[ind_i+1]
             j_list = adj_j[n:m]
             for j in range(ind_in[1]-ind_in[0]):
                 ind_j = ind_in[0]+j
@@ -872,14 +881,18 @@ class FitnessModel(GraphEnsemble):
                     p = p_ij(param[0], f_out_i, f_in_j)
                     # Check if link exists
                     if ind_j in j_list:
+                        if p == 0:
+                            return -np.infty
                         like += log(p)
                     else:
-                        like += log(1 - p)
+                        if p == 1:
+                            return -np.infty
+                        like += log1p(-p)
         
         return like
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _binary_sample(
             p_ij, param, ind_out, ind_in, fit_out, fit_in, selfloops):
         """ Sample from the ensemble.
@@ -901,7 +914,7 @@ class FitnessModel(GraphEnsemble):
         return rows, cols
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _cremb_sample(p_ij, param, ind_out, ind_in, fit_out, fit_in, 
                       s_out, s_in, selfloops):
         """ Sample from the ensemble with weights from the CremB model.
@@ -965,10 +978,13 @@ class ScaleInvariantModel(FitnessModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij(d, x_i, y_j):
         """ Compute the probability of connection between node i and j.
         """
+        if (x_i == 0) or (y_j == 0) or (d == 0):
+            return 0.0
+
         tmp = d*x_i*y_j
         if isinf(tmp):
             return 1.0
@@ -976,11 +992,17 @@ class ScaleInvariantModel(FitnessModel):
             return - expm1(-tmp)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_i, y_j):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
         """
+        if ((x_i == 0) or (y_j == 0)):
+            return 0.0, 0.0
+
+        if d == 0:
+            return 0.0, x_i*y_j
+
         tmp = x_i*y_j
         tmp1 = d*tmp
         if isinf(tmp1):
@@ -989,7 +1011,7 @@ class ScaleInvariantModel(FitnessModel):
             return - expm1(-tmp1), tmp * exp(-tmp1)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _likelihood(p_ij, param, ind_out, ind_in, fit_out, 
                     fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
@@ -998,8 +1020,8 @@ class ScaleInvariantModel(FitnessModel):
         for i in range(ind_out[1]-ind_out[0]):
             ind_i = ind_out[0]+i
             f_out_i = fit_out[i]
-            n = adj_i[i]
-            m = adj_i[i+1]
+            n = adj_i[ind_i]
+            m = adj_i[ind_i+1]
             j_list = adj_j[n:m]
             for j in range(ind_in[1]-ind_in[0]):
                 ind_j = ind_in[0]+j
@@ -1007,9 +1029,15 @@ class ScaleInvariantModel(FitnessModel):
                 if (ind_i != ind_j) | selfloops:
                     # Check if link exists
                     if ind_j in j_list:
-                        like += log(p_ij(param[0], f_out_i, f_in_j))
+                        p = p_ij(param[0], f_out_i, f_in_j)
+                        if p == 0:
+                            return -np.infty
+                        like += log(p)
                     else:
-                        like += param[0]*f_out_i*f_in_j
+                        if not (f_out_i*f_in_j == 0):
+                            if isinf(param[0]):
+                                return -np.infty
+                            like += -param[0]*f_out_i*f_in_j
         
         return like
 
@@ -1584,7 +1612,7 @@ class _StripeFitnessModel(FitnessModel):
                                 x[1].data, x[2].data, num_e[layer_id], slflp))
 
     @staticmethod              
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, fit_out, 
                         fit_in, selfloops):
         """ Compute the objective function of the layer density solver and its
@@ -1602,7 +1630,7 @@ class _StripeFitnessModel(FitnessModel):
         return f, jac
 
     @staticmethod              
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
                         selfloops):
         """ Compute the objective function of the layer density solver and its
@@ -1617,7 +1645,7 @@ class _StripeFitnessModel(FitnessModel):
         return f
 
     @staticmethod              
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
                   lbl_out, lbl_in, fit_out, fit_in, slflp):
         """ Compute the objective function of the density solver and its
@@ -1638,7 +1666,7 @@ class _StripeFitnessModel(FitnessModel):
         return f
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_degrees(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
                     lbl_out, lbl_in, fit_out, fit_in, num_v, slflp):
         """ Compute the expected undirected, in and out degree sequences.
@@ -1684,7 +1712,7 @@ class _StripeFitnessModel(FitnessModel):
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_degrees_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in,
                           num_v, selfloops):
         """ Compute the expected undirected, in and out degree sequences.
@@ -1726,7 +1754,7 @@ class _StripeFitnessModel(FitnessModel):
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_av_nn_prop(p_ij, param, ind_out, ind_in, indptr_out, indptr_in, 
                        lbl_out, lbl_in, fit_out, fit_in, prop, ndir, slflp):
         """ Compute the expected average nearest neighbour property.
@@ -1782,7 +1810,7 @@ class _StripeFitnessModel(FitnessModel):
         return av_nn
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_av_nn_prop_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in, 
                              prop, ndir, slflp):
         """ Compute the expected average nearest neighbour property.
@@ -1833,7 +1861,7 @@ class _StripeFitnessModel(FitnessModel):
         return av_nn
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _likelihood_layer(p_ij, param, ind_out, ind_in, fit_out, 
                           fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
@@ -1851,12 +1879,12 @@ class _StripeFitnessModel(FitnessModel):
                     if ind_j in j_list:
                         like += log(p)
                     else:
-                        like += log(1 - p)
+                        like += log1p(-p)
         
         return like
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _sample_layer(p_ij, param, ind_out, ind_in, fit_out, fit_in, layer, 
                       selfloops):
         """ Sample from the ensemble.
@@ -2122,7 +2150,7 @@ class StripeMultiByLabel(_StripeFitnessModel):
         return g
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection between node i and j in the
         multi-label case.
@@ -2474,7 +2502,7 @@ class StripeMulti(_StripeFitnessModel):
         return f, jac
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j in the multi-label case.
@@ -2504,7 +2532,7 @@ class StripeMulti(_StripeFitnessModel):
         return 1 - val, num/dnm
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection between node i and j in the
         multi-label case.
@@ -2529,7 +2557,7 @@ class StripeMulti(_StripeFitnessModel):
         return 1 - val
 
     @staticmethod              
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, indptr_out, 
                         indptr_in, lbl_out, lbl_in, fit_out, fit_in, slflp):
         """ Compute the objective function of the density solver and its
@@ -3199,7 +3227,7 @@ class StripeInvMultiByLabel(StripeMultiByLabel, _StripeInvariantModel):
         super().__init__(sc, *args, **kwargs)
         
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection between node i and j in the
         multi-label case.
@@ -3229,7 +3257,7 @@ class StripeInvMulti(StripeMulti, _StripeInvariantModel):
         super().__init__(sc, *args, **kwargs)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij_multi(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection between node i and j in the
         multi-label case.
@@ -3254,7 +3282,7 @@ class StripeInvMulti(StripeMulti, _StripeInvariantModel):
             return - expm1(-tmp)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_lbl, x_dat, y_lbl, y_dat):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and jin the

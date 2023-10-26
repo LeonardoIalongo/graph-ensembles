@@ -52,13 +52,13 @@ num_vertices = 4
 num_edges = 5
 z = 2.91360376e-12
 
-p_ref = np.array([[0.00000000, 0.01180476, 0.00000000, 0.32333265],
-                  [0.99939629, 0.00000000, 0.00000000, 0.96403545],
-                  [0.98061950, 0.02007152, 0.00000000, 0.45033967],
-                  [0.98629663, 0.02831116, 0.00000000, 0.00000000]])
+p_ref = np.array([[0.00000000, 0.01187471, 0.00000000, 0.37987302],
+                  [1.00000000, 0.00000000, 0.00000000, 1.00000000],
+                  [1.00000000, 0.02027429, 0.00000000, 0.55926231],
+                  [1.00000000, 0.02871568, 0.00000000, 0.00000000]])
 
 
-class TestFitnessModelInit():
+class TestInvariantModelInit():
     def test_issubclass(self):
         """ Check that the model is a graph ensemble."""
         model = ge.ScaleInvariantModel(g)
@@ -235,7 +235,7 @@ class TestFitnessModelInit():
     def test_wrong_z(self):
         """ Check that the passed z adheres to format.
         """
-        msg = 'The FitnessModel requires one parameter.'
+        msg = 'The model requires one parameter.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(num_vertices=num_vertices,
                                    fit_out=out_strength,
@@ -257,7 +257,7 @@ class TestFitnessModelInit():
                                    param=-1)
 
 
-class TestFitnessModelFit():
+class TestInvariantModelFit():
     def test_solver_newton(self):
         """ Check that the newton solver is fitting the z parameters
         correctly. """
@@ -296,7 +296,7 @@ class TestFitnessModelFit():
         with pytest.raises(ValueError, match=msg):
             model.fit(x0=-1)
 
-        msg = 'The FitnessModel requires one parameter.'
+        msg = 'The model requires one parameter.'
         with pytest.raises(ValueError, match=msg):
             model.fit(x0=np.array([0, 1]))
 
@@ -313,7 +313,7 @@ class TestFitnessModelFit():
             model.fit(method="wrong")
 
 
-class TestFitnessModelMeasures():
+class TestInvariantModelMeasures():
     def test_exp_n_edges(self):
         """ Check expected edges is correct. """
         model = ge.ScaleInvariantModel(num_vertices=num_vertices,
@@ -465,7 +465,7 @@ class TestFitnessModelMeasures():
         # Compute reference from p_ref
         p_log = p_ref.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.log(1 - p_ref)
+        np_log = -z*np.outer(out_strength, in_strength)
         adj = np.array([[0, 1, 0, 1],
                         [1, 0, 0, 0],
                         [1, 0, 0, 0],
@@ -474,10 +474,11 @@ class TestFitnessModelMeasures():
         ref = 0
         for i in range(adj.shape[0]):
             for j in range(adj.shape[1]):
-                if adj[i, j] != 0:
-                    ref += p_log[i, j]
-                else:
-                    ref += np_log[i, j]
+                if i != j:
+                    if adj[i, j] != 0:
+                        ref += p_log[i, j]
+                    else:
+                        ref += np_log[i, j]
 
         # Construct model
         model = ge.ScaleInvariantModel(num_vertices=num_vertices,
@@ -485,9 +486,46 @@ class TestFitnessModelMeasures():
                                        fit_in=in_strength,
                                        param=z)
 
-        assert np.abs(ref - model.log_likelihood(g)) < 1e-6
-        assert np.abs(ref - model.log_likelihood(g.adjacency_matrix())) < 1e-6
-        assert np.abs(ref - model.log_likelihood(adj)) < 1e-6
+        np.testing.assert_allclose(ref, model.log_likelihood(g), 
+                                   atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(ref, model.log_likelihood(
+            g.adjacency_matrix()), atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(ref, model.log_likelihood(adj), 
+                                   atol=1e-6, rtol=1e-6)
+
+    def test_likelihood_inf_p_one(self):
+        """ Test likelihood code. """
+        # Construct adj with p[g] = 0
+        adj = np.array([[0, 1, 0, 1],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0]])
+
+        # Construct model
+        model = ge.ScaleInvariantModel(num_vertices=num_vertices,
+                                       fit_out=out_strength,
+                                       fit_in=in_strength,
+                                       param=np.infty)
+
+        res = model.log_likelihood(adj)
+        assert np.isinf(res) and (res < 0)
+
+    def test_likelihood_inf_p_zero(self):
+        """ Test likelihood code. """
+        # Construct adj with p[g] = 0
+        adj = np.array([[0, 1, 1, 1],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0]])
+
+        # Construct model
+        model = ge.ScaleInvariantModel(num_vertices=num_vertices,
+                                       fit_out=out_strength,
+                                       fit_in=in_strength,
+                                       param=z)
+
+        res = model.log_likelihood(adj)
+        assert np.isinf(res) and (res < 0)
 
     def test_likelihood_error(self):
         """ Test likelihood code. """
@@ -511,7 +549,7 @@ class TestFitnessModelMeasures():
             model.log_likelihood('dfsg')
 
 
-class TestFitnessModelSample():
+class TestInvariantModelSample():
     def test_sampling(self):
         """ Check that properties of the sample correspond to ensemble.
         """

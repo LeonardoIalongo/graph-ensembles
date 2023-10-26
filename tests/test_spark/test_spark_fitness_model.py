@@ -60,7 +60,7 @@ p_ref = np.array([[0.00000000, 0.01729211, 0.00000000, 0.41309584],
                   [0.99065599, 0.04115187, 0.00000000, 0.00000000]])
 
 # Initialize spark
-sc = SparkContext()
+sc = SparkContext.getOrCreate()
 
 
 class TestFitnessModelInit():
@@ -267,7 +267,7 @@ class TestFitnessModelInit():
     def test_wrong_z(self):
         """ Check that the passed z adheres to format.
         """
-        msg = 'The FitnessModel requires one parameter.'
+        msg = 'The model requires one parameter.'
         with pytest.raises(ValueError, match=msg):
             ge.FitnessModel(sc,
                             num_vertices=num_vertices,
@@ -331,7 +331,7 @@ class TestFitnessModelFit():
         with pytest.raises(ValueError, match=msg):
             model.fit(x0=-1)
 
-        msg = 'The FitnessModel requires one parameter.'
+        msg = 'The model requires one parameter.'
         with pytest.raises(ValueError, match=msg):
             model.fit(x0=np.array([0, 1]))
 
@@ -508,7 +508,7 @@ class TestFitnessModelMeasures():
         # Compute reference from p_ref
         p_log = p_ref.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.log(1 - p_ref)
+        np_log = np.log1p(-p_ref)
         adj = np.array([[0, 1, 0, 1],
                         [1, 0, 0, 0],
                         [1, 0, 0, 0],
@@ -529,9 +529,48 @@ class TestFitnessModelMeasures():
                                 fit_in=in_strength,
                                 param=z)
 
-        assert np.abs(ref - model.log_likelihood(g)) < 1e-6
-        assert np.abs(ref - model.log_likelihood(g.adjacency_matrix())) < 1e-6
-        assert np.abs(ref - model.log_likelihood(adj)) < 1e-6
+        np.testing.assert_allclose(ref, model.log_likelihood(g), 
+                                   atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(ref, model.log_likelihood(
+            g.adjacency_matrix()), atol=1e-6, rtol=1e-6)
+        np.testing.assert_allclose(ref, model.log_likelihood(adj), 
+                                   atol=1e-6, rtol=1e-6)
+
+    def test_likelihood_inf_p_one(self):
+        """ Test likelihood code. """
+        # Construct adj with p[g] = 0
+        adj = np.array([[0, 1, 0, 1],
+                        [0, 0, 0, 0],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0]])
+
+        # Construct model
+        model = ge.FitnessModel(sc,
+                                num_vertices=num_vertices,
+                                fit_out=out_strength,
+                                fit_in=in_strength,
+                                param=np.array([np.infty]))
+
+        res = model.log_likelihood(adj)
+        assert np.isinf(res) and (res < 0)
+
+    def test_likelihood_inf_p_zero(self):
+        """ Test likelihood code. """
+        # Construct adj with p[g] = 0
+        adj = np.array([[0, 1, 1, 1],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0],
+                        [1, 0, 0, 0]])
+
+        # Construct model
+        model = ge.FitnessModel(sc,
+                                num_vertices=num_vertices,
+                                fit_out=out_strength,
+                                fit_in=in_strength,
+                                param=z)
+
+        res = model.log_likelihood(adj)
+        assert np.isinf(res) and (res < 0)
 
     def test_likelihood_error(self):
         """ Test likelihood code. """

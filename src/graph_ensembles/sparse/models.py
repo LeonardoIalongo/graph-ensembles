@@ -8,10 +8,10 @@ import numpy.random as rng
 import scipy.sparse as sp
 import warnings
 from numba import jit
-from math import floor
 from math import exp
 from math import expm1
 from math import log
+from math import log1p
 from math import isinf
 
 
@@ -174,7 +174,7 @@ class FitnessModel(GraphEnsemble):
             else:
                 if not (len(self.param) == 1):
                     raise ValueError(
-                        'The FitnessModel requires one parameter.')
+                        'The model requires one parameter.')
             
             if not np.issubdtype(self.param.dtype, np.number):
                 raise ValueError('Parameters must be numeric.')
@@ -216,7 +216,7 @@ class FitnessModel(GraphEnsemble):
 
         if not (len(x0) == 1):
             raise ValueError(
-                'The FitnessModel requires one parameter.')
+                'The model requires one parameter.')
 
         if not np.issubdtype(x0.dtype, np.number):
             raise ValueError('x0 must be numeric.')
@@ -490,7 +490,7 @@ class FitnessModel(GraphEnsemble):
         """ Compute the probability of connection between node i and j.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return 0
+            return 0.0
 
         tmp = d*x_i*y_j
         if isinf(tmp):
@@ -505,10 +505,10 @@ class FitnessModel(GraphEnsemble):
             contribution of node i and j.
         """
         if ((x_i == 0) or (y_j == 0)):
-            return 0, 0
+            return 0.0, 0.0
 
         if d == 0:
-            return 0, x_i*y_j
+            return 0.0, x_i*y_j
 
         tmp = x_i*y_j
         tmp1 = d*tmp
@@ -623,9 +623,13 @@ class FitnessModel(GraphEnsemble):
                     p = p_ij(param[0], f_out_i, f_in_j)
                     # Check if link exists
                     if j in j_list:
+                        if p == 0:
+                            return -np.infty
                         like += log(p)
                     else:
-                        like += log(1 - p)
+                        if p == 1:
+                            return -np.infty
+                        like += log1p(-p)
         
         return like
 
@@ -706,12 +710,12 @@ class ScaleInvariantModel(FitnessModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_ij(d, x_i, y_j):
         """ Compute the probability of connection between node i and j.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return 0
+            return 0.0
 
         tmp = d*x_i*y_j
         if isinf(tmp):
@@ -720,16 +724,16 @@ class ScaleInvariantModel(FitnessModel):
             return - expm1(-tmp)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_i, y_j):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
         """
         if ((x_i == 0) or (y_j == 0)):
-            return 0, 0
+            return 0.0, 0.0
 
         if d == 0:
-            return 0, x_i*y_j
+            return 0.0, x_i*y_j
 
         tmp = x_i*y_j
         tmp1 = d*tmp
@@ -739,7 +743,7 @@ class ScaleInvariantModel(FitnessModel):
             return - expm1(-tmp1), tmp * exp(-tmp1)
 
     @staticmethod
-    @jit(nopython=True)
+    @jit(nopython=True)  # pragma: no cover
     def _likelihood(p_ij, param, fit_out, fit_in, adj_i, adj_j, selfloops):
         """ Compute the binary log likelihood of a graph given the fitted model.
         """
@@ -754,8 +758,14 @@ class ScaleInvariantModel(FitnessModel):
                 if (i != j) | selfloops:
                     # Check if link exists
                     if j in j_list:
-                        like += log(p_ij(param[0], f_out_i, f_in_j))
+                        p = p_ij(param[0], f_out_i, f_in_j)
+                        if p == 0:
+                            return -np.infty
+                        like += log(p)
                     else:
-                        like += param[0]*f_out_i*f_in_j
+                        if not (f_out_i*f_in_j == 0):
+                            if isinf(param[0]):
+                                return -np.infty
+                            like += -param[0]*f_out_i*f_in_j
         
         return like
