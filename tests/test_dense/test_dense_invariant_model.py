@@ -1,5 +1,5 @@
 """ Test the fitness model class on simple sample graph. """
-import graph_ensembles.sparse as ge
+import graph_ensembles as ge
 import numpy as np
 import pandas as pd
 import pytest
