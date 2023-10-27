@@ -61,35 +61,26 @@ class DiGraphEnsemble(GraphEnsemble):
     (prop_dyad). The ensemble is defined by the probability function 
     pij(param, prop_out, prop_in, prop_dyad). 
 
-    All ensembles can be defined in three ways:
-
-    1) From a suitable Graph object: we can think this as a randomization of
-    the observed graph. The conserved quantities and relevant vertex
-    attributes are computed on the original graph to initialise the ensemble.
-    It is then possible to fit the model parameters in order to get a
-    probability distribution over all graphs from which to sample.
-
-    2) From conserved quantities and relevant vertex attributes directly: in
-    the case we do not have a reference graph but we do know what properties
-    we want the ensemble to hold, we can directly use those properties to
-    initialise the model. Once this step is completed we can similarly fit the
-    parameters and sample from the ensemble.
-
-    3) Fully specifying all model parameters: a final possibility is to
-    initialise the model by giving it the list of parameters it needs in order
-    to define the probability distribution over graphs. In this case we do not
-    need to fit the model and the value of the conserved quantities over the
-    ensemble will depend on the parameters passed to the model rather than
-    vice versa.
-
-    What these three possibilities entail will depend on the specifics of the
-    model.
-
-    Note that if keyword arguments are passed together with a Graph, then the
-    arguments overwrite the graph property. This allows for easier definition
-    of the ensemble for example when we want to modify one aspect of the
-    reference graph but not all (e.g. only the density, but keeping strengths
-    the same).
+    Methods
+    -------
+    expected_num_edges:
+        Compute the expected number of edges in the ensemble.
+    expected_degree:
+        Compute the expected undirected degree of each node.
+    expected_out_degree:
+        Compute the expected out degree of each node.
+    expected_in_degree:
+        Compute the expected in degree of each node.
+    expected_av_nn_property:
+        Compute the expected average of the given property of the nearest 
+        neighbours of each node.
+    expected_av_nn_degree:
+        Compute the expected average of the degree of the nearest 
+        neighbours of each node.
+    log_likelihood:
+        Compute the likelihood of the given graph.
+    sample:
+        Return a sample from the ensemble.
 
     """
     def expected_num_edges(self, recompute=False):
@@ -490,11 +481,12 @@ class FitnessModel(DiGraphEnsemble):
 
     def __init__(self, *args, **kwargs):
         """ Return a FitnessModel for the given graph data.
-        The model accepts as arguments either: a DiGraph,
-        in which case the strengths are used as fitnesses, or
-        directly the fitness sequences (in and out).
-        The model accepts the fitness sequences as numpy arrays.
+
+        The model accepts as arguments either: a DiGraph, in which case the 
+        strengths are used as fitnesses, or directly the fitness sequences (in 
+        and out). The model accepts the fitness sequences as numpy arrays.
         """
+
         # If an argument is passed then it must be a graph
         if len(args) > 0:
             if isinstance(args[0], graphs.DiGraph):
@@ -556,10 +548,10 @@ class FitnessModel(DiGraphEnsemble):
         assert self.prop_in.shape == (self.num_vertices,), msg
 
         # Ensure that fitnesses have positive values only
-        msg = "Out fitness must contain positive values only."
+        msg = "Node out properties must contain positive values only."
         assert np.all(self.prop_out >= 0), msg
 
-        msg = "In fitness must contain positive values only."
+        msg = "Node in properties must contain positive values only."
         assert np.all(self.prop_in >= 0), msg
 
         # Ensure that number of edges is a positive number
@@ -779,10 +771,10 @@ class ScaleInvariantModel(FitnessModel):
 
     def __init__(self, *args, **kwargs):
         """ Return a ScaleInvariantModel for the given graph data.
-        The model accepts as arguments either: a WeightedGraph,
-        in which case the strengths are used as fitnesses, or
-        directly the fitness sequences (in and out).
-        The model accepts the fitness sequences as numpy arrays.
+
+        The model accepts as arguments either: a DiGraph, in which case the 
+        strengths are used as fitnesses, or directly the fitness sequences (in 
+        and out). The model accepts the fitness sequences as numpy arrays.
         """
         super().__init__(*args, **kwargs)
 

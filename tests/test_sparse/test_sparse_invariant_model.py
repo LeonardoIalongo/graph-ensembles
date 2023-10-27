@@ -188,14 +188,14 @@ class TestInvariantModelInit():
                                    prop_in=in_strength[0:2],
                                    num_edges=num_edges)
 
-        msg = "Out fitness must contain positive values only."
+        msg = "Node out properties must contain positive values only."
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(num_vertices=num_vertices,
                                    prop_out=-out_strength,
                                    prop_in=in_strength,
                                    num_edges=num_edges)
 
-        msg = "In fitness must contain positive values only."
+        msg = "Node in properties must contain positive values only."
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(num_vertices=num_vertices,
                                    prop_out=out_strength,

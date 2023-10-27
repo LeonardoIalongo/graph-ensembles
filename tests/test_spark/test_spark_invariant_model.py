@@ -72,14 +72,14 @@ class TestScaleInvariantModelInit():
 
     def test_model_init(self):
         model = ge.ScaleInvariantModel(sc, g)
-        assert np.all(model.fit_out == out_strength), g.out_strength()
-        assert np.all(model.fit_in == in_strength), g.in_strength()
+        assert np.all(model.prop_out == out_strength), g.out_strength()
+        assert np.all(model.prop_in == in_strength), g.in_strength()
         assert np.all(model.num_edges == num_edges)
         assert np.all(model.num_vertices == num_vertices)
 
         model = ge.ScaleInvariantModel(sc, g)
-        assert np.all(model.fit_out == out_strength)
-        assert np.all(model.fit_in == in_strength)
+        assert np.all(model.prop_out == out_strength)
+        assert np.all(model.prop_in == in_strength)
         assert np.all(model.num_edges == num_edges)
         assert np.all(model.num_vertices == num_vertices)
 
@@ -89,11 +89,11 @@ class TestScaleInvariantModelInit():
         """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        num_edges=num_edges)
-        assert np.all(model.fit_out == out_strength)
-        assert np.all(model.fit_in == in_strength)
+        assert np.all(model.prop_out == out_strength)
+        assert np.all(model.prop_in == in_strength)
         assert np.all(model.num_edges == num_edges)
         assert np.all(model.num_vertices == num_vertices)
 
@@ -103,11 +103,11 @@ class TestScaleInvariantModelInit():
         """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
-        assert np.all(model.fit_out == out_strength)
-        assert np.all(model.fit_in == in_strength)
+        assert np.all(model.prop_out == out_strength)
+        assert np.all(model.prop_in == in_strength)
         assert np.all(model.param == z)
         assert np.all(model.num_vertices == num_vertices)
         np.testing.assert_allclose(model.expected_num_edges(),
@@ -122,7 +122,7 @@ class TestScaleInvariantModelInit():
 
         msg = 'A SparkContext must be passed as the first argument.'
         with pytest.raises(ValueError, match=msg):
-            ge.ScaleInvariantModel(fit_out=out_strength, fit_in=in_strength)
+            ge.ScaleInvariantModel(prop_out=out_strength, prop_in=in_strength)
 
         msg = 'Second argument passed must be a DiGraph.'
         with pytest.raises(ValueError, match=msg):
@@ -136,8 +136,8 @@ class TestScaleInvariantModelInit():
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_nodes=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
 
     def test_wrong_num_vertices(self):
@@ -147,87 +147,87 @@ class TestScaleInvariantModelInit():
         msg = 'Number of vertices not set.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc, 
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
 
         msg = 'Number of vertices must be an integer.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=np.array([1, 2]),
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
 
         msg = 'Number of vertices must be a positive number.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=-3,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
 
     def test_wrong_strengths(self):
         """ Check that wrong initialization of strengths results in an error.
         """
-        msg = 'fit_out not set.'
+        msg = 'prop_out not set.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_in=in_strength,
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
 
-        msg = 'fit_in not set.'
+        msg = 'prop_in not set.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
+                                   prop_out=out_strength,
                                    num_edges=num_edges)
 
-        msg = ("Out fitness must be a numpy array of length " +
+        msg = ("Node out properties must be a numpy array of length " +
                str(num_vertices))
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=1,
-                                   fit_in=in_strength,
+                                   prop_out=1,
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength[0:2],
-                                   fit_in=in_strength,
+                                   prop_out=out_strength[0:2],
+                                   prop_in=in_strength,
                                    num_edges=num_edges)
 
-        msg = ("In fitness must be a numpy array of length " +
+        msg = ("Node in properties must be a numpy array of length " +
                str(num_vertices))
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=2,
+                                   prop_out=out_strength,
+                                   prop_in=2,
                                    num_edges=num_edges)
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength[0:2],
-                                   num_edges=num_edges)
-
-        msg = "Out fitness must contain positive values only."
-        with pytest.raises(AssertionError, match=msg):
-            ge.ScaleInvariantModel(sc,
-                                   num_vertices=num_vertices,
-                                   fit_out=-out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength[0:2],
                                    num_edges=num_edges)
 
-        msg = "In fitness must contain positive values only."
+        msg = "Node out properties must contain positive values only."
         with pytest.raises(AssertionError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=-in_strength,
+                                   prop_out=-out_strength,
+                                   prop_in=in_strength,
+                                   num_edges=num_edges)
+
+        msg = "Node in properties must contain positive values only."
+        with pytest.raises(AssertionError, match=msg):
+            ge.ScaleInvariantModel(sc,
+                                   num_vertices=num_vertices,
+                                   prop_out=out_strength,
+                                   prop_in=-in_strength,
                                    num_edges=num_edges)
 
     def test_wrong_num_edges(self):
@@ -237,32 +237,32 @@ class TestScaleInvariantModelInit():
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges=np.array([1, 2]))
 
         msg = 'Number of edges must be a number.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges='3')
 
         msg = 'Number of edges must be a positive number.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    num_edges=-324)
 
         msg = 'Either num_edges or param must be set.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength)
+                                   prop_out=out_strength,
+                                   prop_in=in_strength)
 
     def test_wrong_z(self):
         """ Check that the passed z adheres to format.
@@ -271,24 +271,24 @@ class TestScaleInvariantModelInit():
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    param=np.array([0, 1]))
 
         msg = 'Parameters must be numeric.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    param='0')
 
         msg = 'Parameters must be positive.'
         with pytest.raises(ValueError, match=msg):
             ge.ScaleInvariantModel(sc,
                                    num_vertices=num_vertices,
-                                   fit_out=out_strength,
-                                   fit_in=in_strength,
+                                   prop_out=out_strength,
+                                   prop_in=in_strength,
                                    param=-1)
 
 
@@ -353,8 +353,8 @@ class TestScaleInvariantModelMeasures():
         """ Check expected edges is correct. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
         ne = model.expected_num_edges()
         np.testing.assert_allclose(ne, num_edges, rtol=1e-5)
@@ -363,8 +363,8 @@ class TestScaleInvariantModelMeasures():
         """ Check expected d is correct. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         d = model.expected_degree()
@@ -375,8 +375,8 @@ class TestScaleInvariantModelMeasures():
         """ Check expected d_out is correct. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
  
         d_out = model.expected_out_degree()
@@ -387,8 +387,8 @@ class TestScaleInvariantModelMeasures():
         """ Check expected d_out is correct. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         d_in = model.expected_in_degree()
@@ -399,8 +399,8 @@ class TestScaleInvariantModelMeasures():
         """ Test correct value of av_nn_prop using simple local prop. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         prop = np.ones(num_vertices)
@@ -418,8 +418,8 @@ class TestScaleInvariantModelMeasures():
         """ Test correct value of av_nn_prop using simple local prop. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         prop = np.zeros(num_vertices)
@@ -436,8 +436,8 @@ class TestScaleInvariantModelMeasures():
         """ Test correct value of av_nn_prop using simple local prop. """
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         prop = np.arange(num_vertices) + 1
@@ -465,8 +465,8 @@ class TestScaleInvariantModelMeasures():
         """ Test average nn degree."""
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         d_out = model.expected_out_degree()
@@ -526,8 +526,8 @@ class TestScaleInvariantModelMeasures():
         # Construct model
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         np.testing.assert_allclose(ref, model.log_likelihood(g), 
@@ -548,8 +548,8 @@ class TestScaleInvariantModelMeasures():
         # Construct model
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=np.array([np.infty]))
 
         res = model.log_likelihood(adj)
@@ -566,8 +566,8 @@ class TestScaleInvariantModelMeasures():
         # Construct model
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         res = model.log_likelihood(adj)
@@ -582,8 +582,8 @@ class TestScaleInvariantModelMeasures():
         # Construct model
         model = ge.ScaleInvariantModel(sc,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         msg = re.escape('Passed graph adjacency matrix does not have the '
@@ -603,8 +603,8 @@ class TestScaleInvariantModelSample():
         model = ge.ScaleInvariantModel(sc,
                                        p_blocks=10,
                                        num_vertices=num_vertices,
-                                       fit_out=out_strength,
-                                       fit_in=in_strength,
+                                       prop_out=out_strength,
+                                       prop_in=in_strength,
                                        param=z)
 
         samples = 100
