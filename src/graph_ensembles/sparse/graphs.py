@@ -25,40 +25,42 @@ class Graph():
     Attributes
     ----------
     num_vertices: int
-        number of vertices in the graph
+        Number of vertices in the graph.
     adj: numpy.array
-        the adjacency matrix of the graph
+        The adjacency matrix of the graph.
     id_dict: dict
-        dictionary to convert original identifiers to new position id
+        Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
-        type of the id (e.g. np.uint16)
+        Type of the id (e.g. np.uint16).
     num_groups: int  (or None)
-        number of vertex groups
+        Number of vertex groups.
     group_dict: dict (or none)
-        dictionary to convert v_group columns into numeric ids
+        Dictionary to convert v_group columns into numeric ids.
     group_dtype: numpy.dtype
-        type of the group id
+        Type of the group id.
     groups: numpy.array
-        array with the group each node belongs to
+        Array with the group each node belongs to.
+    weighted: bool
+        Is true if the edges have an associated weight.
 
     Methods
     -------
     num_edges:
-        compute the number of edges in the graph
+        Compute the number of edges in the graph.
     total_weight:
-        compute the total sum of the weights of the edges
+        Compute the total sum of the weights of the edges.
     degree:
-        compute the undirected degree sequence
+        Compute the undirected degree sequence.
     degree_by_group:
-        compute the undirected degree sequence by group as a 2D array
+        Compute the undirected degree sequence by group as a 2D array.
     strength:
-        compute the total strength sequence
+        Compute the total strength sequence.
     strength_by_group:
-        compute the total strength sequence by group as a 2D array
+        Compute the total strength sequence by group as a 2D array.
     adjacency_matrix:
-        return the adjacency matrix of the graph
+        Return the adjacency matrix of the graph.
     to_networkx:
-        return a Networkx equivalent
+        Return a Networkx equivalent.
     """
     def __init__(self, v, e, v_id, src, dst, weight=None, v_group=None):
         """Return a Graph object given vertices and edges.
@@ -167,6 +169,7 @@ class Graph():
 
         # Construct adjacency matrix
         if weight is not None:
+            self.weighted = True
             val_array = e[weight].values
 
             # Ensure all weights are positive
@@ -177,6 +180,7 @@ class Graph():
                 (val_array, (src_array, dst_array)), 
                 shape=(self.num_vertices, self.num_vertices)).tocsr()
         else:
+            self.weighted = False
             self.adj = sp.coo_array(
                 (np.ones(src_array.shape[0], bool), (src_array, dst_array)), 
                 shape=(self.num_vertices, self.num_vertices)).tocsr()
@@ -365,56 +369,58 @@ class DiGraph(Graph):
     Attributes
     ----------
     num_vertices: int
-        number of vertices in the graph
+        Number of vertices in the graph.
     adj: numpy.array
-        the adjacency matrix of the graph
+        The adjacency matrix of the graph.
     id_dict: dict
-        dictionary to convert original identifiers to new position id
+        Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
-        type of the id (e.g. np.uint16)
+        Type of the id (e.g. np.uint16).
     num_groups: int  (or None)
-        number of vertex groups
+        Number of vertex groups.
     group_dict: dict (or none)
-        dictionary to convert v_group columns into numeric ids
+        Dictionary to convert v_group columns into numeric ids.
     group_dtype: numpy.dtype
-        type of the group id
+        Type of the group id.
     groups: numpy.array
-        array with the group each node belongs to
+        Array with the group each node belongs to.
+    weighted: bool
+        Is true if the edges have an associated weight.
 
     Methods
     -------
     num_edges:
-        compute the number of edges in the graph
+        Compute the number of edges in the graph.
     total_weight:
-        compute the total sum of the weights of the edges
+        Compute the total sum of the weights of the edges.
     degree:
-        compute the undirected degree sequence
+        Compute the undirected degree sequence.
     out_degree:
-        compute the out degree sequence
+        Compute the out degree sequence.
     in_degree:
-        compute the in degree sequence
+        Compute the in degree sequence.
     degree_by_group:
-        compute the undirected degree sequence by group as a 2D array
+        Compute the undirected degree sequence by group as a 2D array.
     out_degree_by_group:
-        compute the out degree sequence by group as a 2D array
+        Compute the out degree sequence by group as a 2D array.
     in_degree_by_group:
-        compute the in degree sequence by group as a 2D array
+        Compute the in degree sequence by group as a 2D array.
     strength:
-        compute the total strength sequence
+        Compute the total strength sequence.
     out_strength:
-        compute the out strength sequence
+        Compute the out strength sequence.
     in_strength:
-        compute the in strength sequence
+        Compute the in strength sequence.
     strength_by_group:
-        compute the total strength sequence by group as a 2D array
+        Compute the total strength sequence by group as a 2D array.
     out_strength_by_group:
-        compute the out strength sequence by group as a 2D array
+        Compute the out strength sequence by group as a 2D array.
     in_strength_by_group:
-        compute the in strength sequence by group as a 2D array
+        Compute the in strength sequence by group as a 2D array.
     adjacency_matrix:
-        return the adjacency matrix of the graph
+        Return the adjacency matrix of the graph.
     to_networkx:
-        return a Networkx equivalent
+        Return a Networkx equivalent.
     """
     def __init__(self, v, e, v_id, src, dst, weight=None, v_group=None):
         """Return a DiGraph object given vertices and edges.
@@ -636,56 +642,56 @@ class MultiGraph(Graph):
     Attributes
     ----------
     num_vertices: int
-        number of vertices in the graph
-    num_edges: int
-        number of distinct directed edges in the graph
+        Number of vertices in the graph.
     num_labels: int
-        number of distinct edge labels
-    num_edges_label: numpy.array
-        number of edges by label (in order)
+        Number of distinct edge labels.
     adj: numpy.array
-        the adjacency tensor of the graph
+        The adjacency tensor of the graph.
     id_dict: dict
-        dictionary to convert original identifiers to new position id
+        Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
-        type of the id (e.g. np.uint16)
-    num_groups: int  (or None)
-        number of vertex groups
-    group_dict: dict (or none)
-        dictionary to convert v_group columns into numeric ids
-    group_dtype: numpy.dtype
-        type of the group id
-    groups: numpy.array
-        array with the group each node belongs to
+        Type of the id (e.g. np.uint16).
     label_dtype: numpy.dtype
-        the data type of the label internal id
+        The data type of the label internal id.
+    num_groups: int  (or None)
+        Number of vertex groups.
+    group_dict: dict (or none)
+        Dictionary to convert v_group columns into numeric ids.
+    group_dtype: numpy.dtype
+        Type of the group id.
+    groups: numpy.array
+        Array with the group each node belongs to.
+    weighted: bool
+        Is true if the edges have an associated weight.
 
     Methods
     -------
     num_edges:
-        compute the number of edges in the graph
-    num_edges_label:
-        compute the number of edges in the graph for each layer
+        Compute the number of edges in the graph.
+    num_edges_label: 
+        Compute the number of edges by label (in order)
     total_weight:
-        compute the total sum of the weights of the edges
+        Compute the total sum of the weights of the edges.
     total_weight_label:
-        compute the total sum of the weights by label
+        Compute the total sum of the weights by label.
     degree:
-        compute the undirected degree sequence
-    degree_by_group:
-        compute the undirected degree sequence by group as a 2D array
+        Compute the undirected degree sequence.
     degree_by_label:
-        compute the degree of each vertex by label
+        Compute the degree of each vertex by label.
+    degree_by_group:
+        Compute the undirected degree sequence by group as a 2D array.
     strength:
-        compute the total strength sequence
-    strength_by_group:
-        compute the total strength sequence by group as a 2D array
+        Compute the total strength sequence.
     strength_by_label:
-        compute the strength of each vertex by label
+        Compute the strength of each vertex by label.
+    strength_by_group:
+        Compute the total strength sequence by group as a 2D array.
     adjacency_matrix:
-        return the adjacency matrix of the graph
+        Return the adjacency matrix of the graph.
+    adjacency_tensor:
+        Return the adjacency tensor of the graph.
     to_networkx:
-        return a Networkx equivalent
+        Return a Networkx equivalent.
     """
     def __init__(self, v, e, v_id, src, dst, edge_label, weight=None, 
                  v_group=None):
@@ -914,79 +920,84 @@ class MultiDiGraph(MultiGraph, DiGraph):
     of the links definitions. If a link is provided multiple times with 
     weights, they will be summed.
 
+
     Attributes
     ----------
     num_vertices: int
-        number of vertices in the graph
+        Number of vertices in the graph.
     num_labels: int
-        number of distinct edge labels
+        Number of distinct edge labels.
     adj: numpy.array
-        the adjacency tensor of the graph
+        The adjacency tensor of the graph.
     id_dict: dict
-        dictionary to convert original identifiers to new position id
+        Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
-        type of the id (e.g. np.uint16)
-    num_groups: int  (or None)
-        number of vertex groups
-    group_dict: dict (or none)
-        dictionary to convert v_group columns into numeric ids
-    group_dtype: numpy.dtype
-        type of the group id
-    groups: numpy.array
-        array with the group each node belongs to
+        Type of the id (e.g. np.uint16).
     label_dtype: numpy.dtype
-        the data type of the label internal id
+        The data type of the label internal id.
+    num_groups: int  (or None)
+        Number of vertex groups.
+    group_dict: dict (or none)
+        Dictionary to convert v_group columns into numeric ids.
+    group_dtype: numpy.dtype
+        Type of the group id.
+    groups: numpy.array
+        Array with the group each node belongs to.
+    weighted: bool
+        Is true if the edges have an associated weight.
 
     Methods
     -------
     num_edges:
-        compute the number of edges in the graph
-    num_edges_label:
-        compute the number of edges in the graph for each layer
+        Compute the number of edges in the graph.
+    num_edges_label: 
+        Compute the number of edges by label (in order)
     total_weight:
-        compute the total sum of the weights of the edges
+        Compute the total sum of the weights of the edges.
     total_weight_label:
-        compute the total sum of the weights by label
+        Compute the total sum of the weights by label.
     degree:
-        compute the undirected degree sequence
+        Compute the undirected degree sequence.
     out_degree:
-        compute the out degree sequence
+        Compute the out degree sequence.
     in_degree:
-        compute the in degree sequence
-    degree_by_group:
-        compute the undirected degree sequence by group as a 2D array
-    out_degree_by_group:
-        compute the out degree sequence by group as a 2D array
-    in_degree_by_group:
-        compute the in degree sequence by group as a 2D array
+        Compute the in degree sequence.
     degree_by_label:
-        compute the degree of each vertex by label
+        Compute the degree of each vertex by label.
     out_degree_by_label:
-        compute the out degree of each vertex by label
+        Compute the out degree of each vertex by label.
     in_degree_by_label:
-        compute the in degree of each vertex by label
+        Compute the in degree of each vertex by label.
+    degree_by_group:
+        Compute the undirected degree sequence by group as a 2D array.
+    out_degree_by_group:
+        Compute the out degree sequence by group as a 2D array.
+    in_degree_by_group:
+        Compute the in degree sequence by group as a 2D array.
     strength:
-        compute the total strength sequence
+        Compute the total strength sequence.
     out_strength:
-        compute the out strength sequence
+        Compute the out strength sequence.
     in_strength:
-        compute the in strength sequence
-    strength_by_group:
-        compute the total strength sequence by group as a 2D array
-    out_strength_by_group:
-        compute the out strength sequence by group as a 2D array
-    in_strength_by_group:
-        compute the in strength sequence by group as a 2D array
+        Compute the in strength sequence.
     strength_by_label:
-        compute the strength of each vertex by label
+        Compute the strength of each vertex by label.
     out_strength_by_label:
-        compute the out strength of each vertex by label
+        Compute the out strength of each vertex by label.
     in_strength_by_label:
-        compute the in strength of each vertex by label
+        Compute the in strength of each vertex by label.
+    strength_by_group:
+        Compute the total strength sequence by group as a 2D array.
+    out_strength_by_group:
+        Compute the out strength sequence by group as a 2D array.
+    in_strength_by_group:
+        Compute the in strength sequence by group as a 2D array.
     adjacency_matrix:
-        return the adjacency matrix of the graph
+        Return the adjacency matrix of the graph.
+    adjacency_tensor:
+        Return the adjacency tensor of the graph.
     to_networkx:
-        return a Networkx equivalent
+        Return a Networkx equivalent.
     """
     def __init__(self, v, e, v_id, src, dst, edge_label, weight=None, 
                  v_group=None):
