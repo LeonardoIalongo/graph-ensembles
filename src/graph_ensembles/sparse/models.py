@@ -286,9 +286,9 @@ class DiGraphEnsemble(GraphEnsemble):
             vals = np.ones(len(rows), dtype=bool)
         elif weights == 'cremb':
             if out_strength is None:
-                s_out = self.fit_out
+                s_out = self.prop_out
             if in_strength is None:
-                s_in = self.fit_in
+                s_in = self.prop_in
             rows, cols, vals = self._cremb_sample(
                 self.p_ij, self.param, self.prop_out, self.prop_in, 
                 self.prop_dyad, s_out, s_in, self.selfloops)
@@ -467,18 +467,25 @@ class FitnessModel(DiGraphEnsemble):
 
     Attributes
     ----------
-    fit_out: np.ndarray
-        the out fitness sequence
-    fit_in: np.ndarray
-        the in fitness sequence
+    prop_out: np.ndarray
+        The out fitness sequence.
+    prop_in: np.ndarray
+        the in fitness sequence.
+    prop_dyad: function
+        A function that returns the dyadic properties of two nodes.
     num_edges: int
-        the total number of edges
+        The total number of edges.
     num_vertices: int
-        the total number of nodes
+        The total number of nodes.
     param: float
-        the free parameters of the model
+        The free parameters of the model.
     selfloops: bool
-        selects if self loops (connections from i to i) are allowed
+        Selects if self loops (connections from i to i) are allowed.
+
+    Methods
+    -------
+    fit:
+        Fit the parameters of the model with the given method.
     """
 
     def __init__(self, *args, **kwargs):
@@ -602,20 +609,18 @@ class FitnessModel(DiGraphEnsemble):
         Parameters
         ----------
         x0: float
-            optional initial conditions for parameters
+            Optional initial conditions for parameters.
         method: 'density' or 'mle'
-            selects whether to fit param using maximum likelihood estimation
-            or by ensuring that the expected density matches the given one
-        solver: 'Newton-CG' or any scipy minimization solvers
-            selects which scipy solver is used for the mle method
+            Selects whether to fit param using maximum likelihood estimation
+            or by ensuring that the expected density matches the given one.
         atol : float
-            absolute tolerance for the exit condition
+            Absolute tolerance for the exit condition.
         xtol : float
-            relative tolerance for the exit condition on consecutive x values
+            Relative tolerance for the exit condition on consecutive x values.
         max_iter : int or float
-            maximum number of iteration
+            Maximum number of iteration.
         verbose: boolean
-            if true print debug info while iterating
+            If true print debug info while iterating.
         """
         if x0 is None:
             x0 = np.array([0], dtype=np.float64)
@@ -751,24 +756,25 @@ class ScaleInvariantModel(FitnessModel):
 
     Attributes
     ----------
-    sc: Spark Context
-        the Spark Context
-    fit_out: np.ndarray
-        the out fitness sequence
-    fit_in: np.ndarray
-        the in fitness sequence
+    prop_out: np.ndarray
+        The out fitness sequence.
+    prop_in: np.ndarray
+        the in fitness sequence.
+    prop_dyad: function
+        A function that returns the dyadic properties of two nodes.
     num_edges: int
-        the total number of edges
+        The total number of edges.
     num_vertices: int
-        the total number of nodes
+        The total number of nodes.
     param: float
-        the free parameters of the model
-    p_blocks: int
-        the number of blocks in which the fitnesses will be
-        divided for parallel computation, note that the number
-        of elements of the rdd will be p_blocks**2
+        The free parameters of the model.
     selfloops: bool
-        selects if self loops (connections from i to i) are allowed
+        Selects if self loops (connections from i to i) are allowed.
+
+    Methods
+    -------
+    fit:
+        Fit the parameters of the model with the given method.
     """
 
     def __init__(self, *args, **kwargs):
@@ -782,20 +788,6 @@ class ScaleInvariantModel(FitnessModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_ij(d, x_i, y_j):
-        """ Compute the probability of connection between node i and j.
-        """
-        if (x_i == 0) or (y_j == 0) or (d == 0):
-            return 0.0
-
-        tmp = d*x_i*y_j
-        if isinf(tmp):
-            return 1.0
-        else:
-            return - expm1(-tmp)
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_i, y_j):
         """ Compute the probability of connection and the jacobian 
             contribution of node i and j.
@@ -803,11 +795,11 @@ class ScaleInvariantModel(FitnessModel):
         if ((x_i == 0) or (y_j == 0)):
             return 0.0, 0.0
 
-        if d == 0:
+        if d[0] == 0:
             return 0.0, x_i*y_j
 
         tmp = x_i*y_j
-        tmp1 = d*tmp
+        tmp1 = d[0]*tmp
         if isinf(tmp1):
             return 1.0, 0.0
         else:
@@ -815,28 +807,43 @@ class ScaleInvariantModel(FitnessModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _likelihood(p_ij, param, fit_out, fit_in, adj_i, adj_j, selfloops):
-        """ Compute the binary log likelihood of a graph given the fitted model.
+    def p_ij(d, x_i, y_j, z_ij):
+        """ Compute the probability of connection between node i and j.
         """
-        like = 0
-        for i in range(len(fit_out)):
-            f_out_i = fit_out[i]
-            n = adj_i[i]
-            m = adj_i[i+1]
-            j_list = adj_j[n:m]
-            for j in range(len(fit_in)):
-                f_in_j = fit_in[j]
-                if (i != j) | selfloops:
-                    # Check if link exists
-                    if j in j_list:
-                        p = p_ij(param[0], f_out_i, f_in_j)
-                        if p == 0:
-                            return -np.infty
-                        like += log(p)
-                    else:
-                        if not (f_out_i*f_in_j == 0):
-                            if isinf(param[0]):
-                                return -np.infty
-                            like += -param[0]*f_out_i*f_in_j
-        
-        return like
+        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+            return 0.0
+
+        tmp = d[0]*x_i*y_j
+        if isinf(tmp):
+            return 1.0
+        else:
+            return - expm1(-tmp)
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def logp(d, x_i, y_j, z_ij):
+        """ Compute the log probability of connection between node i and j.
+        """
+        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+            return -np.infty
+
+        tmp = d[0]*x_i*y_j
+        if isinf(tmp):
+            return 0.0
+        else:
+            return log(- expm1(-tmp))
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def log1mp(d, x_i, y_j, z_ij):
+        """ Compute the log of 1 minus the probability of connection between 
+        node i and j.
+        """
+        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+            return 0.0
+
+        tmp = d[0]*x_i*y_j
+        if isinf(tmp):
+            return -np.infty
+        else:
+            return -tmp
