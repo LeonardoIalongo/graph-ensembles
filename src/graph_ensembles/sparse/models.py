@@ -22,7 +22,7 @@ from numba.experimental import jitclass
 spec = [('array', float64[:]), ]
 
 
-@jitclass(spec)
+@jitclass(spec)  # pragma: no cover
 class empty_index:
     def __init__(self):
         pass
@@ -159,7 +159,7 @@ class DiGraphEnsemble(GraphEnsemble):
         
         return self._exp_in_degree
 
-    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=None, 
                                 deg_recompute=False):
         """ Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -170,6 +170,9 @@ class DiGraphEnsemble(GraphEnsemble):
             msg = ('Property array must have first dimension size be equal to'
                    ' the number of vertices.')
             raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
 
         # Compute correct expected degree
         if ndir == 'out':
@@ -205,7 +208,7 @@ class DiGraphEnsemble(GraphEnsemble):
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_d_' + ddir.replace('-', '_'))
 
-        if not hasattr(self, name) or recompute:
+        if not hasattr(self, name) or recompute or deg_recompute:
             # Compute correct expected degree
             if ddir == 'out':
                 deg = self.expected_out_degree(recompute=deg_recompute)
@@ -218,8 +221,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
             # Compute property and set attribute
             res = self.expected_av_nn_property(
-                deg, ndir=ndir, selfloops=selfloops, 
-                deg_recompute=deg_recompute)
+                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
             setattr(self, name, res)
 
         return getattr(self, name)
@@ -592,18 +594,18 @@ class RandomDiGraph(DiGraphEnsemble):
                 if tmp == 1:
                     self.total_weight = self.total_weight[0]
                 else:
-                    raise ValueError('Number of edges must be a number.')
+                    raise ValueError('Total weight must be a number.')
             except TypeError:
                 pass        
                 
             try:
                 self.total_weight = self.total_weight * 1.0
             except TypeError:
-                raise ValueError('Number of edges must be a number.')
+                raise ValueError('Total weight must be a number.')
 
             if self.total_weight < 0:
                 raise ValueError(
-                    'Number of edges must be a positive number.')
+                    'Total weight must be a positive number.')
 
     def fit(self):
         """ Fit the parameter to the number of edges and total weight.
@@ -626,8 +628,11 @@ class RandomDiGraph(DiGraphEnsemble):
     def expected_num_edges(self, recompute=False):
         """ Compute the expected number of edges (per label) given p.
         """
-        self.exp_num_edges = self.param[0] * self.num_vertices * (
-            self.num_vertices - 1)
+        if self.selfloops:
+            self.exp_num_edges = self.param[0] * self.num_vertices**2 
+        else:
+            self.exp_num_edges = self.param[0] * self.num_vertices * (
+                self.num_vertices - 1)
         return self.exp_num_edges
 
     def expected_total_weight(self, recompute=False):

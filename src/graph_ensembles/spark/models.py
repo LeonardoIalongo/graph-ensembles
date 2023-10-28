@@ -192,7 +192,7 @@ class DiGraphEnsemble(GraphEnsemble):
         
         return self._exp_in_degree
 
-    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=None, 
                                 deg_recompute=False):
         """ Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -203,6 +203,9 @@ class DiGraphEnsemble(GraphEnsemble):
             msg = ('Property array must have first dimension size be equal to'
                    ' the number of vertices.')
             raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
 
         # Compute correct expected degree
         if ndir == 'out':
@@ -235,8 +238,8 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return av_nn
 
-    def expected_av_nn_degree(self, ddir='out', ndir='out', selfloops=False,
-                              deg_recompute=False, recompute=False):
+    def expected_av_nn_degree(self, ddir='out', ndir='out', selfloops=None,
+                              deg_recompute=False, recompute=None):
         """ Computes the expected value of the nearest neighbour average of
         the degree.
         """
@@ -244,7 +247,7 @@ class DiGraphEnsemble(GraphEnsemble):
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_d_' + ddir.replace('-', '_'))
 
-        if not hasattr(self, name) or recompute:
+        if not hasattr(self, name) or recompute or deg_recompute:
             # Compute correct expected degree
             if ddir == 'out':
                 deg = self.expected_out_degree(recompute=deg_recompute)
@@ -448,79 +451,47 @@ class DiGraphEnsemble(GraphEnsemble):
         """ Compute the expected average nearest neighbour property.
         """
         av_nn = np.zeros(prop.shape, dtype=np.float64)
-        if ind_out == ind_in:
-            for i in range(ind_out[1]-ind_out[0]):
-                ind_i = ind_out[0]+i
-                p_out_i = prop_out[0][i]
-                p_in_i = prop_in[1][i]
-                for j in range(i+1):
-                    ind_j = ind_in[0]+j
-                    p_out_j = prop_out[1][j]
-                    p_in_j = prop_in[0][j]
-                    if ind_i != ind_j:
-                        pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                        pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
-                        if ndir == 'out':
-                            av_nn[ind_i] += pij*prop[ind_j]
-                            av_nn[ind_j] += pji*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pji*prop[ind_j]
-                            av_nn[ind_j] += pij*prop[ind_i]
-                        elif ndir == 'out-in':
-                            p = pij + pji - pij*pji
-                            av_nn[ind_i] += p*prop[ind_j]
-                            av_nn[ind_j] += p*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
-                    elif selfloops:
-                        pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                        if ndir == 'out':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'out-in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
 
+        if ind_out == ind_in:
+            fold = True
         else:
-            for i in range(ind_out[1]-ind_out[0]):
-                ind_i = ind_out[0]+i
-                p_out_i = prop_out[0][i]
-                p_in_i = prop_in[1][i]
-                for j in range(ind_in[1]-ind_in[0]):
-                    ind_j = ind_in[0]+j
-                    p_out_j = prop_out[1][j]
-                    p_in_j = prop_in[0][j]
-                    if ind_i != ind_j:
-                        pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                        pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
-                        if ndir == 'out':
-                            av_nn[ind_i] += pij*prop[ind_j]
-                            av_nn[ind_j] += pji*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pji*prop[ind_j]
-                            av_nn[ind_j] += pij*prop[ind_i]
-                        elif ndir == 'out-in':
-                            p = pij + pji - pij*pji
-                            av_nn[ind_i] += p*prop[ind_j]
-                            av_nn[ind_j] += p*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
-                    elif selfloops:
-                        pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                        if ndir == 'out':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        elif ndir == 'out-in':
-                            av_nn[ind_i] += pii*prop[ind_i]
-                        else:
-                            raise ValueError(
-                                'Direction of neighbourhood not right.')
+            fold = False
+
+        for i in range(ind_out[1]-ind_out[0]):
+            ind_i = ind_out[0]+i
+            p_out_i = prop_out[0][i]
+            p_in_i = prop_in[1][i]
+            for j in in_range(i, ind_in, fold):
+                ind_j = ind_in[0]+j
+                p_out_j = prop_out[1][j]
+                p_in_j = prop_in[0][j]
+                if ind_i != ind_j:
+                    pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
+                    if ndir == 'out':
+                        av_nn[ind_i] += pij*prop[ind_j]
+                        av_nn[ind_j] += pji*prop[ind_i]
+                    elif ndir == 'in':
+                        av_nn[ind_i] += pji*prop[ind_j]
+                        av_nn[ind_j] += pij*prop[ind_i]
+                    elif ndir == 'out-in':
+                        p = pij + pji - pij*pji
+                        av_nn[ind_i] += p*prop[ind_j]
+                        av_nn[ind_j] += p*prop[ind_i]
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
+                elif selfloops:
+                    pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    if ndir == 'out':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    elif ndir == 'in':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    elif ndir == 'out-in':
+                        av_nn[ind_i] += pii*prop[ind_i]
+                    else:
+                        raise ValueError(
+                            'Direction of neighbourhood not right.')
 
         return av_nn
 

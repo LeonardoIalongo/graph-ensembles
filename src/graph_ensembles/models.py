@@ -135,7 +135,7 @@ class DiGraphEnsemble(GraphEnsemble):
         
         return self._exp_in_degree
 
-    def expected_av_nn_property(self, prop, ndir='out', selfloops=False, 
+    def expected_av_nn_property(self, prop, ndir='out', selfloops=None, 
                                 deg_recompute=False):
         """ Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -146,6 +146,9 @@ class DiGraphEnsemble(GraphEnsemble):
             msg = ('Property array must have first dimension size be equal to'
                    ' the number of vertices.')
             raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
 
         # Compute correct expected degree
         if ndir == 'out':
@@ -181,7 +184,7 @@ class DiGraphEnsemble(GraphEnsemble):
         name = ('exp_av_' + ndir.replace('-', '_') + 
                 '_nn_d_' + ddir.replace('-', '_'))
 
-        if not hasattr(self, name) or recompute:
+        if not hasattr(self, name) or recompute or deg_recompute:
             # Compute correct expected degree
             if ddir == 'out':
                 deg = self.expected_out_degree(recompute=deg_recompute)
@@ -194,8 +197,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
             # Compute property and set attribute
             res = self.expected_av_nn_property(
-                deg, ndir=ndir, selfloops=selfloops, 
-                deg_recompute=deg_recompute)
+                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False)
             setattr(self, name, res)
 
         return getattr(self, name)
