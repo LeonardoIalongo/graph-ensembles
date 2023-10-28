@@ -13,7 +13,7 @@ from math import expm1
 from math import log
 from math import log1p
 from math import isinf
-from numba import float64    # import the types
+from numba import float64
 from numba.experimental import jitclass
 
 
@@ -754,6 +754,9 @@ class RandomDiGraph(DiGraphEnsemble):
         else:
             like += (self.num_vertices*(self.num_vertices - 1) - adj.nnz
                      ) * log1p(-self.param[0])
+            # Ensure that the matrix has no elements on the diagonal
+            if adj.diagonal().sum() > 0:
+                return -np.infty
 
         return like
 
