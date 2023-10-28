@@ -25,7 +25,7 @@ spec = [('array', float64[:]), ]
 @jitclass(spec)
 class empty_index:
     def __init__(self):
-        self.array = np.array([], dtype=np.float64)
+        pass
 
     def __getitem__(self, index):
         return 1.0
@@ -65,10 +65,6 @@ class GraphEnsemble():
     the same).
 
     """
-    def __init__(self, *args, **kwargs):
-        self.prop_out = empty_index()
-        self.prop_in = empty_index()
-
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def prop_dyad(i, j):
@@ -108,7 +104,8 @@ class DiGraphEnsemble(GraphEnsemble):
 
     """
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        self.prop_out = empty_index()
+        self.prop_in = empty_index()
 
     def expected_num_edges(self, recompute=False):
         """ Compute the expected number of edges.
@@ -473,7 +470,7 @@ class DiGraphEnsemble(GraphEnsemble):
         return rows, cols, vals
 
 
-class RandomGraph(DiGraphEnsemble):
+class RandomDiGraph(DiGraphEnsemble):
     """ An Erdős–Rényi random graph ensemble.
 
     Attributes
@@ -511,7 +508,7 @@ class RandomGraph(DiGraphEnsemble):
                 if g.weighted:
                     self.total_weight = g.total_weight()
             else:
-                ValueError('First argument passed must be a Graph.')
+                raise ValueError('First argument passed must be a Graph.')
 
             if len(args) > 1:
                 msg = ('Unnamed arguments other than the Graph have been '
@@ -519,7 +516,7 @@ class RandomGraph(DiGraphEnsemble):
                 warnings.warn(msg, UserWarning)
 
         # Get options from keyword arguments
-        allowed_arguments = ['num_vertices', 'num_edges', 'param', 'selfloops'
+        allowed_arguments = ['num_vertices', 'num_edges', 'param', 'selfloops',
                              'total_weight', 'discrete_weights']
         for name in kwargs:
             if name not in allowed_arguments:
@@ -629,7 +626,8 @@ class RandomGraph(DiGraphEnsemble):
     def expected_num_edges(self, recompute=False):
         """ Compute the expected number of edges (per label) given p.
         """
-        self.exp_num_edges = self.p*self.num_vertices*(self.num_vertices - 1)
+        self.exp_num_edges = self.param[0] * self.num_vertices * (
+            self.num_vertices - 1)
         return self.exp_num_edges
 
     def expected_total_weight(self, recompute=False):
@@ -740,6 +738,11 @@ class RandomGraph(DiGraphEnsemble):
             raise ValueError(msg)
 
         # Compute log likelihood of graph
+        if (self.param[0] == 0) and (adj.nnz > 0):
+            return -np.infty
+        if (self.param[0] == 1) and (adj.nnz != 0):
+            return -np.infty
+
         like = adj.nnz * log(self.param[0])
         if selfloops:
             like += (self.num_vertices**2 - adj.nnz) * log1p(-self.param[0])
@@ -992,8 +995,12 @@ class FitnessModel(DiGraphEnsemble):
 
         if not hasattr(self, 'prop_out'):
             raise ValueError('prop_out not set.')
+        elif isinstance(self.prop_out, empty_index):
+            raise ValueError('prop_out not set.')
 
         if not hasattr(self, 'prop_in'):
+            raise ValueError('prop_in not set.')
+        elif isinstance(self.prop_in, empty_index):
             raise ValueError('prop_in not set.')
 
         if not hasattr(self, 'selfloops'):
