@@ -319,12 +319,6 @@ class DiGraphEnsemble(GraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def prop_dyad(i, j):
-        """ Define empy dyadic property as it is not always defined. """
-        return None
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
     def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops): 
         """ Compute the expected number of edges.
         """
@@ -1092,7 +1086,7 @@ class FitnessModel(DiGraphEnsemble):
         xtol : float
             Relative tolerance for the exit condition on consecutive x values.
         max_iter : int or float
-            Maximum number of iteration.
+            Maximum number of iterations.
         verbose: boolean
             If true print debug info while iterating.
         """

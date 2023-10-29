@@ -15,6 +15,7 @@ from math import log1p
 from math import isinf
 from numba import float64
 from numba.experimental import jitclass
+from numba.typed import List
 
 
 # Define a special empty iterator class. This is necessary if the model does 
@@ -1317,3 +1318,1287 @@ class ScaleInvariantModel(FitnessModel):
             return -np.infty
         else:
             return -tmp
+
+
+class MultiGraphEnsemble(GraphEnsemble):
+    """ General class for MultiGraph ensembles.
+    """
+    pass
+
+
+class MultiDiGraphEnsemble(DiGraphEnsemble):
+    """ General class for MultiDiGraph ensembles.
+
+    All ensembles are assumed to have independent edges whose probabilities 
+    depend only on a set of parameters (param), a set of node specific out and 
+    in properties (prop_out and prop_in), and a set of dyadic properties 
+    (prop_dyad). The ensemble is defined by the probability function 
+    pij(param, prop_out, prop_in, prop_dyad) and by the labelled edge 
+    probability pijk(param, prop_out, prop_in, prop_dyad). 
+
+    Methods
+    -------
+    expected_num_edges:
+        Compute the expected number of edges in the ensemble.
+    expected_num_edges_label:
+        Compute the expected number of edges in the ensemble.
+    expected_degree:
+        Compute the expected undirected degree of each node.
+    expected_out_degree:
+        Compute the expected out degree of each node.
+    expected_in_degree:
+        Compute the expected in degree of each node.
+    expected_degree_label:
+        Compute the expected undirected degree of each node.
+    expected_out_degree_label:
+        Compute the expected out degree of each node.
+    expected_in_degree_label:
+        Compute the expected in degree of each node.
+    expected_av_nn_property:
+        Compute the expected average of the given property of the nearest 
+        neighbours of each node.
+    expected_av_nn_degree:
+        Compute the expected average of the degree of the nearest 
+        neighbours of each node.
+    log_likelihood:
+        Compute the likelihood of the given graph.
+    sample:
+        Return a sample from the ensemble.
+
+    """
+    def expected_num_edges_label(self, recompute=False):
+        """ Compute the expected number of edges.
+        """
+        if not hasattr(self, 'param'):
+            raise Exception('Model must be fitted beforehand.')
+        
+        if not hasattr(self, '_exp_num_edges_label') or recompute:
+            # Transform properties to csc format to select labels quickly
+            prop_out = sp.csr_matrix(
+                self.tuple_list_to_csx(self.prop_out), 
+                shape=(self.num_vertices, self.num_labels)).tocsc()
+            prop_out = self.csx_to_tuple_list(
+                prop_out.indptr, prop_out.indices, prop_out.data)
+            prop_in = sp.csr_matrix(
+                self.tuple_list_to_csx(self.prop_in), 
+                shape=(self.num_vertices, self.num_labels)).tocsc()
+            prop_in = self.csx_to_tuple_list(
+                prop_in.indptr, prop_in.indices, prop_in.data)
+
+            # Compute measure
+            self._exp_num_edges_label = self.exp_edges_label(
+                self.p_ijk, self.exp_edges_layer, self.param, 
+                prop_out, prop_in, self.prop_dyad, self.selfloops)
+
+        return self._exp_num_edges_label
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_label(p_ijk, exp_edges_layer, param, prop_out, prop_in, 
+                        prop_dyad, selfloops):
+        """ Compute the expected number of edges with one parameter controlling
+        for the density for each label.
+        """
+        num_labels = len(prop_out)
+        exp_edges = np.zeros(num_labels, dtype=np.float64)
+
+        for i in range(num_labels):
+            exp_edges[i] = exp_edges_layer(
+                p_ijk, param[i], prop_out[i], prop_in[i], prop_dyad, selfloops)
+
+        return exp_edges
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_layer(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
+        """ Compute the expected number of edges with one parameter controlling
+        for the density for each label.
+        """
+        exp_e = 0.0
+        for i, p_out_i in zip(prop_out[0], prop_out[1]):
+            for j, p_in_j in zip(prop_in[0], prop_in[1]):
+                if (i != j) | selfloops:
+                    exp_e += p_ijk(param, p_out_i, p_in_j, prop_dyad(i, j))
+
+        return exp_e
+
+
+class MultiFitnessModel(MultiDiGraphEnsemble):
+    """ A generalized fitness model that allows for fitnesses by label.
+
+    This model allows to take into account labels of the edges and include
+    this information as part of the model. Two quantities can be preserved by
+    the ensemble: either the total number of edges, or the number of edges per
+    label.
+
+    Attributes
+    ----------
+    prop_out: list
+        The out fitness by label as a list of tuples containing for each node 
+        the values of the non-zero elements and the relative label indices.
+    prop_in: list
+        The in fitness by label as a list of tuples containing for each node 
+        the values of the non-zero elements and the relative label indices.
+    prop_dyad: function
+        A function that returns the dyadic properties of two nodes.
+    num_edges: int
+        The total number of edges.
+    num_edges_label: numpy.ndarray
+        The number of edges per label.
+    num_vertices: int
+        The total number of nodes.
+    num_labels: int
+        The total number of labels.
+    param: np.ndarray
+        The parameter vector.
+    per_label: bool
+        Selects if the model has a parameter for each layer or just one.
+    selfloops: bool
+        Selects if self loops (connections from i to i) are allowed.
+
+    Methods
+    -------
+    fit:
+        Fit the parameters of the model with the given method.
+    """
+    def __init__(self, *args, **kwargs):
+        """ Return a MultiFitnessModel for the given graph data.
+
+        The model accepts as arguments either: a MultiDiGraph, in which case 
+        the strengths per label are used as fitnesses, or directly the fitness 
+        sequences (in and out). The model accepts the fitness sequences as 
+        numpy arrays or scipy.sparse arrays (this is the recommended format).
+        """
+        super().__init__(*args, **kwargs)
+
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.MultiDiGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_labels = g.num_labels
+                self.num_edges = g.num_edges()
+                self.num_edges_label = g.num_edges_label()
+                self.prop_out = g.out_strength_by_label()
+                self.prop_in = g.in_strength_by_label()
+                self.per_label = True
+            else:
+                raise ValueError('First argument passed must be a '
+                                 'MultiDiGraph.')
+
+            if len(args) > 1:
+                msg = ('Unnamed arguments other than the Graph have been '
+                       'ignored.')
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = ['num_vertices', 'num_edges', 'num_edges_label',
+                             'num_labels', 'prop_out', 'prop_in', 'param', 
+                             'selfloops', 'per_label']   
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError('Illegal argument passed: ' + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, 'num_vertices'):
+            raise ValueError('Number of vertices not set.')
+        else:
+            try: 
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError('Number of vertices must be an integer.')
+
+            if self.num_vertices <= 0:
+                raise ValueError(
+                    'Number of vertices must be a positive number.')
+
+        if not hasattr(self, 'num_labels'):
+            raise ValueError('Number of labels not set.')
+        else:
+            try: 
+                assert self.num_labels / int(self.num_labels) == 1
+                self.num_labels = int(self.num_labels)
+            except Exception:
+                raise ValueError('Number of labels must be an integer.')
+
+            if self.num_labels <= 0:
+                raise ValueError(
+                    'Number of labels must be a positive number.')
+
+        if not hasattr(self, 'prop_out'):
+            raise ValueError('prop_out not set.')
+        elif isinstance(self.prop_out, empty_index):
+            raise ValueError('prop_out not set.')
+
+        if not hasattr(self, 'prop_in'):
+            raise ValueError('prop_in not set.')
+        elif isinstance(self.prop_in, empty_index):
+            raise ValueError('prop_in not set.')
+
+        if not hasattr(self, 'selfloops'):
+            self.selfloops = False
+
+        # Ensure that fitnesses passed adhere to format
+        msg = ('Node out properties must be a two dimensional array with '
+               'shape (num_vertices, num_labels).')
+        assert (isinstance(self.prop_out, np.ndarray) or 
+                isinstance(self.prop_out, sp.spmatrix)), msg
+        assert self.prop_out.shape == (self.num_vertices, self.num_labels), msg
+
+        msg = ('Node in properties must be a two dimensional array with '
+               'shape (num_vertices, num_labels).')
+        assert (isinstance(self.prop_in, np.ndarray) or 
+                isinstance(self.prop_in, sp.spmatrix)), msg
+        assert self.prop_in.shape == (self.num_vertices, self.num_labels), msg
+
+        # Convert to csr matrices
+        self.prop_out = sp.csr_matrix(self.prop_out)
+        self.prop_in = sp.csr_matrix(self.prop_in)
+
+        # Ensure that all fitness are positive
+        if np.any(self.prop_out.data < 0):
+            raise ValueError(
+                "Node out properties must contain positive values only.")
+
+        if np.any(self.prop_in.data < 0):
+            raise ValueError(
+                "Node in properties must contain positive values only.")
+
+        # Convert to list of tuples
+        self.prop_out = self.csx_to_tuple_list(
+            self.prop_out.indptr, self.prop_out.indices, self.prop_out.data)
+        self.prop_in = self.csx_to_tuple_list(
+            self.prop_in.indptr, self.prop_in.indices, self.prop_in.data)
+
+        # If num_edges is an array check if it has a single value or 
+        # one for each label. 
+        if hasattr(self, 'num_edges'):
+            if isinstance(self.num_edges, np.ndarray):
+                if len(self.num_edges) == self.num_labels:
+                    if not hasattr(self, 'num_edges_label'):
+                        self.num_edges_label = self.num_edges
+                    else:
+                        raise ValueError(
+                            'num_edges is an array of size num_labels'
+                            ' but num_edges_label is already set.')
+                elif len(self.num_edges) == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError(
+                        'num_edges must be an array of size one or '
+                        'num_labels, not {}.'.format(len(self.num_edges)))
+
+        # Ensure that number of constraint matches number of labels or is a 
+        # single number
+        if hasattr(self, 'num_edges_label'):
+            self.per_label = True
+            if not (len(self.num_edges_label) == self.num_labels):
+                raise ValueError(
+                    'The length of the num_edges_label array does not match '
+                    'the number of labels.')
+            
+            if not np.issubdtype(self.num_edges_label.dtype, np.number):
+                raise ValueError('Number of edges per label must be numeric.')
+
+            if np.any(self.num_edges_label < 0):
+                raise ValueError('Number of edges per label must be positive.')
+
+        elif hasattr(self, 'num_edges'):
+            self.per_label = False
+            try: 
+                tmp = len(self.num_edges)
+                if tmp == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError('Number of edges must be a number.')
+            except TypeError:
+                pass        
+                
+            try:
+                self.num_edges = self.num_edges * 1.0
+            except TypeError:
+                raise ValueError('Number of edges must be a number.')
+
+            if self.num_edges < 0:
+                raise ValueError(
+                    'Number of edges must be a positive number.')
+
+        # Ensure that number of parameter is a single positive number or it 
+        # matches the number of labels 
+        if hasattr(self, 'param'):
+            self.per_label = True
+            if not isinstance(self.param, np.ndarray):
+                try:
+                    self.param = np.array([p for p in self.param])
+                except Exception:
+                    self.param = np.array([self.param])
+            if len(self.param) == 1:
+                self.per_label = False
+                self.param = np.array([self.param[0]]*self.num_labels)
+
+            elif not (len(self.param) == self.num_labels):
+                raise ValueError(
+                    'The model requires one or num_labels parameter.')
+
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError('Parameters must be numeric.')
+
+            if np.any(self.param < 0):
+                raise ValueError('Parameters must be positive in value.')
+
+            # Ensure num edges is a float64
+            self.param = self.param.astype(np.float64)
+
+        if not (hasattr(self, 'num_edges') or hasattr(self, 'num_edges_label') 
+                or hasattr(self, 'param')):
+            raise ValueError('Either num_edges(_label) or param must be set.')
+
+        if 'per_label' in kwargs:
+            self.per_label = kwargs['per_label']
+
+    def fit(self, x0=None, method='density', atol=1e-9, xtol=1e-9, 
+            maxiter=100, verbose=False):
+        """ Fit the parameter either to match the given number of edges or
+            using maximum likelihood estimation.
+
+        Parameters
+        ----------
+        x0: float
+            Optional initial conditions for parameters.
+        method: 'density' or 'mle'
+            Selects whether to fit param using maximum likelihood estimation
+            or by ensuring that the expected density matches the given one.
+        atol : float
+            Absolute tolerance for the exit condition.
+        xtol : float
+            Relative tolerance for the exit condition on consecutive x values.
+        max_iter : int or float
+            Maximum number of iterations.
+        verbose: boolean
+            If true print debug info while iterating.
+        """
+        if x0 is None:
+            x0 = np.zeros(self.num_labels, dtype=np.float64)
+
+        if not isinstance(x0, np.ndarray):
+            try:
+                x0 = np.array([p for p in x0])
+            except Exception:
+                x0 = np.array([x0]*self.num_labels)
+
+        if not (len(x0) == self.num_labels):
+            raise ValueError(
+                'The model requires one or num_labels initial conditions.')
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError('x0 must be numeric.')
+
+        if np.any(x0 < 0):
+            raise ValueError('x0 must be positive.')
+
+        if method == 'density':
+            if self.per_label:
+                # Ensure that num_edges is set
+                if not hasattr(self, 'num_edges_label'):
+                    raise ValueError(
+                        'Number of edges per label must be set for density '
+                        'solver with per_label option.')
+
+                self.solver_output = [None]*self.num_labels
+                self.param = x0.copy()
+
+                # Transform properties to csc format to select labels quickly
+                prop_out = sp.csr_matrix(
+                    self.tuple_list_to_csx(self.prop_out), 
+                    shape=(self.num_vertices, self.num_labels)).tocsc()
+                prop_out = self.csx_to_tuple_list(
+                    prop_out.indptr, prop_out.indices, prop_out.data)
+                prop_in = sp.csr_matrix(
+                    self.tuple_list_to_csx(self.prop_in), 
+                    shape=(self.num_vertices, self.num_labels)).tocsc()
+                prop_in = self.csx_to_tuple_list(
+                    prop_in.indptr, prop_in.indices, prop_in.data)
+
+                for i in range(self.num_labels):
+                    p_out = prop_out[i]
+                    p_in = prop_in[i]
+                    num_e = self.num_edges_label[i]
+                    
+                    sol = monotonic_newton_solver(
+                        np.array([x0[i]]), 
+                        lambda x: self.density_fit_layer(
+                            x[0], p_out, p_in, num_e),
+                        atol=atol, xtol=xtol, x_l=0, x_u=np.infty, 
+                        max_iter=maxiter, full_return=True, verbose=verbose)
+
+                    # Update results and check convergence
+                    self.param[i] = sol.x
+                    self.solver_output[i] = sol
+
+                    if not sol.converged:
+                        msg = ('Fit of layer {} '.format(i) +
+                               'did not converge.')
+                        warnings.warn(msg, UserWarning)
+            else:
+                # Ensure that num_edges is set
+                if not hasattr(self, 'num_edges'):
+                    raise ValueError(
+                        'Number of edges must be set for density solver.')
+
+                sol = monotonic_newton_solver(
+                    x0[0:1], self.density_fit_fun, atol=atol, xtol=xtol, 
+                    x_l=0, x_u=np.infty, max_iter=maxiter, full_return=True, 
+                    verbose=verbose)
+
+                # Update results and check convergence
+                self.param = np.array([sol.x[0]]*self.num_labels)
+                self.solver_output = sol
+
+                if not self.solver_output.converged:
+                    warnings.warn('Fit did not converge', UserWarning)
+
+        elif method == 'mle':
+            raise ValueError("Method not implemented.")
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+    def density_fit_fun(self, delta):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta.
+        """
+        param = np.array([delta]*self.num_labels).ravel()
+        print('fit_fun:', param)
+        f, jac = self.exp_edges_f_jac(
+            self.p_jac_ij, param, self.prop_out, self.prop_in, self.selfloops)
+        f -= self.num_edges
+        return f, jac
+
+    def density_fit_layer(self, delta, prop_out, prop_in, num_e):
+        """ Return the objective function value and the Jacobian
+            for a given value of delta.
+        """
+        f, jac = self.exp_edges_f_jac_layer(
+            self.p_jac_ijk, delta, prop_out, prop_in, self.selfloops)
+        f -= num_e
+        return f, jac
+
+    @staticmethod              
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        jac = 0.0
+        for i, p_out_i in enumerate(prop_out):
+            for j, p_in_j in enumerate(prop_in):
+                if (i != j) | selfloops:
+                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
+
+    @staticmethod              
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_f_jac_layer(p_jac_ijk, param, prop_out, prop_in, selfloops):
+        """ Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        jac = 0.0
+        for i, p_out_i in zip(prop_out[0], prop_out[1]):
+            for j, p_in_j in zip(prop_in[0], prop_in[1]):
+                if (i != j) | selfloops:
+                    p_tmp, jac_tmp = p_jac_ijk(param, p_out_i, p_in_j)
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def p_jac_ij(d, prop_out, prop_in):
+        """ Compute the probability of connection between node i and j.
+
+        param is expected to be an array with num_labels elements. All 
+        properties must be a tuple (indices, values) from a sparse matrix.
+        """
+        # Initialize result
+        i = 0
+        j = 0
+        np = 1.0
+        jac = 0.0
+
+        # Loop over all possibilities
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (x_val[i] != 0) and (y_val[j] != 0):
+                    if (d[x_lbl[i]] == 0):
+                        # In this case pij is zero but jac is not
+                        jac += x_val[i] * y_val[j]
+                    else:
+                        # In this case the pij is not zero
+                        tmp = x_val[i] * y_val[j]
+                        tmp1 = d[x_lbl[i]]*tmp
+                        if isinf(tmp1):
+                            return 1.0, 0.0
+                        else:
+                            np /= 1 + tmp1
+                            jac += tmp / (1 + tmp1)
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - np, np*jac
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def p_jac_ijk(d, x_i, y_j):
+        """ Compute the probability of connection and the jacobian 
+            contribution of node i and j for layer k.
+        """
+        if ((x_i == 0) or (y_j == 0)):
+            return 0.0, 0.0
+
+        if d == 0:
+            return 0.0, x_i*y_j
+
+        tmp = x_i*y_j
+        tmp1 = d*tmp
+        if isinf(tmp1):
+            return 1.0, 0.0
+        else:
+            return tmp1 / (1 + tmp1), tmp / (1 + tmp1)**2
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def csx_to_tuple_list(indptr, indices, data):
+        N = len(indptr)-1
+        res = List()
+        for i in range(N):
+            m = indptr[i]
+            n = indptr[i+1]
+            res.append((indices[m:n], data[m:n]))
+        return res
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def tuple_list_to_csx(data):
+        # Get nnz elements
+        nnz = 0
+        for x, y in data:
+            nnz += len(x)
+
+        ind_type = data[0][0].dtype
+        val_type = data[0][1].dtype
+        indptr = np.zeros(len(data) + 1, dtype=ind_type)
+        indices = np.zeros(nnz, dtype=ind_type)
+        vals = np.zeros(nnz, dtype=val_type)
+        n = 0
+        for i, (x, y) in enumerate(data):
+            m = n
+            n += len(x)
+            indptr[i+1] = n
+            indices[m:n] = x
+            vals[m:n] = y
+
+        return vals, indices, indptr
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def p_ij(d, prop_out, prop_in, prop_dyad):
+        """ Compute the probability of connection between node i and j.
+
+        param is expected to be an array with num_labels elements. All 
+        properties must be a tuple (indices, values) from a sparse matrix.
+        """
+        # Initialize result
+        i = 0
+        j = 0
+        val = 1.0
+
+        # Loop over all possibilities
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]]*x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        return 1 - val
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def p_ijk(d, x_i, y_j, z_ij):
+        """ Compute the probability of connection between node i and j on 
+        layer k.
+        """
+        if (x_i == 0) or (y_j == 0) or (d == 0):
+            return 0.0
+
+        tmp = d*x_i*y_j
+        if isinf(tmp):
+            return 1.0
+        else:
+            return tmp / (1 + tmp)
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def logp(d, prop_out, prop_in, prop_dyad):
+        """ Compute the log probability of connection between node i and j.
+        """
+        # Initialize result
+        i = 0
+        j = 0
+        val = 1.0
+
+        # Loop over all possibilities
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]]*x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 0.0
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        if val == 1.0:
+            return -np.infty
+        else:
+            return log1p(-val)
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def log1mp(d, prop_out, prop_in, prop_dyad):
+        """ Compute the log of 1 minus the probability of connection between 
+        node i and j.
+        """
+        # Initialize result
+        i = 0
+        j = 0
+        val = 1.0
+
+        # Loop over all possibilities
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]]*x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return -np.infty
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
+
+        if val == 1.0:
+            return 0.0
+        else:
+            return log(val)
+
+
+
+
+#     @staticmethod              
+#     @jit(nopython=True)  # pragma: no cover
+#     def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+#         """ Compute the objective function of the density solver and its
+#         derivative.
+#         """
+#         f = 0.0
+#         jac = 0.0
+#         for i, p_out_i in enumerate(prop_out):
+#             for j, p_in_j in enumerate(prop_in):
+#                 if (i != j) | selfloops:
+#                     p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
+#                     f += p_tmp
+#                     jac += jac_tmp
+
+#         return f, jac
+
+#     @staticmethod
+#     @jit(nopython=True)  # pragma: no cover
+#     def p_jac_ij(d, x_i, y_j):
+#         """ Compute the probability of connection and the jacobian 
+#             contribution of node i and j.
+#         """
+#         if ((x_i == 0) or (y_j == 0)):
+#             return 0.0, 0.0
+
+#         if d[0] == 0:
+#             return 0.0, x_i*y_j
+
+#         tmp = x_i*y_j
+#         tmp1 = d[0]*tmp
+#         if isinf(tmp1):
+#             return 1.0, 0.0
+#         else:
+#             return tmp1 / (1 + tmp1), tmp / (1 + tmp1)**2
+
+
+
+
+
+
+
+#     def sample(self, ref_g=None, weights=None, out_strength=None, 
+#                in_strength=None, selfloops=None):
+#         """ Return a Graph sampled from the ensemble.
+
+#         If a reference graph is passed (ref_g) then the properties of the graph
+#         will be copied to the new samples.
+#         """
+#         if not hasattr(self, 'param'):
+#             raise Exception('Ensemble has to be fitted before sampling.')
+
+#         if selfloops is None:
+#             selfloops = self.selfloops
+
+#         # Generate uninitialised graph object
+#         g = graphs.DiGraph.__new__(graphs.DiGraph)
+
+#         # Initialise common object attributes
+#         g.num_vertices = self.num_vertices
+#         num_bytes = g.get_num_bytes(g.num_vertices)
+#         g.id_dtype = np.dtype('u' + str(num_bytes))
+
+#         # Check if reference graph is available
+#         if ref_g is not None:
+#             if hasattr(ref_g, 'num_groups'):
+#                 g.num_groups = ref_g.num_groups
+#                 g.group_dict = ref_g.group_dict
+#                 g.group_dtype = ref_g.group_dtype
+#                 g.groups = ref_g.groups
+
+#             g.id_dict = ref_g.id_dict
+#         else:
+#             g.id_dict = {}
+#             for i in range(g.num_vertices):
+#                 g.id_dict[i] = i
+
+#         # Sample edges
+#         if weights is None:
+#             rows, cols = self._binary_sample(
+#                 self.p_ij, self.param, self.prop_out, self.prop_in, 
+#                 self.prop_dyad, self.selfloops)
+#             vals = np.ones(len(rows), dtype=bool)
+#         elif weights == 'cremb':
+#             if out_strength is None:
+#                 s_out = self.prop_out
+#             if in_strength is None:
+#                 s_in = self.prop_in
+#             rows, cols, vals = self._cremb_sample(
+#                 self.p_ij, self.param, self.prop_out, self.prop_in, 
+#                 self.prop_dyad, s_out, s_in, self.selfloops)
+#         else:
+#             raise ValueError('Weights method not recognised or implemented.')
+
+#         # Convert to adjacency matrix
+#         g.adj = sp.csr_matrix((vals, (rows, cols)), 
+#                               shape=(g.num_vertices, g.num_vertices))
+
+#         return g
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# @jit(nopython=True)
+# def layer_exp_edges(p_f, param, fit_out, fit_in):
+#     """ Compute the expected number of edges.
+#     """
+#     exp_edges = 0
+#     for i in np.arange(len(fit_out)):
+#         ind_out = fit_out[i].id
+#         v_out = fit_out[i].value
+#         for j in np.arange(len(fit_in)):
+#             ind_in = fit_in[j].id
+#             v_in = fit_in[j].value
+#             if ind_out != ind_in:
+#                 exp_edges += p_f(param, v_out, v_in)
+
+#     return exp_edges
+
+
+#     @staticmethod
+#     @jit(nopython=True)  # pragma: no cover
+#     def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, num_v, 
+#                     selfloops):
+#         """ Compute the expected undirected, in and out degree sequences.
+#         """
+#         exp_d = np.zeros(num_v, dtype=np.float64)
+#         exp_d_out = np.zeros(num_v, dtype=np.float64)
+#         exp_d_in = np.zeros(num_v, dtype=np.float64)
+
+#         for i, p_out_i in enumerate(prop_out):
+#             p_in_i = prop_in[i]
+#             for j in range(i + 1):
+#                 p_out_j = prop_out[j]
+#                 p_in_j = prop_in[j]
+#                 if i != j:
+#                     pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+#                     pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
+#                     p = pij + pji - pij*pji
+#                     exp_d[i] += p
+#                     exp_d[j] += p
+#                     exp_d_out[i] += pij
+#                     exp_d_out[j] += pji
+#                     exp_d_in[j] += pij
+#                     exp_d_in[i] += pji
+#                 elif selfloops:
+#                     pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+#                     exp_d[i] += pii
+#                     exp_d_out[i] += pii
+#                     exp_d_in[j] += pii
+
+#         return exp_d, exp_d_out, exp_d_in
+
+#     @staticmethod
+#     @jit(nopython=True)  # pragma: no cover
+#     def exp_av_nn_prop(p_ij, param, prop_out, prop_in, prop_dyad, prop, ndir, 
+#                        selfloops):
+#         """ Compute the expected average nearest neighbour property.
+#         """
+#         av_nn = np.zeros(prop.shape, dtype=np.float64)
+#         for i, p_out_i in enumerate(prop_out):
+#             p_in_i = prop_in[i]
+#             for j in range(i):
+#                 p_out_j = prop_out[j]
+#                 p_in_j = prop_in[j]
+#                 pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+#                 pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
+#                 if ndir == 'out':
+#                     av_nn[i] += pij*prop[j]
+#                     av_nn[j] += pji*prop[i]
+#                 elif ndir == 'in':
+#                     av_nn[i] += pji*prop[j]
+#                     av_nn[j] += pij*prop[i]
+#                 elif ndir == 'out-in':
+#                     p = 1 - (1 - pij)*(1 - pji)
+#                     av_nn[i] += p*prop[j]
+#                     av_nn[j] += p*prop[i]
+#                 else:
+#                     raise ValueError('Direction of neighbourhood not right.')
+
+#         if selfloops:
+#             for i in range(len(prop_out)):
+#                 pii = p_ij(param, prop_out[i], prop_in[i], prop_dyad(i, j))
+#                 if ndir == 'out':
+#                     av_nn[i] += pii*prop[i]
+#                 elif ndir == 'in':
+#                     av_nn[i] += pii*prop[i]
+#                 elif ndir == 'out-in':
+#                     av_nn[i] += pii*prop[i]
+#                 else:
+#                     raise ValueError('Direction of neighbourhood not right.')
+
+#         return av_nn
+
+#     @staticmethod
+#     @jit(nopython=True)  # pragma: no cover
+#     def _likelihood(logp, log1mp, param, prop_out, prop_in, prop_dyad, 
+#                     adj_i, adj_j, selfloops):
+#         """ Compute the binary log likelihood of a graph given the fitted model.
+#         """
+#         like = 0
+#         for i, p_out_i in enumerate(prop_out):
+#             n = adj_i[i]
+#             m = adj_i[i+1]
+#             j_list = adj_j[n:m]
+#             for j, p_in_j in enumerate(prop_in):
+#                 if (i != j) | selfloops:
+#                     # Check if link exists
+#                     if j in j_list:
+#                         tmp = logp(param, p_out_i, p_in_j, prop_dyad(i, j))
+#                     else:
+#                         tmp = log1mp(param, p_out_i, p_in_j, prop_dyad(i, j))
+
+#                     if isinf(tmp):
+#                         return tmp
+#                     like += tmp
+        
+#         return like
+
+#     @staticmethod
+#     @jit(nopython=True)  # pragma: no cover
+#     def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+#         """ Sample from the ensemble.
+#         """
+#         rows = []
+#         cols = []
+#         for i, p_out_i in enumerate(prop_out):
+#             for j, p_in_j in enumerate(prop_in):
+#                 if (i != j) | selfloops:
+#                     p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+#                     if rng.random() < p:
+#                         rows.append(i)
+#                         cols.append(j)
+
+#         return rows, cols
+
+#     @staticmethod
+#     @jit(nopython=True)  # pragma: no cover
+#     def _cremb_sample(p_ij, param, prop_out, prop_in, prop_dyad,
+#                       s_out, s_in, selfloops):
+#         """ Sample from the ensemble with weights from the CremB model.
+#         """
+#         s_tot = np.sum(s_out)
+#         msg = 'Sum of in/out strengths not the same.'
+#         assert np.abs(1 - np.sum(s_in)/s_tot) < 1e-6, msg
+#         rows = []
+#         cols = []
+#         vals = []
+#         for i, p_out_i in enumerate(prop_out):
+#             for j, p_in_j in enumerate(prop_in):
+#                 if (i != j) | selfloops:
+#                     p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+#                     if rng.random() < p:
+#                         rows.append(i)
+#                         cols.append(j)
+#                         vals.append(rng.exponential(
+#                             s_out[i]*s_in[j]/(s_tot*p)))
+
+#         return rows, cols, vals
+
+
+
+
+
+
+#     def __init__(self, *args, per_label=True, **kwargs):
+#         """ Return a StripeFitnessModel for the given graph data.
+
+#         The model accepts as arguments either: a WeightedLabelGraph, the
+#         strength sequences (in and out) and the number of edges (per label),
+#         or the strength sequences and the z parameter (per label).
+
+#         The model accepts the strength sequences as numpy recarrays. The first
+#         column must contain the label index, the second column the node index
+#         to which the strength refers, and in the third column must have the
+#         value of the strength for the node label pair. All node label pairs
+#         not included are assumed zero.
+
+#         Note that the number of edges given implicitly determines if the
+#         quantity preserved is the total number of edges or the number of edges
+#         per label. Pass only one integer for the first and a numpy array for
+#         the second. Note that if an array is passed then the index must be the
+#         same as the one in the strength sequence.
+
+#         """
+
+#         # If an argument is passed then it must be a graph
+#         if len(args) > 0:
+#             if isinstance(args[0], graphs.WeightedLabelGraph):
+#                 g = args[0]
+#                 self.num_vertices = g.num_vertices
+#                 self.num_labels = g.num_labels
+#                 self.id_dtype = g.id_dtype
+#                 self.label_dtype = g.label_dtype
+#                 self.out_strength = g.out_strength_by_label(get=True)
+#                 self.in_strength = g.in_strength_by_label(get=True)
+#                 if per_label:
+#                     self.num_edges = g.num_edges_label
+#                 else:
+#                     self.num_edges = g.num_edges
+#             else:
+#                 raise ValueError('First argument passed must be a '
+#                                  'WeightedLabelGraph.')
+
+#             if len(args) > 1:
+#                 msg = ('Unnamed arguments other than the Graph have been '
+#                        'ignored.')
+#                 warnings.warn(msg, UserWarning)
+
+#         # Get options from keyword arguments
+#         allowed_arguments = ['num_vertices', 'num_edges', 'num_labels',
+#                              'out_strength', 'in_strength', 'param',
+#                              'discrete_weights']
+#         for name in kwargs:
+#             if name not in allowed_arguments:
+#                 raise ValueError('Illegal argument passed: ' + name)
+#             else:
+#                 setattr(self, name, kwargs[name])
+
+#         # Ensure that all necessary fields have been set
+#         if not hasattr(self, 'num_vertices'):
+#             raise ValueError('Number of vertices not set.')
+#         else:
+#             try: 
+#                 assert self.num_vertices / int(self.num_vertices) == 1
+#                 self.num_vertices = int(self.num_vertices)
+#             except Exception:
+#                 raise ValueError('Number of vertices must be an integer.')
+
+#             if self.num_vertices <= 0:
+#                 raise ValueError(
+#                     'Number of vertices must be a positive number.')
+
+#         if not hasattr(self, 'num_labels'):
+#             raise ValueError('Number of labels not set.')
+#         else:
+#             try: 
+#                 assert self.num_labels / int(self.num_labels) == 1
+#                 self.num_labels = int(self.num_labels)
+#             except Exception:
+#                 raise ValueError('Number of labels must be an integer.')
+
+#             if self.num_labels <= 0:
+#                 raise ValueError(
+#                     'Number of labels must be a positive number.')
+
+#         if not hasattr(self, 'out_strength'):
+#             raise ValueError('out_strength not set.')
+
+#         if not hasattr(self, 'in_strength'):
+#             raise ValueError('in_strength not set.')
+
+#         if not (hasattr(self, 'num_edges') or
+#                 hasattr(self, 'param')):
+#             raise ValueError('Either num_edges or param must be set.')
+
+#         if not hasattr(self, 'id_dtype'):
+#             num_bytes = mt.get_num_bytes(self.num_vertices)
+#             self.id_dtype = np.dtype('u' + str(num_bytes))
+
+#         if not hasattr(self, 'label_dtype'):
+#             num_bytes = mt.get_num_bytes(self.num_labels)
+#             self.label_dtype = np.dtype('u' + str(num_bytes))
+
+#         # Ensure that strengths passed adhere to format
+#         msg = ("Out strength must be a rec array with columns: "
+#                "('label', 'id', 'value')")
+#         assert isinstance(self.out_strength, np.recarray), msg
+#         for clm in self.out_strength.dtype.names:
+#             assert clm in ('label', 'id', 'value'), msg
+
+#         msg = ("In strength must be a rec array with columns: "
+#                "('label', 'id', 'value')")
+#         assert isinstance(self.in_strength, np.recarray), msg
+#         for clm in self.in_strength.dtype.names:
+#             assert clm in ('label', 'id', 'value'), msg
+
+#         # Ensure that num_vertices and num_labels are coherent with info
+#         # in strengths
+#         if self.num_vertices <= max(np.max(self.out_strength.id),
+#                                     np.max(self.in_strength.id)):
+#             raise ValueError(
+#                 'Number of vertices smaller than max id value in strengths.')
+
+#         if self.num_labels <= max(np.max(self.out_strength.label),
+#                                   np.max(self.in_strength.label)):
+#             raise ValueError(
+#                 'Number of labels smaller than max label value in strengths.')
+
+#         # Ensure that all labels, ids and values of the strength are positive
+#         if np.any(self.out_strength.label < 0):
+#             raise ValueError(
+#                 "Out strength labels must contain positive values only.")
+
+#         if np.any(self.in_strength.label < 0):
+#             raise ValueError(
+#                 "In strength labels must contain positive values only.")
+
+#         if np.any(self.out_strength.id < 0):
+#             raise ValueError(
+#                 "Out strength ids must contain positive values only.")
+
+#         if np.any(self.in_strength.id < 0):
+#             raise ValueError(
+#                 "In strength ids must contain positive values only.")
+
+#         if np.any(self.out_strength.value < 0):
+#             raise ValueError(
+#                 "Out strength values must contain positive values only.")
+
+#         if np.any(self.in_strength.value < 0):
+#             raise ValueError(
+#                 "In strength values must contain positive values only.")
+
+#         msg = "Storing zeros in the strengths leads to inefficient code."
+#         if np.any(self.out_strength.value == 0) or np.any(
+#                 self.in_strength.value == 0):
+#             msg = "Storing zeros in the strengths leads to inefficient code."
+#             warnings.warn(msg, UserWarning)
+
+#         # Ensure that strengths are sorted
+#         self.out_strength = self.out_strength[['label', 'id', 'value']]
+#         self.in_strength = self.in_strength[['label', 'id', 'value']]
+#         self.out_strength.sort()
+#         self.in_strength.sort()
+
+#         # Ensure that number of constraint matches number of labels
+#         if hasattr(self, 'num_edges'):
+#             if not isinstance(self.num_edges, np.ndarray):
+#                 self.num_edges = np.array([self.num_edges])
+
+#             msg = ('Number of edges must be a number or a numpy array of '
+#                    'length equal to the number of labels.')
+#             if len(self.num_edges) > 1:
+#                 self.per_label = True
+#                 assert len(self.num_edges) == self.num_labels, msg
+#             else:
+#                 self.per_label = False
+
+#             if not np.issubdtype(self.num_edges.dtype, np.number):
+#                 raise ValueError(msg)
+
+#             if np.any(self.num_edges < 0):
+#                 msg = 'Number of edges must contain only positive values.'
+#                 raise ValueError(msg)
+
+#             # Ensure num edges is a float64
+#             self.num_edges = self.num_edges.astype(np.float64)
+#         else:
+#             if not isinstance(self.param, np.ndarray):
+#                 try:
+#                     self.param = np.array([p for p in self.param])
+#                 except Exception:
+#                     self.param = np.array([self.param])
+
+#             # Ensure that param has two dimensions (row 1: z, row 2: alpha,
+#             # each column is a layer, if single z then single column)
+#             if self.param.ndim < 2:
+#                 self.param = np.array([self.param])
+#             elif self.param.ndim > 2:
+#                 raise ValueError('StripeFitnessModel parameters must have '
+#                                  'two dimensions max.')
+
+#             p_shape = self.param.shape
+        
+#             msg = ('StripeFitnessModel requires an array of parameters '
+#                    'with number of elements equal to the number of labels '
+#                    'or to one.')
+#             if p_shape[0] != 1:
+#                 raise ValueError(msg)
+#             elif p_shape[1] == self.num_labels:
+#                 self.per_label = True
+#             elif p_shape[1] == 1:
+#                 self.per_label = False
+#             else:
+#                 raise ValueError(msg)
+
+#             if not np.issubdtype(self.param.dtype, np.number):
+#                 raise ValueError('Parameters must be numeric.')
+
+#             if np.any(self.param < 0):
+#                 raise ValueError('Parameters must be positive.')
+
+#             # Ensure param is a float64
+#             self.param = self.param.astype(np.float64)
+
+#         # Check that sum of in and out strengths are equal per label
+#         tot_out = np.zeros((self.num_labels))
+#         for row in self.out_strength:
+#             tot_out[row.label] += row.value
+#         tot_in = np.zeros((self.num_labels))
+#         for row in self.in_strength:
+#             tot_in[row.label] += row.value
+
+#         msg = 'Sums of strengths per label do not match.'
+#         assert np.allclose(tot_out, tot_in, atol=1e-14, rtol=1e-9), msg
+
+#         # Get the correct probability functional
+#         self.prob_fun = mt.p_fitness
+#         self.jac_fun = mt.jac_fitness
+
+#         # If param are set computed expected number of edges per label
+#         if hasattr(self, 'param'):
+#             if self.per_label:
+#                 self.expected_num_edges_label()
+#                 self.num_edges = self.exp_num_edges_label
+#             else:
+#                 self.expected_num_edges()
+#                 self.num_edges = self.exp_num_edges
+
+
+
+# @jit(nopython=True)
+# def layer_f_jac(p_f, jac_f, param, fit_out, fit_in, n_edges):
+#     """ Compute the objective function of the newton solver and its
+#     derivative for a single label of the stripe model.
+#     """
+#     jac = 0
+#     f = 0
+#     for i in np.arange(len(fit_out)):
+#         ind_out = fit_out[i].id
+#         s_out = fit_out[i].value
+#         for j in np.arange(len(fit_in)):
+#             ind_in = fit_in[j].id
+#             s_in = fit_in[j].value
+#             if ind_out != ind_in:
+#                 f += p_f(param, s_out, s_in)
+#                 jac += jac_f(param, s_out, s_in)
+
+#     return f - n_edges, jac

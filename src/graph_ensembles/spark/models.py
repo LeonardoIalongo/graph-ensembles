@@ -432,12 +432,6 @@ class DiGraphEnsemble(GraphEnsemble):
         return ind, (x[il:iu], x[jl:ju]), (y[jl:ju], y[il:iu])
 
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def prop_dyad(i, j):
-        """ Define empy dyadic property as it is not always defined. """
-        return None
-
-    @staticmethod
     def tuple_of_lists_append(x, y):
         for i in range(len(x)):
             x[i].extend(y[i])
