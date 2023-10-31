@@ -612,6 +612,8 @@ class MultiGraph(Graph):
         Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
         Type of the id (e.g. np.uint16).
+    label_dict: dict
+        Dictionary to convert original identifiers to new position id.
     label_dtype: numpy.dtype
         The data type of the label internal id.
     num_groups: int  (or None)
@@ -870,6 +872,8 @@ class MultiDiGraph(MultiGraph, DiGraph):
         Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
         Type of the id (e.g. np.uint16).
+    label_dict: dict
+        Dictionary to convert original identifiers to new position id.
     label_dtype: numpy.dtype
         The data type of the label internal id.
     num_groups: int  (or None)
