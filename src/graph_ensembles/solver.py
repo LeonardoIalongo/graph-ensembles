@@ -6,15 +6,16 @@ class Solution():
 
     It allows to more easily determine why the solver has stopped.
     """
-    def __init__(self, x, n_iter, max_iter, method, **kwargs):
+    def __init__(self, x, target, n_iter, max_iter, method, **kwargs):
         self.x = x
         self.n_iter = n_iter
         self.max_iter = max_iter
+        self.target = target
         self.method = method
 
         # Extract keyword arguments
         allowed_arguments = ['f_seq', 'x_seq', 'norm_seq', 'x_seq',
-                             'diff_seq', 'atol', 'xtol']
+                             'diff_seq', 'atol', 'rtol']
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError('Illegal argument passed: ' + name)
@@ -28,36 +29,38 @@ class Solution():
             self.max_iter_reached = False
 
         if self.method == 'newton':
-            if hasattr(self, 'atol') and hasattr(self, 'norm_seq'):
-                if self.norm_seq[-1] <= self.atol:
+            if (hasattr(self, 'atol') and hasattr(self, 'rtol')
+                    and hasattr(self, 'norm_seq')):
+                if self.norm_seq[-1] <= self.atol + self.rtol*target:
                     self.converged = True
                 else:
                     self.converged = False
             else:
-                raise ValueError('atol or norm_seq not set.')
+                raise ValueError('atol, rtol, or norm_seq not set.')
 
-            if hasattr(self, 'xtol') and hasattr(self, 'diff_seq'):
-                if self.diff_seq[-1] <= self.xtol:
+            if hasattr(self, 'rtol') and hasattr(self, 'diff_seq'):
+                if self.diff_seq[-1] <= self.rtol:
                     self.no_change_stop = True
                 else:
                     self.no_change_stop = False
             else:
-                raise ValueError('xtol or diff_seq not set.')
+                raise ValueError('rtol or diff_seq not set.')
 
         elif self.method == 'fixed-point':
-            if hasattr(self, 'xtol') and hasattr(self, 'diff_seq'):
-                if self.diff_seq[-1] <= self.xtol:
+            if hasattr(self, 'rtol') and hasattr(self, 'diff_seq'):
+                if self.diff_seq[-1] <= self.rtol:
                     self.converged = True
                 else:
                     self.converged = False
             else:
-                raise ValueError('xtol or diff_seq not set.')
+                raise ValueError('rtol or diff_seq not set.')
 
 
-def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100, 
-                            x_l=-np.infty, x_u=np.infty, f_l=None, f_u=None, 
-                            full_return=False, verbose=False):
-    """Find roots of eq. f(x) = 0, using the newton method.
+def monotonic_newton_solver(x0, fun, target, atol=1e-24, rtol=1e-9, 
+                            max_iter=100, x_l=-np.infty, x_u=np.infty, 
+                            f_l=None, f_u=None, full_return=False, 
+                            verbose=False):
+    """Find roots of eq. f(x) - target = 0, using the newton method.
     This implementation assumes that the function is monotonic in x:
     it identifies a bracket within which the root must be and uses a 
     bisection method if the newton algorithm is trying results outside
@@ -72,15 +75,16 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
     fun_jac: function
         Jacobian of the function.
     atol: float
-        tolerance for the exit condition on the norm
-    xtol: float
-        tolerance for the exit condition on difference between two iterations
+        Absolute tolerance for the exit condition on the norm.
+    rtol: float
+        Relative tolerance for the exit condition on the norm and on the
+        difference between two iterations.
     max_iter: int or float
-        maximum number of iteration
+        Maximum number of iteration.
     full_return: boolean
-        if true return all info on convergence
+        If true return all info on convergence.
     verbose: boolean
-        if true print debug info while iterating
+        If true print debug info while iterating.
 
     Returns
     -------
@@ -90,12 +94,17 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
     n_iter = 0
     x = x0
     f, f_p = fun(x)
+    f += -target
     norm = np.abs(f)
     diff = np.array([1])
-
+    
     # Check that initial value given is in interval
     if (x > x_u) or (x < x_l):
         raise ValueError('Initial value for solver outside allowed bracket.')
+
+    # Set interval values to arrays
+    x_l = np.array([x_l], dtype=np.float64)
+    x_u = np.array([x_u], dtype=np.float64)
 
     if full_return:
         f_seq = [f]
@@ -106,13 +115,13 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
     # Initialize bounds on x
     if norm < atol:
         if full_return:
-            return Solution(x, n_iter, max_iter, 'newton',
+            return Solution(x, target, n_iter, max_iter, 'newton',
                             f_seq=np.array(f_seq),
                             x_seq=np.array(x_seq),
                             norm_seq=np.array(norm_seq),
                             diff_seq=np.array(diff_seq),
                             atol=atol,
-                            xtol=xtol)
+                            rtol=rtol)
         else:
             return x
 
@@ -138,15 +147,13 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
         print("x0 = {}".format(x))
         print("|f(x0)| = {}".format(norm))
 
-    while (norm > atol and n_iter < max_iter and diff > xtol):
+    while (norm > (atol + rtol*target) and n_iter < max_iter and diff > rtol):
         # Save previous iteration
         x_old = x
 
         # Compute update
-        if np.abs(f_p) > atol:
+        if f_p != 0:
             dx = - f/f_p
-        elif f_p != 0:
-            dx = - f/(np.sign(f_p)*atol) 
         else:
             dx = - f/atol 
 
@@ -154,15 +161,23 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
         # otherwise use secant method
         if (x + dx >= x_u) or (x + dx <= x_l):
             if f_u is None:
-                x = np.array([x_u])
+                x = x_u
             elif f_l is None:
-                x = np.array([x_l])
+                x = x_l
+            elif np.isinf(x_u):
+                if np.isinf(x_l):
+                    x = np.array([0.0])
+                else:
+                    x = x_l + 2*np.abs(x_l)
+            elif np.isinf(x_l):
+                x = x_u - 2*np.abs(x_u)
             else:
                 x = x_u - (f_u * (x_u - x_l))/(f_u - f_l)
         else:
             x = x + dx
     
         f, f_p = fun(x)
+        f = f - target
 
         if (f > 0) & (f_p > 0) & (x <= x_u):
             x_u = x
@@ -181,6 +196,8 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
                 f_u = f
             elif x == x_l:
                 f_l = f
+        elif f == 0:
+            pass
         else:
             msg = 'The function does not respect the expected monotonicity.'
             assert False, msg
@@ -214,18 +231,18 @@ def monotonic_newton_solver(x0, fun, atol=1e-6, xtol=1e-6, max_iter=100,
         print(' ')
 
     if verbose:
-        print('Converged: ', norm <= atol)
+        print('Converged: ', norm <= atol + rtol*target)
         print('Final distance from root: ', norm)
         print('Last relative change in x: ', diff)
         print('Iterations: ', n_iter)
 
     if full_return:
-        return Solution(x, n_iter, max_iter, 'newton',
+        return Solution(x, target, n_iter, max_iter, 'newton',
                         f_seq=np.array(f_seq),
                         x_seq=np.array(x_seq),
                         norm_seq=np.array(norm_seq),
                         diff_seq=np.array(diff_seq),
                         atol=atol,
-                        xtol=xtol)
+                        rtol=rtol)
     else:
         return x

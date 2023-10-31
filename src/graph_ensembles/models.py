@@ -1069,8 +1069,8 @@ class FitnessModel(DiGraphEnsemble):
         if not (hasattr(self, 'num_edges') or hasattr(self, 'param')):
             raise ValueError('Either num_edges or param must be set.')
 
-    def fit(self, x0=None, method='density', atol=1e-9, 
-            xtol=1e-9, maxiter=100, verbose=False):
+    def fit(self, x0=None, method='density', atol=1e-24, 
+            rtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
 
@@ -1083,8 +1083,8 @@ class FitnessModel(DiGraphEnsemble):
             or by ensuring that the expected density matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
-        xtol : float
-            Relative tolerance for the exit condition on consecutive x values.
+        rtol : float
+            Relative tolerance for the exit condition.
         max_iter : int or float
             Maximum number of iterations.
         verbose: boolean
@@ -1112,8 +1112,8 @@ class FitnessModel(DiGraphEnsemble):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
             sol = monotonic_newton_solver(
-                x0, self.density_fit_fun, atol=atol, xtol=xtol, x_l=0, 
-                x_u=np.infty, max_iter=maxiter, full_return=True, 
+                x0, self.density_fit_fun, self.num_edges, atol=atol, rtol=rtol,
+                x_l=0, x_u=np.infty, max_iter=maxiter, full_return=True, 
                 verbose=verbose)
 
         elif method == 'mle':
@@ -1135,7 +1135,7 @@ class FitnessModel(DiGraphEnsemble):
         """
         f, jac = self.exp_edges_f_jac(
             self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops)
-        f -= self.num_edges
+
         return f, jac
 
     @staticmethod              

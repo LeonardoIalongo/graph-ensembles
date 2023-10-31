@@ -1072,8 +1072,8 @@ class FitnessModel(DiGraphEnsemble):
         if not (hasattr(self, 'num_edges') or hasattr(self, 'param')):
             raise ValueError('Either num_edges or param must be set.')
 
-    def fit(self, x0=None, method='density', atol=1e-9, 
-            xtol=1e-9, maxiter=100, verbose=False):
+    def fit(self, x0=None, method='density', atol=1e-24, 
+            rtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
 
@@ -1086,8 +1086,8 @@ class FitnessModel(DiGraphEnsemble):
             or by ensuring that the expected density matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
-        xtol : float
-            Relative tolerance for the exit condition on consecutive x values.
+        rtol : float
+            Relative tolerance for the exit condition.
         max_iter : int or float
             Maximum number of iteration.
         verbose: boolean
@@ -1115,8 +1115,8 @@ class FitnessModel(DiGraphEnsemble):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
             sol = monotonic_newton_solver(
-                x0, self.density_fit_fun, atol=atol, xtol=xtol, x_l=0, 
-                x_u=np.infty, max_iter=maxiter, full_return=True, 
+                x0, self.density_fit_fun, self.num_edges, atol=atol, rtol=rtol,
+                x_l=0.0, x_u=np.infty, max_iter=maxiter, full_return=True, 
                 verbose=verbose)
 
         elif method == 'mle':
@@ -1138,7 +1138,7 @@ class FitnessModel(DiGraphEnsemble):
         """
         f, jac = self.exp_edges_f_jac(
             self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops)
-        f -= self.num_edges
+
         return f, jac
 
     @staticmethod              
@@ -2074,7 +2074,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         if 'per_label' in kwargs:
             self.per_label = kwargs['per_label']
 
-    def fit(self, x0=None, method='density', atol=1e-9, xtol=1e-9, 
+    def fit(self, x0=None, method='density', atol=1e-24, rtol=1e-9, 
             maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
@@ -2088,8 +2088,8 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
             or by ensuring that the expected density matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
-        xtol : float
-            Relative tolerance for the exit condition on consecutive x values.
+        rtol : float
+            Relative tolerance for the exit condition.
         max_iter : int or float
             Maximum number of iterations.
         verbose: boolean
@@ -2145,8 +2145,8 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                     sol = monotonic_newton_solver(
                         np.array([x0[i]]), 
                         lambda x: self.density_fit_layer(
-                            x[0], p_out, p_in, num_e),
-                        atol=atol, xtol=xtol, x_l=0, x_u=np.infty, 
+                            x[0], p_out, p_in), num_e,
+                        atol=atol, rtol=rtol, x_l=0.0, x_u=np.infty, 
                         max_iter=maxiter, full_return=True, verbose=verbose)
 
                     # Update results and check convergence
@@ -2164,9 +2164,9 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                         'Number of edges must be set for density solver.')
 
                 sol = monotonic_newton_solver(
-                    x0[0:1], self.density_fit_fun, atol=atol, xtol=xtol, 
-                    x_l=0, x_u=np.infty, max_iter=maxiter, full_return=True, 
-                    verbose=verbose)
+                    x0[0:1], self.density_fit_fun, self.num_edges,
+                    atol=atol, rtol=rtol, x_l=0.0, x_u=np.infty,
+                    max_iter=maxiter, full_return=True, verbose=verbose)
 
                 # Update results and check convergence
                 self.param = np.array([sol.x[0]]*self.num_labels)
@@ -2187,16 +2187,16 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         """
         f, jac = self.exp_edges_f_jac(
             self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops)
-        f -= self.num_edges
+
         return f, jac
 
-    def density_fit_layer(self, delta, prop_out, prop_in, num_e):
+    def density_fit_layer(self, delta, prop_out, prop_in):
         """ Return the objective function value and the Jacobian
             for a given value of delta.
         """
         f, jac = self.exp_edges_f_jac_layer(
             self.p_jac_ijk, delta, prop_out, prop_in, self.selfloops)
-        f -= num_e
+
         return f, jac
 
     @staticmethod              
@@ -2222,8 +2222,8 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         """ Compute the objective function of the density solver and its
         derivative.
         """
-        f = 0.0
-        jac = 0.0
+        f = np.float64(0.0)
+        jac = np.float64(0.0)
         for i, p_out_i in zip(prop_out[0], prop_out[1]):
             for j, p_in_j in zip(prop_in[0], prop_in[1]):
                 if (i != j) | selfloops:
@@ -2244,8 +2244,8 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         # Initialize result
         i = 0
         j = 0
-        np = 1.0
-        jac = 0.0
+        val = np.float64(1.0)
+        jac = np.float64(0.0)
 
         # Loop over all possibilities
         x_lbl = prop_out[0]
@@ -2265,7 +2265,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                         if isinf(tmp1):
                             return 1.0, 0.0
                         else:
-                            np /= 1 + tmp1
+                            val /= 1 + tmp1
                             jac += tmp / (1 + tmp1)
                 i += 1
                 j += 1
@@ -2274,7 +2274,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
             else:
                 j += 1
 
-        return 1 - np, np*jac
+        return 1 - val, val*jac
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -2543,7 +2543,7 @@ class MultiInvariantModel(MultiFitnessModel):
         y_val = prop_in[1]
         while i < len(x_lbl) and j < len(y_lbl):
             if x_lbl[i] == y_lbl[j]:
-                if (x_val[i] != 0) and (y_val[j] != 0) and (d[x_lbl[i]] != 0):
+                if (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = x_val[i] * y_val[j]
                     if isinf(tmp):
                         return 1.0, 0.0

@@ -1384,8 +1384,8 @@ class FitnessModel(DiGraphEnsemble):
         fmap = self.fit_map
         self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
 
-    def fit(self, x0=None, method='density', atol=1e-9, 
-            xtol=1e-9, maxiter=100, verbose=False):
+    def fit(self, x0=None, method='density', atol=1e-24, 
+            rtol=1e-9, maxiter=100, verbose=False):
         """ Fit the parameter either to match the given number of edges or
             using maximum likelihood estimation.
 
@@ -1398,8 +1398,8 @@ class FitnessModel(DiGraphEnsemble):
             or by ensuring that the expected density matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
-        xtol : float
-            Relative tolerance for the exit condition on consecutive x values.
+        rtol : float
+            Relative tolerance for the exit condition.
         max_iter : int or float
             Maximum number of iteration.
         verbose: boolean
@@ -1427,8 +1427,8 @@ class FitnessModel(DiGraphEnsemble):
                 raise ValueError(
                     'Number of edges must be set for density solver.')
             sol = monotonic_newton_solver(
-                x0, self.density_fit_fun, atol=atol, xtol=xtol, x_l=0, 
-                x_u=np.infty, max_iter=maxiter, full_return=True, 
+                x0, self.density_fit_fun, self.num_edges, atol=atol, rtol=rtol,
+                x_l=0, x_u=np.infty, max_iter=maxiter, full_return=True, 
                 verbose=verbose)
 
         elif method == 'mle':
@@ -1455,7 +1455,7 @@ class FitnessModel(DiGraphEnsemble):
             lambda x: f_jac(
                 p_jac_ij, delta, x[0][0], x[0][1], x[1], x[2], slflp))
         f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
-        f -= self.num_edges
+
         return f, jac
 
     @staticmethod              
