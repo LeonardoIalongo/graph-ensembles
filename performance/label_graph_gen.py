@@ -9,7 +9,7 @@ import pickle as pk
 
 @jit(nopython=True)
 def p_fit(d, x_i, x_j):
-    tmp = d*x_i*x_j
+    tmp = d * x_i * x_j
     if isinf(tmp):
         return 1
     else:
@@ -28,8 +28,7 @@ def power_law(n, gamma, min_val=1):
 
 @jit(nopython=True)
 def fit_exp_edges(z, fit_out, fit_in):
-    """ Compute the expected number of edges.
-    """
+    """Compute the expected number of edges."""
     exp_edges = 0
     for i in np.arange(len(fit_out)):
         ind_out = fit_out[i].id
@@ -56,7 +55,7 @@ def sample_edges(z, out_strength, in_strength, label):
             if ind_out != ind_in:
                 p = p_fit(z, s_out, s_in)
                 if rng.random() < p:
-                    w = np.float64(rng.exponential(s_out*s_in/(s_tot*p)))
+                    w = np.float64(rng.exponential(s_out * s_in / (s_tot * p)))
                     sample.append((label, ind_out, ind_in, w))
 
     return sample
@@ -69,9 +68,10 @@ def sample(z, out_strength, in_strength, num_vertices, num_labels):
 
     # Initialise common object attributes
     g.num_vertices = num_vertices
-    g.id_dtype = 'u' + str(mt.get_num_bytes(num_vertices))
+    g.id_dtype = "u" + str(mt.get_num_bytes(num_vertices))
     g.v = np.arange(g.num_vertices, dtype=g.id_dtype).view(
-        type=np.recarray, dtype=[('id', g.id_dtype)])
+        type=np.recarray, dtype=[("id", g.id_dtype)]
+    )
     g.id_dict = {}
     for x in g.v.id:
         g.id_dict[x] = x
@@ -79,45 +79,49 @@ def sample(z, out_strength, in_strength, num_vertices, num_labels):
     # Sample edges and extract properties
     e = []
     for label in range(num_labels):
-        e.extend(sample_edges(z[label],
-                              out_strength[out_strength.label == label],
-                              in_strength[in_strength.label == label],
-                              label))
+        e.extend(
+            sample_edges(
+                z[label],
+                out_strength[out_strength.label == label],
+                in_strength[in_strength.label == label],
+                label,
+            )
+        )
 
     e = np.array(e)
-    e = e.view(type=np.recarray,
-               dtype=[('label', 'f8'),
-                      ('src', 'f8'),
-                      ('dst', 'f8'),
-                      ('weight', 'f8')]).reshape((e.shape[0],))
+    e = e.view(
+        type=np.recarray,
+        dtype=[("label", "f8"), ("src", "f8"), ("dst", "f8"), ("weight", "f8")],
+    ).reshape((e.shape[0],))
     g.num_labels = num_labels
-    g.label_dtype = 'u' + str(mt.get_num_bytes(num_labels))
-    e = e.astype([('label', g.label_dtype),
-                  ('src', g.id_dtype),
-                  ('dst', g.id_dtype),
-                  ('weight', 'f8')])
+    g.label_dtype = "u" + str(mt.get_num_bytes(num_labels))
+    e = e.astype(
+        [
+            ("label", g.label_dtype),
+            ("src", g.id_dtype),
+            ("dst", g.id_dtype),
+            ("weight", "f8"),
+        ]
+    )
     g.sort_ind = np.argsort(e)
     g.e = e[g.sort_ind]
     g.num_edges = mt.compute_num_edges(g.e)
     ne_label = mt.compute_num_edges_by_label(g.e, g.num_labels)
-    dtype = 'u' + str(mt.get_num_bytes(np.max(ne_label)))
+    dtype = "u" + str(mt.get_num_bytes(np.max(ne_label)))
     g.num_edges_label = ne_label.astype(dtype)
     g.total_weight = np.sum(e.weight)
-    g.total_weight_label = mt.compute_tot_weight_by_label(
-            g.e, g.num_labels)
+    g.total_weight_label = mt.compute_tot_weight_by_label(g.e, g.num_labels)
 
     return g
 
 
 def strengths(k, n, n_l):
-    s_out = np.recarray(k, dtype=[('label', np.uint8),
-                                  ('id', np.uint32),
-                                  ('value', np.float64)
-                                  ])
-    s_in = np.recarray(k, dtype=[('label', np.uint8),
-                                 ('id', np.uint32),
-                                 ('value', np.float64)
-                                 ])
+    s_out = np.recarray(
+        k, dtype=[("label", np.uint8), ("id", np.uint32), ("value", np.float64)]
+    )
+    s_in = np.recarray(
+        k, dtype=[("label", np.uint8), ("id", np.uint32), ("value", np.float64)]
+    )
 
     s_out.label = rng.randint(0, n_l, k)
     s_in.label = s_out.label.copy()
@@ -140,11 +144,11 @@ z_list = [2e-4, 1e-3, 5e-6]
 for n_vertices, z, n in zip(n_vertices_list, z_list, range(3)):
     # Sample node fitness
     if n == 0:
-        s_out, s_in = strengths(n_vertices*5, n_vertices, n_labels)
+        s_out, s_in = strengths(n_vertices * 5, n_vertices, n_labels)
     if n == 1:
-        s_out, s_in = strengths(n_vertices*20, n_vertices, n_labels)
+        s_out, s_in = strengths(n_vertices * 20, n_vertices, n_labels)
     else:
-        s_out, s_in = strengths(n_vertices*10, n_vertices, n_labels)
+        s_out, s_in = strengths(n_vertices * 10, n_vertices, n_labels)
 
     # # Visual inspection
     # import matplotlib.pyplot as plt
@@ -157,25 +161,28 @@ for n_vertices, z, n in zip(n_vertices_list, z_list, range(3)):
     # plt.show()
 
     # Add noise to z
-    z = z*(2*rng.random(n_labels))**2
+    z = z * (2 * rng.random(n_labels)) ** 2
 
     # Compute expected edges
     exp_n = []
     for i in range(n_labels):
-        exp_n.append(fit_exp_edges(z[i],
-                                   s_out[s_out.label == i],
-                                   s_in[s_in.label == i]))
-    print('Expected number of edges: ',
-          np.mean(exp_n), np.min(exp_n), np.max(exp_n))
+        exp_n.append(
+            fit_exp_edges(z[i], s_out[s_out.label == i], s_in[s_in.label == i])
+        )
+    print("Expected number of edges: ", np.mean(exp_n), np.min(exp_n), np.max(exp_n))
 
     # Sample graph
     g = sample(z, s_out, s_in, n_vertices, n_labels)
 
-    print('Number of edges in sample: ', g.num_edges)
+    print("Number of edges in sample: ", g.num_edges)
 
     # Save sample
-    file_path = 'data/g_v{0:.1e}_e{1:.1e}_l{2:.1e}.pk'.format(
-        n_vertices, np.mean(exp_n), n_labels).replace(
-        '+0', '').replace('-0', '')
-    with open(file_path, 'wb') as f:
+    file_path = (
+        "data/g_v{0:.1e}_e{1:.1e}_l{2:.1e}.pk".format(
+            n_vertices, np.mean(exp_n), n_labels
+        )
+        .replace("+0", "")
+        .replace("-0", "")
+    )
+    with open(file_path, "wb") as f:
         pk.dump(g, f)

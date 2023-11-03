@@ -48,14 +48,14 @@ For more see the example notebooks in the examples folder.
                               'debtor', 'd_country',
                               'value', 'type', 'EUR'])
 
-    g = ge.Graph(v, e, v_id=['name', 'country'],
+    g = ge.MultiDiGraph(v, e, v_id=['name', 'country'],
                  src=['creditor', 'c_country'],
                  dst=['debtor', 'd_country'],
                  edge_label=['type', 'EUR'],
                  weight='value')
 
     # Initialize model
-    model = ge.StripeFitnessModel(g)
+    model = ge.MultiFitnessModel(g)
 
     # Fit model parameters
     model.fit()
@@ -78,7 +78,8 @@ To build a development environment run:
 
     python3 -m venv env 
     source env/bin/activate 
-    pip install -e '.[dev]'
+    pip install -e .
+    pip install -r requirements.txt
 
 For testing:
 

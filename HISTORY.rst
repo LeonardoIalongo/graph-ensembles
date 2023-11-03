@@ -2,6 +2,26 @@
 History
 =======
 
+0.3.0 (2023-11-03)
+------------------
+* Major update of graph classes into four new categories (Graph, DiGraph, MultiGraph, MultiDiGraph) in line with Networkx. 
+* Cleaned up models and organized in three modules (dense, sparse, spark) based on how the computations are performed and results are stored. 
+* Introduced better inheritance through Ensemble classes based on the newly defined graph classes. 
+* Added testing in spark and updated testing of MultiDiGraph Ensemble classes.  
+
+0.2.3 (2023-07-03)
+------------------
+* Improved and corrected spark submodule.
+
+0.2.2 (2023-05-11)
+------------------
+* Created submodule spark for allowing some models to be parallelize computations using spark
+
+0.2.1 (2021-08-03)
+------------------
+* Added option for faster computation of average nearest neighbour properties by allowing for multiple links between the same nodes.
+* Added compression option in to_networkx function.
+
 0.2.0 (2021-07-12)
 ------------------
 * Added likelihood and nearest neighbour properties.

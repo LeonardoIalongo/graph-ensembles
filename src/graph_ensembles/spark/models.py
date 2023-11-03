@@ -1,18 +1,20 @@
 """ This module defines the classes that allow for the construction of
 network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
-from . import graphs
-from .solver import monotonic_newton_solver
+from ..sparse import graphs
+from ..solver import monotonic_newton_solver
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
 import warnings
 from numba import jit
+from math import floor
 from math import exp
 from math import expm1
 from math import log
 from math import log1p
 from math import isinf
+from pyspark import SparkContext
 from numba import float64
 from numba.experimental import jitclass
 from numba.typed import List
@@ -32,6 +34,15 @@ class empty_index:
 
     def __getitem__(self, index):
         return 1.0
+
+
+# Global function definitions
+@jit(nopython=True)  # pragma: no cover
+def in_range(i, ind, fold):
+    if fold:
+        return range(i + 1)
+    else:
+        return range(ind[1] - ind[0])
 
 
 class GraphEnsemble:
@@ -118,28 +129,40 @@ class DiGraphEnsemble(GraphEnsemble):
             raise Exception("Model must be fitted beforehand.")
 
         if not hasattr(self, "_exp_num_edges") or recompute:
-            self._exp_num_edges = self.exp_edges(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.selfloops,
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_edges
+            p_ij = self.p_ij
+            delta = self.param
+            pdyad = self.prop_dyad
+            slflp = self.selfloops
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, slflp)
             )
+            self._exp_num_edges = tmp.fold(0, lambda x, y: x + y)
 
         return self._exp_num_edges
 
     def expected_degree(self, recompute=False):
         """Compute the expected undirected degree."""
         if not hasattr(self, "_exp_degree") or recompute:
-            res = self.exp_degrees(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.num_vertices,
-                self.selfloops,
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_degrees
+            p_ij = self.p_ij
+            delta = self.param
+            pdyad = self.prop_dyad
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, num_v, slflp
+                )
+            )
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold(
+                (exp_d, exp_d_out, exp_d_in),
+                lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]),
             )
             self._exp_degree = res[0]
             self._exp_out_degree = res[1]
@@ -150,14 +173,24 @@ class DiGraphEnsemble(GraphEnsemble):
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
         if not hasattr(self, "_exp_out_degree") or recompute:
-            res = self.exp_degrees(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.num_vertices,
-                self.selfloops,
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_degrees
+            p_ij = self.p_ij
+            delta = self.param
+            pdyad = self.prop_dyad
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, num_v, slflp
+                )
+            )
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold(
+                (exp_d, exp_d_out, exp_d_in),
+                lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]),
             )
             self._exp_degree = res[0]
             self._exp_out_degree = res[1]
@@ -168,14 +201,24 @@ class DiGraphEnsemble(GraphEnsemble):
     def expected_in_degree(self, recompute=False):
         """Compute the expected in degree."""
         if not hasattr(self, "_exp_in_degree") or recompute:
-            res = self.exp_degrees(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.num_vertices,
-                self.selfloops,
+            # It is necessary to select the elements or pickling will fail
+            e_fun = self.exp_degrees
+            p_ij = self.p_ij
+            delta = self.param
+            pdyad = self.prop_dyad
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, num_v, slflp
+                )
+            )
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold(
+                (exp_d, exp_d_out, exp_d_in),
+                lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]),
             )
             self._exp_degree = res[0]
             self._exp_out_degree = res[1]
@@ -212,16 +255,16 @@ class DiGraphEnsemble(GraphEnsemble):
             raise ValueError("Neighbourhood direction not recognised.")
 
         # It is necessary to select the elements or pickling will fail
-        av_nn = self.exp_av_nn_prop(
-            self.p_ij,
-            self.param,
-            self.prop_out,
-            self.prop_in,
-            self.prop_dyad,
-            prop,
-            ndir,
-            self.selfloops,
+        e_fun = self.exp_av_nn_prop
+        p_ij = self.p_ij
+        delta = self.param
+        pdyad = self.prop_dyad
+        tmp = self.p_sym_rdd.map(
+            lambda x: e_fun(
+                p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, prop, ndir, selfloops
+            )
         )
+        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), lambda x, y: x + y)
 
         # Test that mask is the same
         ind = deg != 0
@@ -237,9 +280,9 @@ class DiGraphEnsemble(GraphEnsemble):
         self,
         ddir="out",
         ndir="out",
-        selfloops=False,
+        selfloops=None,
         deg_recompute=False,
-        recompute=False,
+        recompute=None,
     ):
         """Computes the expected value of the nearest neighbour average of
         the degree.
@@ -280,9 +323,9 @@ class DiGraphEnsemble(GraphEnsemble):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
         elif sp.issparse(g):
-            adj = g.todense() != 0
+            adj = g.asformat("csr")
         elif isinstance(g, np.ndarray):
-            adj = g != 0
+            adj = sp.csr_matrix(g)
         else:
             raise ValueError("g input not a graph or adjacency matrix.")
 
@@ -297,16 +340,27 @@ class DiGraphEnsemble(GraphEnsemble):
             raise ValueError(msg)
 
         # Compute log likelihood of graph
-        like = self._likelihood(
-            self.logp,
-            self.log1mp,
-            self.param,
-            self.prop_out,
-            self.prop_in,
-            self.prop_dyad,
-            adj,
-            self.selfloops,
+        e_fun = self._likelihood
+        logp = self.logp
+        log1mp = self.log1mp
+        delta = self.param
+        pdyad = self.prop_dyad
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                logp,
+                log1mp,
+                delta,
+                x[0][0],
+                x[0][1],
+                x[1],
+                x[2],
+                pdyad,
+                adj.indptr,
+                adj.indices,
+                selfloops,
+            )
         )
+        like = tmp.fold(0, lambda x, y: x + y)
 
         return like
 
@@ -352,133 +406,234 @@ class DiGraphEnsemble(GraphEnsemble):
                 g.id_dict[i] = i
 
         # Sample edges
+        p_ij = self.p_ij
+        delta = self.param
+        pdyad = self.prop_dyad
+        app_fun = self.tuple_of_lists_append
         if weights is None:
-            rows, cols = self._binary_sample(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.selfloops,
+            e_fun = self._binary_sample
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(
+                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, selfloops
+                )
             )
-            g.adj = np.zeros((g.num_vertices, g.num_vertices), dtype=bool)
-            g.adj[rows, cols] = True
+            rows, cols = tmp.fold(([], []), lambda x, y: app_fun(x, y))
+            vals = np.ones(len(rows), dtype=bool)
+
         elif weights == "cremb":
             if out_strength is None:
                 s_out = self.prop_out
             if in_strength is None:
                 s_in = self.prop_in
-            rows, cols, vals = self._cremb_sample(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                s_out,
-                s_in,
-                self.selfloops,
+            e_fun = self._cremb_sample
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(
+                    p_ij,
+                    delta,
+                    x[0][0],
+                    x[0][1],
+                    x[1],
+                    x[2],
+                    pdyad,
+                    s_out,
+                    s_in,
+                    selfloops,
+                )
             )
-            g.adj = np.zeros((g.num_vertices, g.num_vertices))
-            g.adj[rows, cols] = vals
+            rows, cols, vals = tmp.fold(([], [], []), lambda x, y: app_fun(x, y))
+
         else:
             raise ValueError("Weights method not recognised or implemented.")
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_matrix(
+            (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+        )
 
         return g
 
     @staticmethod
+    def fit_map(ind, x, y):
+        """Assigns to each partition the correct values of strengths to allow
+        computations in parallel over the pij matrix.
+
+        Note that this is done to ensure that each partition can compute
+        pij and pji in the same loop to be able to compute undirected
+        properties of the ensemble.
+
+        Parameters
+        ----------
+        ind: tuple
+            a tuple containing the slices of the index of prop_out (ind[0])
+            and of prop_in (ind[1]) to iterate over
+        x: numpy.ndarray
+            the out fitness
+        y: numpy.ndarray
+            the in fitness
+
+        Output
+        ------
+        ind: tuple
+            as input
+        x: tuple
+            the relevant slices of x for the iteration over ind
+        y: tuple
+            the relevant slices of y for the iteration over ind
+        """
+        il, iu = ind[0]
+        jl, ju = ind[1]
+        return ind, (x[il:iu], x[jl:ju]), (y[jl:ju], y[il:iu])
+
+    @staticmethod
+    def tuple_of_lists_append(x, y):
+        for i in range(len(x)):
+            x[i].extend(y[i])
+        return x
+
+    @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+    def exp_edges(
+        p_ij, param, ind_out, ind_in, prop_out, prop_in, prop_dyad, selfloops
+    ):
         """Compute the expected number of edges."""
         exp_e = 0.0
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+        for i in range(ind_out[1] - ind_out[0]):
+            p_out_i = prop_out[i]
+            for j in range(ind_in[1] - ind_in[0]):
+                p_in_j = prop_in[j]
+                if (ind_out[0] + i != ind_in[0] + j) | selfloops:
                     exp_e += p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
 
         return exp_e
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, num_v, selfloops):
+    def exp_degrees(
+        p_ij, param, ind_out, ind_in, prop_out, prop_in, prop_dyad, num_v, selfloops
+    ):
         """Compute the expected undirected, in and out degree sequences."""
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
         exp_d_in = np.zeros(num_v, dtype=np.float64)
 
-        for i, p_out_i in enumerate(prop_out):
-            p_in_i = prop_in[i]
-            for j in range(i + 1):
-                p_out_j = prop_out[j]
-                p_in_j = prop_in[j]
-                if i != j:
+        if ind_out == ind_in:
+            fold = True
+        else:
+            fold = False
+
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            p_out_i = prop_out[0][i]
+            p_in_i = prop_in[1][i]
+            for j in in_range(i, ind_in, fold):
+                ind_j = ind_in[0] + j
+                p_out_j = prop_out[1][j]
+                p_in_j = prop_in[0][j]
+                if ind_i != ind_j:
                     pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
                     pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
                     p = pij + pji - pij * pji
-                    exp_d[i] += p
-                    exp_d[j] += p
-                    exp_d_out[i] += pij
-                    exp_d_out[j] += pji
-                    exp_d_in[j] += pij
-                    exp_d_in[i] += pji
+                    exp_d[ind_i] += p
+                    exp_d[ind_j] += p
+                    exp_d_out[ind_i] += pij
+                    exp_d_out[ind_j] += pji
+                    exp_d_in[ind_j] += pij
+                    exp_d_in[ind_i] += pji
                 elif selfloops:
                     pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                    exp_d[i] += pii
-                    exp_d_out[i] += pii
-                    exp_d_in[j] += pii
+                    exp_d[ind_i] += pii
+                    exp_d_out[ind_i] += pii
+                    exp_d_in[ind_j] += pii
 
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def exp_av_nn_prop(
-        p_ij, param, prop_out, prop_in, prop_dyad, prop, ndir, selfloops
+        p_ij,
+        param,
+        ind_out,
+        ind_in,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        prop,
+        ndir,
+        selfloops,
     ):
         """Compute the expected average nearest neighbour property."""
         av_nn = np.zeros(prop.shape, dtype=np.float64)
-        for i, p_out_i in enumerate(prop_out):
-            p_in_i = prop_in[i]
-            for j in range(i):
-                p_out_j = prop_out[j]
-                p_in_j = prop_in[j]
-                pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
-                if ndir == "out":
-                    av_nn[i] += pij * prop[j]
-                    av_nn[j] += pji * prop[i]
-                elif ndir == "in":
-                    av_nn[i] += pji * prop[j]
-                    av_nn[j] += pij * prop[i]
-                elif ndir == "out-in":
-                    p = 1 - (1 - pij) * (1 - pji)
-                    av_nn[i] += p * prop[j]
-                    av_nn[j] += p * prop[i]
-                else:
-                    raise ValueError("Direction of neighbourhood not right.")
 
-        if selfloops:
-            for i in range(len(prop_out)):
-                pii = p_ij(param, prop_out[i], prop_in[i], prop_dyad(i, j))
-                if ndir == "out":
-                    av_nn[i] += pii * prop[i]
-                elif ndir == "in":
-                    av_nn[i] += pii * prop[i]
-                elif ndir == "out-in":
-                    av_nn[i] += pii * prop[i]
-                else:
-                    raise ValueError("Direction of neighbourhood not right.")
+        if ind_out == ind_in:
+            fold = True
+        else:
+            fold = False
+
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            p_out_i = prop_out[0][i]
+            p_in_i = prop_in[1][i]
+            for j in in_range(i, ind_in, fold):
+                ind_j = ind_in[0] + j
+                p_out_j = prop_out[1][j]
+                p_in_j = prop_in[0][j]
+                if ind_i != ind_j:
+                    pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
+                    if ndir == "out":
+                        av_nn[ind_i] += pij * prop[ind_j]
+                        av_nn[ind_j] += pji * prop[ind_i]
+                    elif ndir == "in":
+                        av_nn[ind_i] += pji * prop[ind_j]
+                        av_nn[ind_j] += pij * prop[ind_i]
+                    elif ndir == "out-in":
+                        p = pij + pji - pij * pji
+                        av_nn[ind_i] += p * prop[ind_j]
+                        av_nn[ind_j] += p * prop[ind_i]
+                    else:
+                        raise ValueError("Direction of neighbourhood not right.")
+                elif selfloops:
+                    pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    if ndir == "out":
+                        av_nn[ind_i] += pii * prop[ind_i]
+                    elif ndir == "in":
+                        av_nn[ind_i] += pii * prop[ind_i]
+                    elif ndir == "out-in":
+                        av_nn[ind_i] += pii * prop[ind_i]
+                    else:
+                        raise ValueError("Direction of neighbourhood not right.")
 
         return av_nn
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _likelihood(logp, log1mp, param, prop_out, prop_in, prop_dyad, adj, selfloops):
+    def _likelihood(
+        logp,
+        log1mp,
+        param,
+        ind_out,
+        ind_in,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        adj_i,
+        adj_j,
+        selfloops,
+    ):
         """Compute the binary log likelihood of a graph given the fitted model."""
         like = 0
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            p_out_i = prop_out[i]
+            n = adj_i[ind_i]
+            m = adj_i[ind_i + 1]
+            j_list = adj_j[n:m]
+            for j in range(ind_in[1] - ind_in[0]):
+                ind_j = ind_in[0] + j
+                p_in_j = prop_in[j]
+                if (ind_i != ind_j) | selfloops:
                     # Check if link exists
-                    if adj[i, j] != 0:
+                    if ind_j in j_list:
                         tmp = logp(param, p_out_i, p_in_j, prop_dyad(i, j))
                     else:
                         tmp = log1mp(param, p_out_i, p_in_j, prop_dyad(i, j))
@@ -491,24 +646,39 @@ class DiGraphEnsemble(GraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+    def _binary_sample(
+        p_ij, param, ind_out, ind_in, prop_out, prop_in, prop_dyad, selfloops
+    ):
         """Sample from the ensemble."""
         rows = List()
         cols = List()
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            p_out_i = prop_out[i]
+            for j in range(ind_in[1] - ind_in[0]):
+                ind_j = ind_in[0] + j
+                p_in_j = prop_in[j]
+                if (ind_i != ind_j) | selfloops:
                     p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
                     if rng.random() < p:
-                        rows.append(i)
-                        cols.append(j)
+                        rows.append(ind_i)
+                        cols.append(ind_j)
 
         return rows, cols
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def _cremb_sample(
-        p_ij, param, prop_out, prop_in, prop_dyad, s_out, s_in, selfloops
+        p_ij,
+        param,
+        ind_out,
+        ind_in,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        s_out,
+        s_in,
+        selfloops,
     ):
         """Sample from the ensemble with weights from the CremB model."""
         s_tot = np.sum(s_out)
@@ -517,14 +687,20 @@ class DiGraphEnsemble(GraphEnsemble):
         rows = List()
         cols = List()
         vals = List()
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            p_out_i = prop_out[i]
+            for j in range(ind_in[1] - ind_in[0]):
+                ind_j = ind_in[0] + j
+                p_in_j = prop_in[j]
+                if (ind_i != ind_j) | selfloops:
                     p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
                     if rng.random() < p:
-                        rows.append(i)
-                        cols.append(j)
-                        vals.append(rng.exponential(s_out[i] * s_in[j] / (s_tot * p)))
+                        rows.append(ind_i)
+                        cols.append(ind_j)
+                        vals.append(
+                            rng.exponential(s_out[ind_i] * s_in[ind_j] / (s_tot * p))
+                        )
 
         return rows, cols, vals
 
@@ -558,30 +734,42 @@ class RandomDiGraph(DiGraphEnsemble):
         """Return a RandomGraph ensemble."""
         super().__init__(*args, **kwargs)
 
-        # If an argument is passed then it must be a graph
+        # First argument must be a SparkContext
         if len(args) > 0:
-            if isinstance(args[0], graphs.Graph):
-                g = args[0]
-                self.num_vertices = g.num_vertices
-                self.num_edges = g.num_edges()
-                if g.weighted:
-                    self.total_weight = g.total_weight()
+            if isinstance(args[0], SparkContext):
+                self.sc = args[0]
             else:
-                raise ValueError("First argument passed must be a Graph.")
+                raise ValueError("First argument must be a SparkContext.")
 
+            # If an argument is passed then it must be a graph
             if len(args) > 1:
+                if isinstance(args[1], graphs.Graph):
+                    g = args[1]
+                    self.num_vertices = g.num_vertices
+                    self.num_edges = g.num_edges()
+                    if g.weighted:
+                        self.total_weight = g.total_weight()
+                else:
+                    raise ValueError("Second argument passed must be a Graph.")
+
+            if len(args) > 2:
                 msg = "Unnamed arguments other than the Graph have been " "ignored."
                 warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError("A SparkContext must be passed as the first argument.")
 
         # Get options from keyword arguments
         allowed_arguments = [
             "num_vertices",
             "num_edges",
+            "p_blocks",
             "param",
             "selfloops",
             "total_weight",
             "discrete_weights",
         ]
+
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError("Illegal argument passed: " + name)
@@ -664,6 +852,71 @@ class RandomDiGraph(DiGraphEnsemble):
             if self.total_weight < 0:
                 raise ValueError("Total weight must be a positive number.")
 
+        # Ensure that the number of blocks is a positive integer
+        if not hasattr(self, "p_blocks"):
+            self.p_blocks = 10
+        else:
+            try:
+                assert self.p_blocks / int(self.p_blocks) == 1
+                self.p_blocks = int(self.p_blocks)
+            except Exception:
+                raise ValueError("Number of parallel blocks must be an integer.")
+
+            if self.p_blocks <= 0:
+                raise ValueError("Number of parallel blocks must be a positive number.")
+
+        # Ensure number of blocks is smaller than dimensions of graphs
+        # it is in general inefficient too have too few elements per partition
+        if self.p_blocks > self.num_vertices / 10:
+            if floor(self.num_vertices / 10) < 2:
+                self.p_blocks = 2
+            else:
+                self.p_blocks = int(self.num_vertices / 10)
+
+        # Create two RDDs to parallelize computations
+        # The first simply divides the pij matrix in blocks
+        elements = []
+        step = floor(self.num_vertices / self.p_blocks)
+        for i in range(self.p_blocks):
+            if i == self.p_blocks - 1:
+                x = (i * step, self.num_vertices)
+            else:
+                x = (i * step, (i + 1) * step)
+            for j in range(self.p_blocks):
+                if j == self.p_blocks - 1:
+                    y = (j * step, self.num_vertices)
+                else:
+                    y = (j * step, (j + 1) * step)
+                elements.append(
+                    ((x, y), self.prop_out[x[0] : x[1]], self.prop_in[y[0] : y[1]])
+                )
+
+        self.p_iter_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
+        # the second has a triangular structure allowing
+        # to iterate over pij and pji in the same block
+        elements = []
+        step = floor(self.num_vertices / self.p_blocks)
+        for i in range(self.p_blocks):
+            if i == self.p_blocks - 1:
+                x = (i * step, self.num_vertices)
+            else:
+                x = (i * step, (i + 1) * step)
+            for j in range(i + 1):
+                if j == self.p_blocks - 1:
+                    y = (j * step, self.num_vertices)
+                else:
+                    y = (j * step, (j + 1) * step)
+                elements.append((x, y))
+
+        self.p_sym_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
+        # Assign to each parallel partition the correct fitness values
+        fin = self.prop_in
+        fout = self.prop_out
+        fmap = self.fit_map
+        self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
+
     def fit(self):
         """Fit the parameter to the number of edges and total weight."""
         if self.selfloops:
@@ -723,7 +976,7 @@ class RandomDiGraph(DiGraphEnsemble):
         return self.expected_out_degree(recompute=recompute)
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=False, deg_recompute=False
+        self, prop, ndir="out", selfloops=None, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -736,6 +989,9 @@ class RandomDiGraph(DiGraphEnsemble):
                 " the number of vertices."
             )
             raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
 
         # Compute correct expected degree
         if ndir == "out":
@@ -784,9 +1040,9 @@ class RandomDiGraph(DiGraphEnsemble):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
         elif sp.issparse(g):
-            adj = g.todense()
+            adj = g.asformat("csr")
         elif isinstance(g, np.ndarray):
-            adj = g != 0
+            adj = sp.csr_matrix(g)
         else:
             raise ValueError("g input not a graph or adjacency matrix.")
 
@@ -801,22 +1057,20 @@ class RandomDiGraph(DiGraphEnsemble):
             raise ValueError(msg)
 
         # Compute log likelihood of graph
-        if (self.param[0] == 0) and (np.count_nonzero(adj) > 0):
+        if (self.param[0] == 0) and (adj.nnz > 0):
             return -np.infty
-        if (self.param[0] == 1) and (np.count_nonzero(adj) != 0):
+        if (self.param[0] == 1) and (adj.nnz != 0):
             return -np.infty
 
-        like = np.count_nonzero(adj) * log(self.param[0])
+        like = adj.nnz * log(self.param[0])
         if selfloops:
-            like += (self.num_vertices**2 - np.count_nonzero(adj)) * log1p(
+            like += (self.num_vertices**2 - adj.nnz) * log1p(-self.param[0])
+        else:
+            like += (self.num_vertices * (self.num_vertices - 1) - adj.nnz) * log1p(
                 -self.param[0]
             )
-        else:
-            like += (
-                self.num_vertices * (self.num_vertices - 1) - np.count_nonzero(adj)
-            ) * log1p(-self.param[0])
             # Ensure that the matrix has no elements on the diagonal
-            if np.count_nonzero(adj.ravel()[:: adj.shape[1] + 1]) > 0:
+            if adj.diagonal().sum() > 0:
                 return -np.infty
 
         return like
@@ -867,10 +1121,8 @@ class RandomDiGraph(DiGraphEnsemble):
             rows, cols = self._binary_sample(
                 self.param, self.num_vertices, self.selfloops
             )
-            g.adj = np.zeros((g.num_vertices, g.num_vertices), dtype=bool)
-            g.adj[rows, cols] = True
+            vals = np.ones(len(rows), dtype=bool)
         elif weights == "random":
-            g.adj = np.zeros((g.num_vertices, g.num_vertices))
             if self.discrete_weights:
                 rows, cols, vals = self._discrete_weighted_sample(
                     self.param, self.num_vertices, self.selfloops
@@ -879,9 +1131,7 @@ class RandomDiGraph(DiGraphEnsemble):
                 rows, cols, vals = self._weighted_sample(
                     self.param, self.num_vertices, self.selfloops
                 )
-            g.adj[rows, cols] = vals
         elif weights == "cremb":
-            g.adj = np.zeros((g.num_vertices, g.num_vertices))
             if out_strength is None:
                 s_out = self.prop_out
             if in_strength is None:
@@ -889,9 +1139,13 @@ class RandomDiGraph(DiGraphEnsemble):
             rows, cols, vals = self._cremb_sample(
                 self.param, self.num_vertices, s_out, s_in, self.selfloops
             )
-            g.adj[rows, cols] = vals
         else:
             raise ValueError("Weights method not recognised or implemented.")
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_matrix(
+            (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+        )
 
         return g
 
@@ -993,6 +1247,8 @@ class FitnessModel(DiGraphEnsemble):
 
     Attributes
     ----------
+    sc: Spark Context
+        the Spark Context
     prop_out: np.ndarray
         The out fitness sequence.
     prop_in: np.ndarray
@@ -1021,22 +1277,30 @@ class FitnessModel(DiGraphEnsemble):
         strengths are used as fitnesses, or directly the fitness sequences (in
         and out). The model accepts the fitness sequences as numpy arrays.
         """
-        super().__init__(*args, **kwargs)
-
-        # If an argument is passed then it must be a graph
+        # First argument must be a SparkContext
         if len(args) > 0:
-            if isinstance(args[0], graphs.DiGraph):
-                g = args[0]
-                self.num_vertices = g.num_vertices
-                self.num_edges = g.num_edges()
-                self.prop_out = g.out_strength()
-                self.prop_in = g.in_strength()
+            if isinstance(args[0], SparkContext):
+                self.sc = args[0]
             else:
-                raise ValueError("First argument passed must be a " "DiGraph.")
+                raise ValueError("First argument must be a SparkContext.")
 
+            # If an argument is passed then it must be a graph
             if len(args) > 1:
+                if isinstance(args[1], graphs.DiGraph):
+                    g = args[1]
+                    self.num_vertices = g.num_vertices
+                    self.num_edges = g.num_edges()
+                    self.prop_out = g.out_strength()
+                    self.prop_in = g.in_strength()
+                else:
+                    raise ValueError("Second argument passed must be a DiGraph.")
+
+            if len(args) > 2:
                 msg = "Unnamed arguments other than the Graph have been " "ignored."
                 warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError("A SparkContext must be passed as the first argument.")
 
         # Get options from keyword arguments
         allowed_arguments = [
@@ -1044,6 +1308,7 @@ class FitnessModel(DiGraphEnsemble):
             "num_edges",
             "prop_out",
             "prop_in",
+            "p_blocks",
             "param",
             "selfloops",
         ]
@@ -1136,6 +1401,71 @@ class FitnessModel(DiGraphEnsemble):
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
 
+        # Ensure that the number of blocks is a positive integer
+        if not hasattr(self, "p_blocks"):
+            self.p_blocks = 10
+        else:
+            try:
+                assert self.p_blocks / int(self.p_blocks) == 1
+                self.p_blocks = int(self.p_blocks)
+            except Exception:
+                raise ValueError("Number of parallel blocks must be an integer.")
+
+            if self.p_blocks <= 0:
+                raise ValueError("Number of parallel blocks must be a positive number.")
+
+        # Ensure number of blocks is smaller than dimensions of graphs
+        # it is in general inefficient too have too few elements per partition
+        if self.p_blocks > self.num_vertices / 10:
+            if floor(self.num_vertices / 10) < 2:
+                self.p_blocks = 2
+            else:
+                self.p_blocks = int(self.num_vertices / 10)
+
+        # Create two RDDs to parallelize computations
+        # The first simply divides the pij matrix in blocks
+        elements = []
+        step = floor(self.num_vertices / self.p_blocks)
+        for i in range(self.p_blocks):
+            if i == self.p_blocks - 1:
+                x = (i * step, self.num_vertices)
+            else:
+                x = (i * step, (i + 1) * step)
+            for j in range(self.p_blocks):
+                if j == self.p_blocks - 1:
+                    y = (j * step, self.num_vertices)
+                else:
+                    y = (j * step, (j + 1) * step)
+                elements.append(
+                    ((x, y), self.prop_out[x[0] : x[1]], self.prop_in[y[0] : y[1]])
+                )
+
+        self.p_iter_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
+        # the second has a triangular structure allowing
+        # to iterate over pij and pji in the same block
+        elements = []
+        step = floor(self.num_vertices / self.p_blocks)
+        for i in range(self.p_blocks):
+            if i == self.p_blocks - 1:
+                x = (i * step, self.num_vertices)
+            else:
+                x = (i * step, (i + 1) * step)
+            for j in range(i + 1):
+                if j == self.p_blocks - 1:
+                    y = (j * step, self.num_vertices)
+                else:
+                    y = (j * step, (j + 1) * step)
+                elements.append((x, y))
+
+        self.p_sym_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
+        # Assign to each parallel partition the correct fitness values
+        fin = self.prop_in
+        fout = self.prop_out
+        fmap = self.fit_map
+        self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
+
     def fit(
         self,
         x0=None,
@@ -1160,7 +1490,7 @@ class FitnessModel(DiGraphEnsemble):
         rtol : float
             Relative tolerance for the exit condition.
         max_iter : int or float
-            Maximum number of iterations.
+            Maximum number of iteration.
         verbose: boolean
             If true print debug info while iterating.
         """
@@ -1213,23 +1543,29 @@ class FitnessModel(DiGraphEnsemble):
         """Return the objective function value and the Jacobian
         for a given value of delta.
         """
-        f, jac = self.exp_edges_f_jac(
-            self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops
+        f_jac = self.exp_edges_f_jac
+        p_jac_ij = self.p_jac_ij
+        slflp = self.selfloops
+        tmp = self.p_iter_rdd.map(
+            lambda x: f_jac(p_jac_ij, delta, x[0][0], x[0][1], x[1], x[2], slflp)
         )
+        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
 
         return f, jac
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+    def exp_edges_f_jac(p_jac_ij, param, ind_out, ind_in, prop_out, prop_in, selfloops):
         """Compute the objective function of the density solver and its
         derivative.
         """
         f = 0.0
         jac = 0.0
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+        for i in range(ind_out[1] - ind_out[0]):
+            p_out_i = prop_out[i]
+            for j in range(ind_in[1] - ind_in[0]):
+                p_in_j = prop_in[j]
+                if (ind_out[0] + i != ind_in[0] + j) | selfloops:
                     p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
                     f += p_tmp
                     jac += jac_tmp
@@ -1303,6 +1639,8 @@ class ScaleInvariantModel(FitnessModel):
 
     Attributes
     ----------
+    sc: Spark Context
+        the Spark Context
     prop_out: np.ndarray
         The out fitness sequence.
     prop_in: np.ndarray
@@ -1323,6 +1661,16 @@ class ScaleInvariantModel(FitnessModel):
     fit:
         Fit the parameters of the model with the given method.
     """
+
+    def __init__(self, *args, **kwargs):
+        """Return a ScaleInvariantModel for the given graph data.
+
+        The model accepts as arguments either: a DiGraph, in which case the
+        strengths are used as fitnesses, or directly the fitness sequences (in
+        and out). The model accepts the fitness sequences as numpy arrays.
+        """
+
+        super().__init__(*args, **kwargs)
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -1378,7 +1726,11 @@ class ScaleInvariantModel(FitnessModel):
         if (x_i == 0) or (y_j == 0) or (d[0] == 0):
             return 0.0
 
-        return -d[0] * x_i * y_j
+        tmp = d[0] * x_i * y_j
+        if isinf(tmp):
+            return -np.infty
+        else:
+            return -tmp
 
 
 class MultiGraphEnsemble(GraphEnsemble):
@@ -1428,55 +1780,290 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
     """
 
-    def expected_num_edges_label(self, recompute=False):
+    def expected_num_edges(self, recompute=False):
         """Compute the expected number of edges."""
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
 
         if not hasattr(self, "_exp_num_edges_label") or recompute:
-            self._exp_num_edges_label = self.exp_edges_label(
-                self.p_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.selfloops,
+            # It is necessary to select the elements or pickling will fail
+            delta = self.param
+            slflp = self.selfloops
+            p_ij = self.p_ij
+            pdyad = self.prop_dyad
+            e_fun = self.exp_edges
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(
+                    p_ij,
+                    delta,
+                    x[0][0],
+                    x[0][1],
+                    x[1].indptr,
+                    x[2].indptr,
+                    x[1].indices,
+                    x[2].indices,
+                    x[1].data,
+                    x[2].data,
+                    pdyad,
+                    slflp,
+                )
             )
+            self._exp_num_edges = tmp.fold(0, lambda x, y: x + y)
+
+        return self._exp_num_edges
+
+    def expected_num_edges_label(self, recompute=False):
+        """Compute the expected number of edges (per label)."""
+        if not hasattr(self, "param"):
+            raise Exception("Model must be fitted before hand.")
+
+        if not hasattr(self, "_exp_num_edges_label") or recompute:
+            # Initialize each layer
+            e_fun = self.exp_edges_layer
+            p_ijk = self.p_ijk
+            delta = self.param
+            pdyad = self.prop_dyad
+            slflp = self.selfloops
+            tmp_rdd = self.layers_rdd.map(
+                lambda x: (
+                    x[0],
+                    e_fun(
+                        p_ijk,
+                        delta[x[0]],
+                        x[1].indices,
+                        x[1].data,
+                        x[2].indices,
+                        x[2].data,
+                        pdyad,
+                        slflp,
+                    ),
+                )
+            )
+
+            # Collect and assign results for each layer
+            self._exp_num_edges_label = np.zeros(self.num_labels, dtype=np.float64)
+            tmp = tmp_rdd.collect()
+            for i, v in tmp:
+                # Update results and check convergence
+                self._exp_num_edges_label[i] = v
 
         return self._exp_num_edges_label
 
-    def expected_degree_by_label(self, recompute=False):
-        """Compute the expected undirected degree by label."""
-        if not hasattr(self, "_exp_degree_label") or recompute:
-            res = self.exp_degrees_label(
-                self.p_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.num_vertices,
-                self.num_labels,
-                self.selfloops,
+    def expected_degree(self, recompute=False):
+        """Compute the expected undirected/out/in degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Model must be fitted beforehand.")
+
+        if not hasattr(self, "_exp_degree") or recompute:
+            # It is necessary to select the elements or pickling will fail
+            delta = self.param
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            p_ij = self.p_ij
+            pdyad = self.prop_dyad
+            e_fun = self.exp_degrees
+            tmp = self.p_sym_rdd.map(
+                lambda x: e_fun(
+                    p_ij,
+                    delta,
+                    x[0][0],
+                    x[0][1],
+                    (x[1][0].indptr, x[1][1].indptr),
+                    (x[2][0].indptr, x[2][1].indptr),
+                    (x[1][0].indices, x[1][1].indices),
+                    (x[2][0].indices, x[2][1].indices),
+                    (x[1][0].data, x[1][1].data),
+                    (x[2][0].data, x[2][1].data),
+                    pdyad,
+                    num_v,
+                    slflp,
+                )
             )
-            self._exp_degree_label = res[0]
-            self._exp_out_degree_label = res[1]
-            self._exp_in_degree_label = res[2]
+
+            # Initialize results
+            exp_d = np.zeros(num_v, dtype=np.float64)
+            exp_d_out = np.zeros(num_v, dtype=np.float64)
+            exp_d_in = np.zeros(num_v, dtype=np.float64)
+            res = tmp.fold(
+                (exp_d, exp_d_out, exp_d_in),
+                lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]),
+            )
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
+
+        return self._exp_degree
+
+    def expected_out_degree(self, recompute=False):
+        """Compute the expected out degree."""
+        if not hasattr(self, "_exp_out_degree") or recompute:
+            _ = self.expected_degree()
+
+        return self._exp_out_degree
+
+    def expected_in_degree_by(self, recompute=False):
+        """Compute the expected in degree."""
+        if not hasattr(self, "_exp_in_degree") or recompute:
+            _ = self.expected_degree()
+
+        return self._exp_in_degree
+
+    def expected_degree_by_label(self, recompute=False):
+        """Compute the expected undirected degree."""
+        if not hasattr(self, "_exp_degree_label") or recompute:
+            # It is necessary to select the elements or pickling will fail
+            delta = self.param
+            slflp = self.selfloops
+            num_v = self.num_vertices
+            p_ijk = self.p_ijk
+            pdyad = self.prop_dyad
+            e_fun = self.exp_degrees_layer
+            app_fun = self.tuple_of_lists_append
+            tmp = self.layers_rdd.map(
+                lambda x: e_fun(
+                    p_ijk,
+                    delta[x[0]],
+                    x[1].indices,
+                    x[2].indices,
+                    x[1].data,
+                    x[2].data,
+                    pdyad,
+                    x[0],
+                    num_v,
+                    slflp,
+                )
+            )
+
+            # Initialize results
+            res = tmp.fold(([], [], []), lambda x, y: app_fun(x, y))
+            d = np.array(res[0])
+            d_out = np.array(res[1])
+            d_in = np.array(res[2])
+            self._exp_degree_label = sp.coo_array(
+                (d[:, 2], (d[:, 0], d[:, 1])),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsr()
+            self._exp_out_degree_label = sp.coo_array(
+                (d_out[:, 2], (d_out[:, 0], d_out[:, 1])),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsr()
+            self._exp_in_degree_label = sp.coo_array(
+                (d_in[:, 2], (d_in[:, 0], d_in[:, 1])),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsr()
 
         return self._exp_degree_label
 
     def expected_out_degree_by_label(self, recompute=False):
-        """Compute the expected out degree by label."""
+        """Compute the expected out degree."""
         if not hasattr(self, "_exp_out_degree_label") or recompute:
             _ = self.expected_degree_by_label()
 
         return self._exp_out_degree_label
 
     def expected_in_degree_by_label(self, recompute=False):
-        """Compute the expected in degree by label."""
+        """Compute the expected in degree."""
         if not hasattr(self, "_exp_in_degree_label") or recompute:
             _ = self.expected_degree_by_label()
 
         return self._exp_in_degree_label
+
+    def expected_av_nn_property(
+        self, prop, ndir="out", selfloops=None, deg_recompute=False
+    ):
+        """Computes the expected value of the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if not prop.shape[0] == self.num_vertices:
+            msg = (
+                "Property array must have first dimension size be equal to"
+                " the number of vertices."
+            )
+            raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # Compute correct expected degree
+        if ndir == "out":
+            deg = self.expected_out_degree(recompute=deg_recompute)
+        elif ndir == "in":
+            deg = self.expected_in_degree(recompute=deg_recompute)
+        elif ndir == "out-in":
+            deg = self.expected_degree(recompute=deg_recompute)
+        else:
+            raise ValueError("Neighbourhood direction not recognised.")
+
+        # It is necessary to select the elements or pickling will fail
+        e_fun = self.exp_av_nn_prop
+        p_ij = self.p_ij
+        pdyad = self.prop_dyad
+        delta = self.param
+
+        tmp = self.p_sym_rdd.map(
+            lambda x: e_fun(
+                p_ij,
+                delta,
+                x[0][0],
+                x[0][1],
+                (x[1][0].indptr, x[1][1].indptr),
+                (x[2][0].indptr, x[2][1].indptr),
+                (x[1][0].indices, x[1][1].indices),
+                (x[2][0].indices, x[2][1].indices),
+                (x[1][0].data, x[1][1].data),
+                (x[2][0].data, x[2][1].data),
+                pdyad,
+                prop,
+                ndir,
+                selfloops,
+            )
+        )
+        av_nn = tmp.fold(np.zeros(prop.shape, dtype=np.float64), lambda x, y: x + y)
+
+        # Test that mask is the same
+        ind = deg != 0
+        msg = "Got a av_nn for an empty neighbourhood."
+        assert np.all(av_nn[~ind] == 0), msg
+
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def expected_av_nn_degree(
+        self,
+        ddir="out",
+        ndir="out",
+        selfloops=None,
+        deg_recompute=False,
+        recompute=None,
+    ):
+        """Computes the expected value of the nearest neighbour average of
+        the degree.
+        """
+        # Compute property name
+        name = "exp_av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
+
+        if not hasattr(self, name) or recompute or deg_recompute:
+            # Compute correct expected degree
+            if ddir == "out":
+                deg = self.expected_out_degree(recompute=deg_recompute)
+            elif ddir == "in":
+                deg = self.expected_in_degree(recompute=deg_recompute)
+            elif ddir == "out-in":
+                deg = self.expected_degree(recompute=deg_recompute)
+            else:
+                raise ValueError("Degree type not recognised.")
+
+            # Compute property and set attribute
+            res = self.expected_av_nn_property(
+                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False
+            )
+            setattr(self, name, res)
+
+        return getattr(self, name)
 
     def log_likelihood(self, g, selfloops=None):
         """Compute the likelihood a graph given the fitted model.
@@ -1497,32 +2084,42 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             adj = g.adjacency_matrix(directed=True, weighted=False)
             tensor = False
         elif sp.issparse(g):
-            adj = g.todense()
+            adj = g.asformat("csr")
             tensor = False
         elif isinstance(g, np.ndarray):
             if g.ndim == 3:
-                adj = g
+                adj = [sp.csr_matrix(g[i, :, :]) for i in range(g.shape[0])]
                 tensor = True
             elif g.ndim == 2:
-                adj = g
+                adj = sp.csr_matrix(g)
                 tensor = False
             else:
                 raise ValueError("Adjacency array is neither 2 nor 3 dimensional.")
-        elif isinstance(g, list) and sp.issparse(g[0]):
-            adj = [x.todense() for x in g]
+        elif isinstance(g, list):
+            adj = [sp.csr_matrix(x) for x in g]
             tensor = True
         else:
             raise ValueError("g input not a graph or adjacency matrix.")
 
         # Ensure dimensions are correct
-        shape = (self.num_labels, self.num_vertices, self.num_vertices)
         if tensor:
             msg = (
                 "Passed graph adjacency tensor does not have the "
-                "correct shape: {0} instead of {1}".format(adj.shape, shape)
+                "correct number of layers: {0} instead of {1}".format(
+                    len(adj), self.num_labels
+                )
             )
-            if adj.shape != shape:
+            if len(adj) != self.num_labels:
                 raise ValueError(msg)
+            for i, x in enumerate(adj):
+                if x.shape != (self.num_vertices, self.num_vertices):
+                    msg = (
+                        "Passed graph adjacency tensor does not have the "
+                        "correct shape in layer{2}: {0} instead of {1}".format(
+                            adj.shape, (self.num_vertices, self.num_vertices), i
+                        )
+                    )
+                    raise ValueError(msg)
         else:
             if adj.shape != (self.num_vertices, self.num_vertices):
                 msg = (
@@ -1535,27 +2132,56 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         # Compute log likelihood of graph
         if tensor:
-            like = self._likelihood_tensor(
-                self.logp_ijk,
-                self.log1mp_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                adj,
-                selfloops,
+            # Compute log likelihood of graph
+            e_fun = self._likelihood_layer
+            pdyad = self.prop_dyad
+            delta = self.param
+            logp = self.logp_ijk
+            log1mp = self.log1mp_ijk
+            tmp = self.layers_rdd.map(
+                lambda x: e_fun(
+                    logp,
+                    log1mp,
+                    delta[x[0]],
+                    x[1].indices,
+                    x[2].indices,
+                    x[1].data,
+                    x[2].data,
+                    pdyad,
+                    adj[x[0]].indptr,
+                    adj[x[0]].indices,
+                    selfloops,
+                )
             )
+            like = tmp.fold(0.0, lambda x, y: x + y)
+
         else:
-            like = self._likelihood(
-                self.logp,
-                self.log1mp,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                adj,
-                selfloops,
+            # Compute log likelihood of graph
+            e_fun = self._likelihood
+            pdyad = self.prop_dyad
+            delta = self.param
+            logp = self.logp
+            log1mp = self.log1mp
+            tmp = self.p_iter_rdd.map(
+                lambda x: e_fun(
+                    logp,
+                    log1mp,
+                    delta,
+                    x[0][0],
+                    x[0][1],
+                    x[1].indptr,
+                    x[2].indptr,
+                    x[1].indices,
+                    x[2].indices,
+                    x[1].data,
+                    x[2].data,
+                    pdyad,
+                    adj.indptr,
+                    adj.indices,
+                    selfloops,
+                )
             )
+            like = tmp.fold(0.0, lambda x, y: x + y)
 
         return like
 
@@ -1609,13 +2235,13 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         # If weights are given check that they make sense
         if out_strength_label is None:
-            s_out_l = self.prop_out
+            s_out_l = self.prop_out.tocsc()
         else:
             # Check dimensions
-            if sp.issparse(out_strength_label):
-                out_strength_label = out_strength_label.todense()
-
             if isinstance(out_strength_label, np.ndarray):
+                out_strength_label = sp.csc_matrix(out_strength_label)
+
+            if sp.issparse(out_strength_label):
                 msg = (
                     "Out strength by label must have shape (num_vertices, "
                     "num_labels)."
@@ -1624,16 +2250,17 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                     self.num_vertices,
                     self.num_labels,
                 ), msg
+                s_out_l = out_strength_label.tocsc()
             else:
                 raise ValueError("Out strength by label must be an array.")
 
         if in_strength_label is None:
-            s_in_l = self.prop_in
+            s_in_l = self.prop_in.tocsc()
         else:
-            if sp.issparse(in_strength_label):
-                in_strength_label = in_strength_label.todense()
-
             if isinstance(in_strength_label, np.ndarray):
+                in_strength_label = sp.csc_matrix(in_strength_label)
+
+            if sp.issparse(in_strength_label):
                 msg = (
                     "In strength by label must have shape (num_vertices, "
                     "num_labels)."
@@ -1642,170 +2269,508 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                     self.num_vertices,
                     self.num_labels,
                 ), msg
+                s_in_l = in_strength_label.tocsc()
             else:
                 raise ValueError("In strength by label must be an array.")
 
         # Sample edges by layer
+        g.adj = [None] * self.num_labels
+
         if weights is None:
-            lbls, rows, cols = self._binary_sample_tensor(
-                self.p_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.selfloops,
+            e_fun = self._binary_sample_layer
+            selfloops = self.selfloops
+            p_ijk = self.p_ijk
+            pdyad = self.prop_dyad
+            delta = self.param
+            tmp = self.layers_rdd.map(
+                lambda x: (
+                    x[0],
+                    e_fun(
+                        p_ijk,
+                        delta[x[0]],
+                        x[1].indices,
+                        x[2].indices,
+                        x[1].data,
+                        x[2].data,
+                        pdyad,
+                        selfloops,
+                    ),
+                )
             )
-            vals = np.ones(len(rows), dtype=bool)
+            for i, (rows, cols) in tmp.collect():
+                # Convert to adjacency matrix
+                g.adj[i] = sp.csr_matrix(
+                    (np.ones(len(rows), dtype=bool), (rows, cols)),
+                    shape=(g.num_vertices, g.num_vertices),
+                )
+
         elif weights == "cremb":
-            lbls, rows, cols, vals = self._cremb_sample_tensor(
-                self.p_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                s_out_l,
-                s_in_l,
-                self.selfloops,
+            e_fun = self._cremb_sample_layer
+            selfloops = self.selfloops
+            p_ijk = self.p_ijk
+            pdyad = self.prop_dyad
+            delta = self.param
+            tmp = self.layers_rdd.map(
+                lambda x: (
+                    x[0],
+                    e_fun(
+                        p_ijk,
+                        delta[x[0]],
+                        x[1].indices,
+                        x[2].indices,
+                        x[1].data,
+                        x[2].data,
+                        s_out_l[:, x[0]].indices,
+                        s_out_l[:, x[0]].data,
+                        s_in_l[:, x[0]].indices,
+                        s_in_l[:, x[0]].data,
+                        pdyad,
+                        selfloops,
+                    ),
+                )
             )
+            for i, (rows, cols, vals) in tmp.collect():
+                # Convert to adjacency matrix
+                g.adj[i] = sp.csr_matrix(
+                    (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+                )
+
         else:
             raise ValueError("Weights method not recognised or implemented.")
-
-        # Convert to adjacency matrix
-        g.adj = np.zeros((g.num_labels, g.num_vertices, g.num_vertices))
-        g.adj[lbls, rows, cols] = vals
 
         return g
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_label(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Compute the expected number of edges with one parameter controlling
-        for the density for each label.
+    def exp_edges(
+        p_ij,
+        param,
+        ind_out,
+        ind_in,
+        indptr_out,
+        indptr_in,
+        lbl_out,
+        lbl_in,
+        prop_out,
+        prop_in,
+        pdyad,
+        slflp,
+    ):
+        """Compute the objective function of the density solver and its
+        derivative.
         """
-        num_labels = len(prop_out)
-        exp_edges = np.zeros(num_labels, dtype=np.float64)
+        f = 0.0
+        for i in range(ind_out[1] - ind_out[0]):
+            f_out_i = ind_out[0] + i
+            f_out_l = lbl_out[indptr_out[i] : indptr_out[i + 1]]
+            f_out_v = prop_out[indptr_out[i] : indptr_out[i + 1]]
+            for j in range(ind_in[1] - ind_in[0]):
+                f_in_j = ind_in[0] + j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j] : indptr_in[j + 1]]
+                    f_in_v = prop_in[indptr_in[j] : indptr_in[j + 1]]
+                    f += p_ij(param, f_out_l, f_out_v, f_in_l, f_in_v, pdyad)
 
-        for k in range(num_labels):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        exp_edges[k] += p_ijk(
-                            param[k], p_out_i, p_in_j, prop_dyad(i, j)
-                        )
-
-        return exp_edges
+        return f
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_degrees_label(
-        p_ijk, param, prop_out, prop_in, prop_dyad, num_v, num_l, selfloops
+    def exp_edges_layer(
+        p_ijk, param, ind_out, prop_out, ind_in, prop_in, pdyad, selfloops
+    ):
+        """Compute the objective function of the layer density solver and its
+        derivative.
+        """
+        f = 0.0
+        for i, out_i in enumerate(ind_out):
+            for j, in_j in enumerate(ind_in):
+                if (out_i != in_j) | selfloops:
+                    f += p_ijk(param, prop_out[i], prop_in[j], pdyad(i, j))
+
+        return f
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_degrees(
+        p_ij,
+        param,
+        ind_out,
+        ind_in,
+        ptr_out,
+        ptr_in,
+        lbl_out,
+        lbl_in,
+        val_out,
+        val_in,
+        pdyad,
+        num_v,
+        selfloops,
     ):
         """Compute the expected undirected, in and out degree sequences."""
-        exp_d = np.zeros((num_v, num_l), dtype=np.float64)
-        exp_d_out = np.zeros((num_v, num_l), dtype=np.float64)
-        exp_d_in = np.zeros((num_v, num_l), dtype=np.float64)
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
 
-        for lbl in range(num_l):
-            for i in range(num_v):
-                p_out_i = prop_out[i, lbl]
-                p_in_i = prop_in[i, lbl]
-                for j in range(i + 1):
-                    p_out_j = prop_out[j, lbl]
-                    p_in_j = prop_in[j, lbl]
+        if ind_out == ind_in:
+            fold = True
+        else:
+            fold = False
 
-                    if i != j:
-                        pij = p_ijk(param[lbl], p_out_i, p_in_j, prop_dyad(i, j))
-                        pji = p_ijk(param[lbl], p_out_j, p_in_i, prop_dyad(j, i))
-                        p = pij + pji - pij * pji
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            l_out_i = lbl_out[0][ptr_out[0][i] : ptr_out[0][i + 1]]
+            f_out_i = val_out[0][ptr_out[0][i] : ptr_out[0][i + 1]]
+            l_in_i = lbl_in[1][ptr_in[1][i] : ptr_in[1][i + 1]]
+            f_in_i = val_in[1][ptr_in[1][i] : ptr_in[1][i + 1]]
+            for j in in_range(i, ind_in, fold):
+                ind_j = ind_in[0] + j
+                l_out_j = lbl_out[1][ptr_out[1][j] : ptr_out[1][j + 1]]
+                f_out_j = val_out[1][ptr_out[1][j] : ptr_out[1][j + 1]]
+                l_in_j = lbl_in[0][ptr_in[0][j] : ptr_in[0][j + 1]]
+                f_in_j = val_in[0][ptr_in[0][j] : ptr_in[0][j + 1]]
 
-                        exp_d[i, lbl] += p
-                        exp_d[j, lbl] += p
-                        exp_d_out[i, lbl] += pij
-                        exp_d_out[j, lbl] += pji
-                        exp_d_in[i, lbl] += pji
-                        exp_d_in[j, lbl] += pij
-
-                    elif selfloops:
-                        pii = p_ijk(param[lbl], p_out_i, p_in_j, prop_dyad(i, j))
-                        exp_d[i, lbl] += pii
-                        exp_d_out[i, lbl] += pii
-                        exp_d_in[i, lbl] += pii
+                if ind_i != ind_j:
+                    pij = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j, pdyad(i, j))
+                    pji = p_ij(param, l_out_j, f_out_j, l_in_i, f_in_i, pdyad(i, j))
+                    p = pij + pji - pij * pji
+                    exp_d[ind_i] += p
+                    exp_d[ind_j] += p
+                    exp_d_out[ind_i] += pij
+                    exp_d_out[ind_j] += pji
+                    exp_d_in[ind_j] += pij
+                    exp_d_in[ind_i] += pji
+                elif selfloops:
+                    pii = p_ij(param, l_out_i, f_out_i, l_in_j, f_in_j, pdyad(i, j))
+                    exp_d[ind_i] += pii
+                    exp_d_out[ind_i] += pii
+                    exp_d_in[ind_j] += pii
 
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _likelihood_tensor(
-        logp_ijk, log1mp_ijk, param, prop_out, prop_in, prop_dyad, adj, selfloops
+    def exp_degrees_layer(
+        p_ijk, param, ind_out, ind_in, prop_out, prop_in, pdyad, lbl, num_v, selfloops
     ):
-        """Compute the log likelihood for the given adjacency tensor."""
-        like = np.float64(0.0)
+        """Compute the expected undirected, in and out degree sequences."""
+        d = {}
+        d_out = {}
+        d_in = {}
 
-        for k in range(adj.shape[0]):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        if adj[k, i, j] != 0:
-                            tmp = logp_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
-                        else:
-                            tmp = log1mp_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
+        for i, ind_i in enumerate(ind_out):
+            f_out_i = prop_out[i]
+            for j, ind_j in enumerate(ind_in):
+                f_in_j = prop_in[j]
+                if ind_i != ind_j:
+                    pij = p_ijk(param, f_out_i, f_in_j, pdyad(ind_i, ind_j))
 
-                        if isinf(tmp):
-                            return tmp
+                    if (ind_i in ind_in) and (ind_j in ind_out):
+                        f_in_i = prop_in[np.where(ind_in == ind_i)][0]
+                        f_out_j = prop_out[np.where(ind_out == ind_j)][0]
+                        pji = p_ijk(param, f_out_j, f_in_i, pdyad(ind_i, ind_j))
+                        p = pij + pji - pij * pji
+                    else:
+                        pji = 0.0
+                        p = pij
 
-                        like += tmp
+                    key = (np.int64(ind_i), np.int64(lbl))
+                    if key in d:
+                        d[key] += p
+                        d_out[key] += pij
+                        d_in[key] += pji
+                    else:
+                        d[key] = p
+                        d_out[key] = pij
+                        d_in[key] = pji
+
+                    key = (np.int64(ind_j), np.int64(lbl))
+                    if key in d:
+                        d[key] += p
+                        d_out[key] += pji
+                        d_in[key] += pij
+                    else:
+                        d[key] = p
+                        d_out[key] = pji
+                        d_in[key] = pij
+
+                elif selfloops:
+                    pii = p_ijk(param, f_out_i, f_in_j, pdyad(ind_i, ind_j))
+                    key = (np.int64(ind_i), np.int64(lbl))
+                    if key in d:
+                        d[key] += pii
+                        d_out[key] += pii
+                        d_in[key] += pii
+                    else:
+                        d[key] = pii
+                        d_out[key] = pii
+                        d_in[key] = pii
+
+        # Convert dictionary to lists
+        exp_d = List()
+        exp_d_out = List()
+        exp_d_in = List()
+        for key in d.keys():
+            exp_d.append([key[0], key[1], d[key]])
+            exp_d_out.append([key[0], key[1], d_out[key]])
+            exp_d_in.append([key[0], key[1], d_in[key]])
+
+        return exp_d, exp_d_out, exp_d_in
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_av_nn_prop(
+        p_ij,
+        param,
+        ind_out,
+        ind_in,
+        indptr_out,
+        indptr_in,
+        lbl_out,
+        lbl_in,
+        prop_out,
+        prop_in,
+        pdyad,
+        prop,
+        ndir,
+        slflp,
+    ):
+        """Compute the expected average nearest neighbour property."""
+        av_nn = np.zeros(prop.shape, dtype=np.float64)
+
+        if ind_out == ind_in:
+            fold = True
+        else:
+            fold = False
+
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            l_out_i = lbl_out[0][indptr_out[0][i] : indptr_out[0][i + 1]]
+            f_out_i = prop_out[0][indptr_out[0][i] : indptr_out[0][i + 1]]
+            l_in_i = lbl_in[1][indptr_in[1][i] : indptr_in[1][i + 1]]
+            f_in_i = prop_in[1][indptr_in[1][i] : indptr_in[1][i + 1]]
+            for j in in_range(i, ind_in, fold):
+                ind_j = ind_in[0] + j
+                l_out_j = lbl_out[1][indptr_out[1][j] : indptr_out[1][j + 1]]
+                f_out_j = prop_out[1][indptr_out[1][j] : indptr_out[1][j + 1]]
+                l_in_j = lbl_in[0][indptr_in[0][j] : indptr_in[0][j + 1]]
+                f_in_j = prop_in[0][indptr_in[0][j] : indptr_in[0][j + 1]]
+
+                if ind_i != ind_j:
+                    pij = p_ij(
+                        param, l_out_i, f_out_i, l_in_j, f_in_j, pdyad(ind_i, ind_j)
+                    )
+                    pji = p_ij(
+                        param, l_out_j, f_out_j, l_in_i, f_in_i, pdyad(ind_i, ind_j)
+                    )
+                    if ndir == "out":
+                        av_nn[ind_i] += pij * prop[ind_j]
+                        av_nn[ind_j] += pji * prop[ind_i]
+                    elif ndir == "in":
+                        av_nn[ind_i] += pji * prop[ind_j]
+                        av_nn[ind_j] += pij * prop[ind_i]
+                    elif ndir == "out-in":
+                        p = pij + pji - pij * pji
+                        av_nn[ind_i] += p * prop[ind_j]
+                        av_nn[ind_j] += p * prop[ind_i]
+                    else:
+                        raise ValueError("Direction of neighbourhood not right.")
+                elif slflp:
+                    pii = p_ij(
+                        param, l_out_i, f_out_i, l_in_j, f_in_j, pdyad(ind_i, ind_j)
+                    )
+                    if ndir == "out":
+                        av_nn[ind_i] += pii * prop[ind_i]
+                    elif ndir == "in":
+                        av_nn[ind_i] += pii * prop[ind_i]
+                    elif ndir == "out-in":
+                        av_nn[ind_i] += pii * prop[ind_i]
+                    else:
+                        raise ValueError("Direction of neighbourhood not right.")
+
+        return av_nn
+
+    @staticmethod
+    # @jit(nopython=True)  # pragma: no cover
+    def _likelihood(
+        logp,
+        log1mp,
+        param,
+        ind_out,
+        ind_in,
+        indptr_out,
+        indptr_in,
+        lbl_out,
+        lbl_in,
+        prop_out,
+        prop_in,
+        pdyad,
+        adj_i,
+        adj_j,
+        slflp,
+    ):
+        """Compute the objective function of the density solver and its
+        derivative.
+        """
+        like = 0.0
+        for i in range(ind_out[1] - ind_out[0]):
+            f_out_i = ind_out[0] + i
+            f_out_l = lbl_out[indptr_out[i] : indptr_out[i + 1]]
+            f_out_v = prop_out[indptr_out[i] : indptr_out[i + 1]]
+            j_list = adj_j[adj_i[f_out_i] : adj_i[f_out_i + 1]]
+            for j in range(ind_in[1] - ind_in[0]):
+                f_in_j = ind_in[0] + j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j] : indptr_in[j + 1]]
+                    f_in_v = prop_in[indptr_in[j] : indptr_in[j + 1]]
+                    # Check if link exists
+                    if f_in_j in j_list:
+                        tmp = logp(param, f_out_l, f_out_v, f_in_l, f_in_v, pdyad(i, j))
+                    else:
+                        tmp = log1mp(
+                            param, f_out_l, f_out_v, f_in_l, f_in_v, pdyad(i, j)
+                        )
+
+                    if isinf(tmp):
+                        return tmp
+                    like += tmp
 
         return like
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _binary_sample_tensor(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
+    def _likelihood_layer(
+        logp_ijk,
+        log1mp_ijk,
+        param,
+        ind_out,
+        ind_in,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        indptr,
+        indices,
+        selfloops,
+    ):
+        """Compute the log likelihood for this layer."""
+        like = np.float64(0.0)
+        N = len(indptr) - 1
+
+        # Iterate over links in adj to check that there are no links with p==0
+        for i in range(N):
+            n = indptr[i]
+            m = indptr[i + 1]
+            if n != m:
+                ind = ind_out == i
+                if not np.any(ind):
+                    return -np.infty
+                if np.any(prop_out[ind] == 0):
+                    return -np.infty
+
+                j_list = indices[n:m]
+                for j in j_list:
+                    ind = ind_in == j
+                    if not np.any(ind):
+                        return -np.infty
+                    if np.any(prop_in[ind] == 0):
+                        return -np.infty
+
+        # Now compute likelihood due to non-zero values of pijk
+        for i, out_i in zip(ind_out, prop_out):
+            n = indptr[i]
+            m = indptr[i + 1]
+            j_list = indices[n:m]
+            for j, in_j in zip(ind_in, prop_in):
+                if (i != j) | selfloops:
+                    # Check if link exists
+                    if j in j_list:
+                        tmp = logp_ijk(param, out_i, in_j, prop_dyad(i, j))
+                    else:
+                        tmp = log1mp_ijk(param, out_i, in_j, prop_dyad(i, j))
+
+                    if isinf(tmp):
+                        return tmp
+                    like += tmp
+        return like
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _binary_sample_layer(
+        p_ijk, delta, out_ind, in_ind, out_val, in_val, pdyad, selfloops
+    ):
         """Sample from the ensemble."""
-        lbls = List()
         rows = List()
         cols = List()
+        for i, out_i in zip(out_ind, out_val):
+            for j, in_j in zip(in_ind, in_val):
+                if (i != j) | selfloops:
+                    p = p_ijk(delta, out_i, in_j, pdyad(i, j))
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
 
-        for k in range(prop_out.shape[1]):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        p = p_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
-                        if rng.random() < p:
-                            lbls.append(k)
-                            rows.append(i)
-                            cols.append(j)
+        rows_arr = np.empty(len(rows), dtype=np.int64)
+        cols_arr = np.empty(len(cols), dtype=np.int64)
 
-        return lbls, rows, cols
+        for i, (r, c) in enumerate(zip(rows, cols)):
+            rows_arr[i] = r
+            cols_arr[i] = c
+
+        return rows_arr, cols_arr
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def _cremb_sample_layer(
-        p_ijk, param, prop_out, prop_in, prop_dyad, s_out, s_in, selfloops
+        p_ijk,
+        delta,
+        out_ind,
+        in_ind,
+        out_val,
+        in_val,
+        s_out_ind,
+        s_out_val,
+        s_in_ind,
+        s_in_val,
+        pdyad,
+        selfloops,
     ):
-        """Sample from the ensemble with weights from the CremB model."""
-        s_tot = np.sum(s_out[1])
+        """Sample from the ensemble."""
+        s_tot = np.sum(s_out_val)
         msg = "Sum of in/out strengths not the same."
-        assert np.abs(1 - np.sum(s_in[1]) / s_tot) < 1e-6, msg
+        assert np.abs(1 - np.sum(s_in_val) / s_tot) < 1e-6, msg
 
-        lbls = List()
         rows = List()
         cols = List()
         vals = List()
-
-        for k in range(prop_out.shape[1]):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        p = p_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
-                        if rng.random() < p:
-                            lbls.append(k)
-                            rows.append(i)
-                            cols.append(j)
+        for i, out_i in zip(out_ind, out_val):
+            for j, in_j in zip(in_ind, in_val):
+                if (i != j) | selfloops:
+                    p = p_ijk(delta, out_i, in_j, pdyad(i, j))
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
+                        ind_out = s_out_ind == i
+                        ind_in = s_in_ind == j
+                        if np.any(ind_out) or np.any(ind_in):
                             vals.append(
-                                rng.exponential(s_out[i, k] * s_in[j, k] / (s_tot * p))
+                                rng.exponential(
+                                    s_out_val[ind_out][0]
+                                    * s_in_val[ind_in][0]
+                                    / (s_tot * p)
+                                )
                             )
+                        else:
+                            vals.append(0.0)
 
-        return lbls, rows, cols, vals
+        rows_arr = np.empty(len(rows), dtype=np.int64)
+        cols_arr = np.empty(len(cols), dtype=np.int64)
+        vals_arr = np.empty(len(vals), dtype=np.int64)
+
+        for i, (r, c, v) in enumerate(zip(rows, cols, vals)):
+            rows_arr[i] = r
+            cols_arr[i] = c
+            vals_arr[i] = v
+
+        return rows_arr, cols_arr, vals_arr
 
 
 class MultiFitnessModel(MultiDiGraphEnsemble):
@@ -1857,23 +2822,33 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         """
         super().__init__(*args, **kwargs)
 
-        # If an argument is passed then it must be a graph
+        # First argument must be a SparkContext
         if len(args) > 0:
-            if isinstance(args[0], graphs.MultiDiGraph):
-                g = args[0]
-                self.num_vertices = g.num_vertices
-                self.num_labels = g.num_labels
-                self.num_edges = g.num_edges()
-                self.num_edges_label = g.num_edges_label()
-                self.prop_out = g.out_strength_by_label()
-                self.prop_in = g.in_strength_by_label()
-                self.per_label = True
+            if isinstance(args[0], SparkContext):
+                self.sc = args[0]
             else:
-                raise ValueError("First argument passed must be a " "MultiDiGraph.")
+                raise ValueError("First argument must be a SparkContext.")
 
+            # If an argument is passed then it must be a graph
             if len(args) > 1:
+                if isinstance(args[1], graphs.MultiDiGraph):
+                    g = args[1]
+                    self.num_vertices = g.num_vertices
+                    self.num_labels = g.num_labels
+                    self.num_edges = g.num_edges()
+                    self.num_edges_label = g.num_edges_label()
+                    self.prop_out = g.out_strength_by_label()
+                    self.prop_in = g.in_strength_by_label()
+                    self.per_label = True
+                else:
+                    raise ValueError("Second argument passed must be a MultiDiGraph.")
+
+            if len(args) > 2:
                 msg = "Unnamed arguments other than the Graph have been " "ignored."
                 warnings.warn(msg, UserWarning)
+
+        else:
+            raise ValueError("A SparkContext must be passed as the first argument.")
 
         # Get options from keyword arguments
         allowed_arguments = [
@@ -1883,10 +2858,12 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
             "num_labels",
             "prop_out",
             "prop_in",
+            "p_blocks",
             "param",
             "selfloops",
             "per_label",
         ]
+
         for name in kwargs:
             if name not in allowed_arguments:
                 raise ValueError("Illegal argument passed: " + name)
@@ -1946,17 +2923,15 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         assert isinstance(self.prop_in, np.ndarray) or sp.issparse(self.prop_in), msg
         assert self.prop_in.shape == (self.num_vertices, self.num_labels), msg
 
-        # Convert to dense arrays
-        if sp.issparse(self.prop_out):
-            self.prop_out = self.prop_out.todense()
-        if sp.issparse(self.prop_in):
-            self.prop_in = self.prop_in.todense()
+        # Convert to csr matrices
+        self.prop_out = sp.csr_matrix(self.prop_out)
+        self.prop_in = sp.csr_matrix(self.prop_in)
 
         # Ensure that all fitness are positive
-        if np.any(self.prop_out < 0):
+        if np.any(self.prop_out.data < 0):
             raise ValueError("Node out properties must contain positive values only.")
 
-        if np.any(self.prop_in < 0):
+        if np.any(self.prop_in.data < 0):
             raise ValueError("Node in properties must contain positive values only.")
 
         # If num_edges is an array check if it has a single value or
@@ -2049,6 +3024,78 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         if "per_label" in kwargs:
             self.per_label = kwargs["per_label"]
 
+        # Ensure that the number of blocks is a positive integer
+        if not hasattr(self, "p_blocks"):
+            self.p_blocks = 10
+        else:
+            try:
+                assert self.p_blocks / int(self.p_blocks) == 1
+                self.p_blocks = int(self.p_blocks)
+            except Exception:
+                raise ValueError("Number of parallel blocks must be an integer.")
+
+            if self.p_blocks <= 0:
+                raise ValueError("Number of parallel blocks must be a positive number.")
+
+        # Ensure number of blocks is smaller than dimensions of graphs
+        # it is in general inefficient too have too few elements per partition
+        if self.p_blocks > self.num_vertices / 10:
+            if floor(self.num_vertices / 10) < 2:
+                self.p_blocks = 2
+            else:
+                self.p_blocks = int(self.num_vertices / 10)
+
+        # Create three RDDs to parallelize computations
+        # The first simply divides the pij matrix in blocks
+        elements = []
+        step = floor(self.num_vertices / self.p_blocks)
+        for i in range(self.p_blocks):
+            if i == self.p_blocks - 1:
+                x = (i * step, self.num_vertices)
+            else:
+                x = (i * step, (i + 1) * step)
+            for j in range(self.p_blocks):
+                if j == self.p_blocks - 1:
+                    y = (j * step, self.num_vertices)
+                else:
+                    y = (j * step, (j + 1) * step)
+                elements.append(
+                    ((x, y), self.prop_out[x[0] : x[1]], self.prop_in[y[0] : y[1]])
+                )
+
+        self.p_iter_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
+        # the second has a triangular structure allowing
+        # to iterate over pij and pji in the same block
+        elements = []
+        step = floor(self.num_vertices / self.p_blocks)
+        for i in range(self.p_blocks):
+            if i == self.p_blocks - 1:
+                x = (i * step, self.num_vertices)
+            else:
+                x = (i * step, (i + 1) * step)
+            for j in range(i + 1):
+                if j == self.p_blocks - 1:
+                    y = (j * step, self.num_vertices)
+                else:
+                    y = (j * step, (j + 1) * step)
+                elements.append((x, y))
+
+        self.p_sym_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
+        # Assign to each parallel partition the correct fitness values
+        fin = self.prop_in
+        fout = self.prop_out
+        fmap = self.fit_map
+        self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
+
+        # the third divides the pij in label layers
+        # Transform properties to csc format to select labels quickly
+        prop_out = self.prop_out.tocsc()
+        prop_in = self.prop_in.tocsc()
+        elements = [(i, prop_out[:, i], prop_in[:, i]) for i in range(self.num_labels)]
+        self.layers_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
+
     def fit(
         self,
         x0=None,
@@ -2107,32 +3154,47 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 self.solver_output = [None] * self.num_labels
                 self.param = x0.copy()
 
-                # Transform properties to csc format to select labels quickly
-                for i in range(self.num_labels):
-                    p_out = self.prop_out[:, i]
-                    p_in = self.prop_in[:, i]
-                    num_e = self.num_edges_label[i]
+                # Initialize each layer with solver function
+                d_fit = self.density_fit_layer
+                f_jac = self.exp_edges_f_jac_layer
+                p_jac = self.p_jac_ijk
+                num_e = self.num_edges_label
+                slflp = self.selfloops
+                sol_rdd = self.layers_rdd.map(
+                    lambda x: d_fit(x, x0, f_jac, p_jac, slflp)
+                )
 
-                    sol = monotonic_newton_solver(
-                        np.array([x0[i]]),
-                        lambda x: self.density_fit_layer(x[0], p_out, p_in),
-                        num_e,
-                        atol=atol,
-                        rtol=rtol,
-                        x_l=0.0,
-                        x_u=np.infty,
-                        max_iter=maxiter,
-                        full_return=True,
-                        verbose=verbose,
+                # Map to solver
+                sol_rdd = sol_rdd.map(
+                    lambda x: (
+                        x[0],
+                        monotonic_newton_solver(
+                            x[1],
+                            x[2],
+                            num_e[x[0]],
+                            atol=atol,
+                            rtol=rtol,
+                            x_l=0.0,
+                            x_u=np.infty,
+                            max_iter=maxiter,
+                            full_return=True,
+                            verbose=verbose,
+                        ),
                     )
+                )
 
+                # Collect solution to array
+                self.param = x0.copy()
+                self.solver_output = [None] * self.num_labels
+                tmp = sol_rdd.collect()
+                for i, sol in tmp:
                     # Update results and check convergence
                     self.param[i] = sol.x[0]
                     self.solver_output[i] = sol
-
                     if not sol.converged:
-                        msg = "Fit of layer {} ".format(i) + "did not converge."
+                        msg = "Fit of layer {}, did not converge.".format(i)
                         warnings.warn(msg, UserWarning)
+
             else:
                 # Ensure that num_edges is set
                 if not hasattr(self, "num_edges"):
@@ -2166,51 +3228,89 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
     def density_fit_fun(self, delta):
         """Return the objective function value and the Jacobian
-        for a given value of delta.
+        for a given value of delta when there are multiple labels per
+        edge allowed.
         """
-        f, jac = self.exp_edges_f_jac(
-            self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops
+        f_jac = self.exp_edges_f_jac
+        p_jac_ij = self.p_jac_ij
+        slflp = self.selfloops
+        tmp = self.p_iter_rdd.map(
+            lambda x: f_jac(
+                p_jac_ij,
+                delta,
+                x[0][0],
+                x[0][1],
+                x[1].indptr,
+                x[2].indptr,
+                x[1].indices,
+                x[2].indices,
+                x[1].data,
+                x[2].data,
+                slflp,
+            )
         )
-
-        return f, jac
-
-    def density_fit_layer(self, delta, prop_out, prop_in):
-        """Return the objective function value and the Jacobian
-        for a given value of delta.
-        """
-        f, jac = self.exp_edges_f_jac_layer(
-            self.p_jac_ijk, delta, prop_out, prop_in, self.selfloops
-        )
+        f, jac = tmp.fold((0, 0), lambda x, y: (x[0] + y[0], x[1] + y[1]))
 
         return f, jac
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+    def exp_edges_f_jac(
+        p_jac_ij,
+        param,
+        ind_out,
+        ind_in,
+        indptr_out,
+        indptr_in,
+        lbl_out,
+        lbl_in,
+        prop_out,
+        prop_in,
+        slflp,
+    ):
         """Compute the objective function of the density solver and its
         derivative.
         """
-        f = 0.0
-        jac = 0.0
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
+        f = np.float64(0.0)
+        jac = np.float64(0.0)
+        for i in range(ind_out[1] - ind_out[0]):
+            f_out_i = ind_out[0] + i
+            f_out_l = lbl_out[indptr_out[i] : indptr_out[i + 1]]
+            f_out_v = prop_out[indptr_out[i] : indptr_out[i + 1]]
+            for j in range(ind_in[1] - ind_in[0]):
+                f_in_j = ind_in[0] + j
+                if (f_out_i != f_in_j) | slflp:
+                    f_in_l = lbl_in[indptr_in[j] : indptr_in[j + 1]]
+                    f_in_v = prop_in[indptr_in[j] : indptr_in[j + 1]]
+                    p_tmp, jac_tmp = p_jac_ij(param, f_out_l, f_out_v, f_in_l, f_in_v)
                     f += p_tmp
                     jac += jac_tmp
 
         return f, jac
 
     @staticmethod
+    def density_fit_layer(x, x0, f_jac, p_jac, slflp):
+        lbl_id = x[0]
+        return (
+            lbl_id,
+            x0[lbl_id : lbl_id + 1],
+            lambda y: f_jac(
+                p_jac, y[0], x[1].indices, x[1].data, x[2].indices, x[2].data, slflp
+            ),
+        )
+
+    @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac_layer(p_jac_ijk, param, prop_out, prop_in, selfloops):
+    def exp_edges_f_jac_layer(
+        p_jac_ijk, param, out_ind, out_val, in_ind, in_val, selfloops
+    ):
         """Compute the objective function of the density solver and its
         derivative.
         """
         f = np.float64(0.0)
         jac = np.float64(0.0)
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
+        for i, p_out_i in zip(out_ind, out_val):
+            for j, p_in_j in zip(in_ind, in_val):
                 if (i != j) | selfloops:
                     p_tmp, jac_tmp = p_jac_ijk(param, p_out_i, p_in_j)
                     f += p_tmp
@@ -2220,31 +3320,40 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_jac_ij(d, prop_out, prop_in):
+    def p_jac_ij(d, x_lbl, x_val, y_lbl, y_val):
         """Compute the probability of connection between node i and j.
 
         param is expected to be an array with num_labels elements. All
         properties must be a tuple (indices, values) from a sparse matrix.
         """
         # Initialize result
+        i = 0
+        j = 0
         val = np.float64(1.0)
         jac = np.float64(0.0)
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (x_i != 0) and (y_i != 0):
-                tmp = x_i * y_i
-                if d[0] == 0:
-                    # In this case pij is zero but jac is not
-                    jac += tmp
-                else:
-                    # In this case the pij is not zero
-                    tmp1 = d[0] * tmp
-                    if isinf(tmp1):
-                        return 1.0, 0.0
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (x_val[i] != 0) and (y_val[j] != 0):
+                    if d[0] == 0:
+                        # In this case pij is zero but jac is not
+                        jac += x_val[i] * y_val[j]
                     else:
-                        val /= 1 + tmp1
-                        jac += tmp / (1 + tmp1)
+                        # In this case the pij is not zero
+                        tmp = x_val[i] * y_val[j]
+                        tmp1 = d[0] * tmp
+                        if isinf(tmp1):
+                            return 1.0, 0.0
+                        else:
+                            val /= 1 + tmp1
+                            jac += tmp / (1 + tmp1)
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         return 1 - val, val * jac
 
@@ -2269,41 +3378,59 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_ij(d, prop_out, prop_in, prop_dyad):
+    def p_ij(d, x_lbl, x_val, y_lbl, y_val, prop_dyad):
         """Compute the probability of connection between node i and j.
 
         param is expected to be an array with num_labels elements. All
         properties must be a tuple (indices, values) from a sparse matrix.
         """
         # Initialize result
-        val = np.float64(1.0)
+        i = 0
+        j = 0
+        val = 1.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 1.0
-                else:
-                    val /= 1 + tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         return 1 - val
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def logp(d, prop_out, prop_in, prop_dyad):
+    def logp(d, x_lbl, x_val, y_lbl, y_val, prop_dyad):
         """Compute the log probability of connection between node i and j."""
         # Initialize result
-        val = np.float64(1.0)
+        i = 0
+        j = 0
+        val = 1.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 0.0
-                else:
-                    val /= 1 + tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 0.0
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         if val == 1.0:
             return -np.infty
@@ -2312,23 +3439,35 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def log1mp(d, prop_out, prop_in, prop_dyad):
+    def log1mp(d, x_lbl, x_val, y_lbl, y_val, prop_dyad):
         """Compute the log of 1 minus the probability of connection between
         node i and j.
         """
         # Initialize result
-        val = np.float64(1.0)
+        i = 0
+        j = 0
+        val = 1.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return -np.infty
-                else:
-                    val /= 1 + tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return -np.infty
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
-        return log(val)
+        if val == 1.0:
+            return 0.0
+        else:
+            return log(val)
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -2417,7 +3556,7 @@ class MultiInvariantModel(MultiFitnessModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_jac_ij(d, prop_out, prop_in):
+    def p_jac_ij(d, x_lbl, x_val, y_lbl, y_val):
         """Compute the probability of connection between node i and j.
 
         param is expected to be an array with num_labels elements. All
@@ -2428,16 +3567,25 @@ class MultiInvariantModel(MultiFitnessModel):
             return 1.0, 0.0
 
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (x_i != 0) and (y_i != 0):
-                tmp = x_i * y_i
-                if isinf(tmp):
-                    return 1.0, 0.0
-                else:
-                    val += tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0, 0.0
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         val1 = d[0] * val
         if val1 == 0.0:
@@ -2466,44 +3614,59 @@ class MultiInvariantModel(MultiFitnessModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_ij(d, prop_out, prop_in, prop_dyad):
+    def p_ij(d, x_lbl, x_val, y_lbl, y_val, prop_dyad):
         """Compute the probability of connection between node i and j.
 
         param is expected to be an array with num_labels elements. All
         properties must be a tuple (indices, values) from a sparse matrix.
         """
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 1.0
-                else:
-                    val += tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
-        if val == 0.0:
-            return 0.0
-        else:
-            return -expm1(-val)
+        return -expm1(-val)
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def logp(d, prop_out, prop_in, prop_dyad):
+    def logp(d, x_lbl, x_val, y_lbl, y_val, prop_dyad):
         """Compute the log probability of connection between node i and j."""
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 0.0
-                else:
-                    val += tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 0.0
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         if val == 0.0:
             return -np.infty
@@ -2512,21 +3675,30 @@ class MultiInvariantModel(MultiFitnessModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def log1mp(d, prop_out, prop_in, prop_dyad):
+    def log1mp(d, x_lbl, x_val, y_lbl, y_val, prop_dyad):
         """Compute the log of 1 minus the probability of connection between
         node i and j.
         """
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return -np.infty
-                else:
-                    val += tmp
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return -np.infty
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         return -val
 
