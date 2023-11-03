@@ -3,6 +3,7 @@ include LICENSE.txt
 include README.rst
 include pytest.ini
 include tox.ini
+include requirements.txt
 include *.sh
 
 recursive-include src *.py
