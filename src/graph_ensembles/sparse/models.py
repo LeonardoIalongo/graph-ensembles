@@ -2,7 +2,7 @@
 network ensembles from partial information. They can be used for
 reconstruction, filtering or pattern detection among others. """
 from . import graphs
-from .solver import monotonic_newton_solver
+from ..solver import monotonic_newton_solver
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
@@ -280,9 +280,9 @@ class DiGraphEnsemble(GraphEnsemble):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
         elif sp.issparse(g):
-            adj = g.todense() != 0
+            adj = g.asformat("csr")
         elif isinstance(g, np.ndarray):
-            adj = g != 0
+            adj = sp.csr_array(g)
         else:
             raise ValueError("g input not a graph or adjacency matrix.")
 
@@ -304,7 +304,8 @@ class DiGraphEnsemble(GraphEnsemble):
             self.prop_out,
             self.prop_in,
             self.prop_dyad,
-            adj,
+            adj.indptr,
+            adj.indices,
             self.selfloops,
         )
 
@@ -361,8 +362,7 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.prop_dyad,
                 self.selfloops,
             )
-            g.adj = np.zeros((g.num_vertices, g.num_vertices), dtype=bool)
-            g.adj[rows, cols] = True
+            vals = np.ones(len(rows), dtype=bool)
         elif weights == "cremb":
             if out_strength is None:
                 s_out = self.prop_out
@@ -378,10 +378,13 @@ class DiGraphEnsemble(GraphEnsemble):
                 s_in,
                 self.selfloops,
             )
-            g.adj = np.zeros((g.num_vertices, g.num_vertices))
-            g.adj[rows, cols] = vals
         else:
             raise ValueError("Weights method not recognised or implemented.")
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_array(
+            (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+        )
 
         return g
 
@@ -471,14 +474,19 @@ class DiGraphEnsemble(GraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _likelihood(logp, log1mp, param, prop_out, prop_in, prop_dyad, adj, selfloops):
+    def _likelihood(
+        logp, log1mp, param, prop_out, prop_in, prop_dyad, adj_i, adj_j, selfloops
+    ):
         """Compute the binary log likelihood of a graph given the fitted model."""
         like = 0
         for i, p_out_i in enumerate(prop_out):
+            n = adj_i[i]
+            m = adj_i[i + 1]
+            j_list = adj_j[n:m]
             for j, p_in_j in enumerate(prop_in):
                 if (i != j) | selfloops:
                     # Check if link exists
-                    if adj[i, j] != 0:
+                    if j in j_list:
                         tmp = logp(param, p_out_i, p_in_j, prop_dyad(i, j))
                     else:
                         tmp = log1mp(param, p_out_i, p_in_j, prop_dyad(i, j))
@@ -493,8 +501,8 @@ class DiGraphEnsemble(GraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
         """Sample from the ensemble."""
-        rows = List()
-        cols = List()
+        rows = []
+        cols = []
         for i, p_out_i in enumerate(prop_out):
             for j, p_in_j in enumerate(prop_in):
                 if (i != j) | selfloops:
@@ -514,9 +522,9 @@ class DiGraphEnsemble(GraphEnsemble):
         s_tot = np.sum(s_out)
         msg = "Sum of in/out strengths not the same."
         assert np.abs(1 - np.sum(s_in) / s_tot) < 1e-6, msg
-        rows = List()
-        cols = List()
-        vals = List()
+        rows = []
+        cols = []
+        vals = []
         for i, p_out_i in enumerate(prop_out):
             for j, p_in_j in enumerate(prop_in):
                 if (i != j) | selfloops:
@@ -784,9 +792,9 @@ class RandomDiGraph(DiGraphEnsemble):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
         elif sp.issparse(g):
-            adj = g.todense()
+            adj = g.asformat("csr")
         elif isinstance(g, np.ndarray):
-            adj = g != 0
+            adj = sp.csr_array(g)
         else:
             raise ValueError("g input not a graph or adjacency matrix.")
 
@@ -801,22 +809,20 @@ class RandomDiGraph(DiGraphEnsemble):
             raise ValueError(msg)
 
         # Compute log likelihood of graph
-        if (self.param[0] == 0) and (np.count_nonzero(adj) > 0):
+        if (self.param[0] == 0) and (adj.nnz > 0):
             return -np.infty
-        if (self.param[0] == 1) and (np.count_nonzero(adj) != 0):
+        if (self.param[0] == 1) and (adj.nnz != 0):
             return -np.infty
 
-        like = np.count_nonzero(adj) * log(self.param[0])
+        like = adj.nnz * log(self.param[0])
         if selfloops:
-            like += (self.num_vertices**2 - np.count_nonzero(adj)) * log1p(
+            like += (self.num_vertices**2 - adj.nnz) * log1p(-self.param[0])
+        else:
+            like += (self.num_vertices * (self.num_vertices - 1) - adj.nnz) * log1p(
                 -self.param[0]
             )
-        else:
-            like += (
-                self.num_vertices * (self.num_vertices - 1) - np.count_nonzero(adj)
-            ) * log1p(-self.param[0])
             # Ensure that the matrix has no elements on the diagonal
-            if np.count_nonzero(adj.ravel()[:: adj.shape[1] + 1]) > 0:
+            if adj.diagonal().sum() > 0:
                 return -np.infty
 
         return like
@@ -867,10 +873,8 @@ class RandomDiGraph(DiGraphEnsemble):
             rows, cols = self._binary_sample(
                 self.param, self.num_vertices, self.selfloops
             )
-            g.adj = np.zeros((g.num_vertices, g.num_vertices), dtype=bool)
-            g.adj[rows, cols] = True
+            vals = np.ones(len(rows), dtype=bool)
         elif weights == "random":
-            g.adj = np.zeros((g.num_vertices, g.num_vertices))
             if self.discrete_weights:
                 rows, cols, vals = self._discrete_weighted_sample(
                     self.param, self.num_vertices, self.selfloops
@@ -879,9 +883,7 @@ class RandomDiGraph(DiGraphEnsemble):
                 rows, cols, vals = self._weighted_sample(
                     self.param, self.num_vertices, self.selfloops
                 )
-            g.adj[rows, cols] = vals
         elif weights == "cremb":
-            g.adj = np.zeros((g.num_vertices, g.num_vertices))
             if out_strength is None:
                 s_out = self.prop_out
             if in_strength is None:
@@ -889,9 +891,13 @@ class RandomDiGraph(DiGraphEnsemble):
             rows, cols, vals = self._cremb_sample(
                 self.param, self.num_vertices, s_out, s_in, self.selfloops
             )
-            g.adj[rows, cols] = vals
         else:
             raise ValueError("Weights method not recognised or implemented.")
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_array(
+            (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+        )
 
         return g
 
@@ -899,8 +905,8 @@ class RandomDiGraph(DiGraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def _binary_sample(param, num_v, selfloops):
         """Sample from the ensemble."""
-        rows = List()
-        cols = List()
+        rows = []
+        cols = []
         p = param[0]
         for i in range(num_v):
             for j in range(num_v):
@@ -915,9 +921,9 @@ class RandomDiGraph(DiGraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def _weighted_sample(param, num_v, selfloops):
         """Sample from the ensemble."""
-        rows = List()
-        cols = List()
-        vals = List()
+        rows = []
+        cols = []
+        vals = []
         p = param[0]
         for i in range(num_v):
             for j in range(num_v):
@@ -933,9 +939,9 @@ class RandomDiGraph(DiGraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def _discrete_weighted_sample(param, num_v, selfloops):
         """Sample from the ensemble."""
-        rows = List()
-        cols = List()
-        vals = List()
+        rows = []
+        cols = []
+        vals = []
         p = param[0]
         for i in range(num_v):
             for j in range(num_v):
@@ -954,9 +960,12 @@ class RandomDiGraph(DiGraphEnsemble):
         s_tot = np.sum(s_out)
         msg = "Sum of in/out strengths not the same."
         assert np.abs(1 - np.sum(s_in) / s_tot) < 1e-6, msg
-        rows = List()
-        cols = List()
-        vals = List()
+        rows = []
+        cols = []
+        vals = []
+        rows = []
+        cols = []
+        vals = []
         p = param[0]
         for i in range(num_v):
             for j in range(num_v):
@@ -1160,7 +1169,7 @@ class FitnessModel(DiGraphEnsemble):
         rtol : float
             Relative tolerance for the exit condition.
         max_iter : int or float
-            Maximum number of iterations.
+            Maximum number of iteration.
         verbose: boolean
             If true print debug info while iterating.
         """
@@ -1189,7 +1198,7 @@ class FitnessModel(DiGraphEnsemble):
                 self.num_edges,
                 atol=atol,
                 rtol=rtol,
-                x_l=0,
+                x_l=0.0,
                 x_u=np.infty,
                 max_iter=maxiter,
                 full_return=True,
@@ -1324,6 +1333,15 @@ class ScaleInvariantModel(FitnessModel):
         Fit the parameters of the model with the given method.
     """
 
+    def __init__(self, *args, **kwargs):
+        """Return a ScaleInvariantModel for the given graph data.
+
+        The model accepts as arguments either: a DiGraph, in which case the
+        strengths are used as fitnesses, or directly the fitness sequences (in
+        and out). The model accepts the fitness sequences as numpy arrays.
+        """
+        super().__init__(*args, **kwargs)
+
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def p_jac_ij(d, x_i, y_j):
@@ -1378,7 +1396,11 @@ class ScaleInvariantModel(FitnessModel):
         if (x_i == 0) or (y_j == 0) or (d[0] == 0):
             return 0.0
 
-        return -d[0] * x_i * y_j
+        tmp = d[0] * x_i * y_j
+        if isinf(tmp):
+            return -np.infty
+        else:
+            return -tmp
 
 
 class MultiGraphEnsemble(GraphEnsemble):
@@ -1434,11 +1456,29 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             raise Exception("Model must be fitted beforehand.")
 
         if not hasattr(self, "_exp_num_edges_label") or recompute:
+            # Transform properties to csc format to select labels quickly
+            prop_out = sp.csr_array(
+                self.tuple_list_to_csx(self.prop_out),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsc()
+            prop_out = self.csx_to_tuple_list(
+                prop_out.indptr, prop_out.indices, prop_out.data
+            )
+            prop_in = sp.csr_array(
+                self.tuple_list_to_csx(self.prop_in),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsc()
+            prop_in = self.csx_to_tuple_list(
+                prop_in.indptr, prop_in.indices, prop_in.data
+            )
+
+            # Compute measure
             self._exp_num_edges_label = self.exp_edges_label(
                 self.p_ijk,
+                self.exp_edges_layer,
                 self.param,
-                self.prop_out,
-                self.prop_in,
+                prop_out,
+                prop_in,
                 self.prop_dyad,
                 self.selfloops,
             )
@@ -1446,33 +1486,60 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         return self._exp_num_edges_label
 
     def expected_degree_by_label(self, recompute=False):
-        """Compute the expected undirected degree by label."""
+        """Compute the expected undirected degree."""
         if not hasattr(self, "_exp_degree_label") or recompute:
+            # Transform properties to csc format to select labels quickly
+            prop_out = sp.csr_array(
+                self.tuple_list_to_csx(self.prop_out),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsc()
+            prop_out = self.csx_to_tuple_list(
+                prop_out.indptr, prop_out.indices, prop_out.data
+            )
+            prop_in = sp.csr_array(
+                self.tuple_list_to_csx(self.prop_in),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsc()
+            prop_in = self.csx_to_tuple_list(
+                prop_in.indptr, prop_in.indices, prop_in.data
+            )
+
+            # Compute measure
             res = self.exp_degrees_label(
                 self.p_ijk,
                 self.param,
-                self.prop_out,
-                self.prop_in,
+                prop_out,
+                prop_in,
                 self.prop_dyad,
                 self.num_vertices,
                 self.num_labels,
                 self.selfloops,
             )
-            self._exp_degree_label = res[0]
-            self._exp_out_degree_label = res[1]
-            self._exp_in_degree_label = res[2]
+            self._exp_degree_label = sp.dok_array((self.num_vertices, self.num_labels))
+            self._exp_degree_label._update(res[0])
+            self._exp_degree_label = self._exp_degree_label.tocsr()
+            self._exp_out_degree_label = sp.dok_array(
+                (self.num_vertices, self.num_labels)
+            )
+            self._exp_out_degree_label._update(res[1])
+            self._exp_out_degree_label = self._exp_out_degree_label.tocsr()
+            self._exp_in_degree_label = sp.dok_array(
+                (self.num_vertices, self.num_labels)
+            )
+            self._exp_in_degree_label._update(res[2])
+            self._exp_in_degree_label = self._exp_in_degree_label.tocsr()
 
         return self._exp_degree_label
 
     def expected_out_degree_by_label(self, recompute=False):
-        """Compute the expected out degree by label."""
+        """Compute the expected out degree."""
         if not hasattr(self, "_exp_out_degree_label") or recompute:
             _ = self.expected_degree_by_label()
 
         return self._exp_out_degree_label
 
     def expected_in_degree_by_label(self, recompute=False):
-        """Compute the expected in degree by label."""
+        """Compute the expected in degree."""
         if not hasattr(self, "_exp_in_degree_label") or recompute:
             _ = self.expected_degree_by_label()
 
@@ -1497,32 +1564,42 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             adj = g.adjacency_matrix(directed=True, weighted=False)
             tensor = False
         elif sp.issparse(g):
-            adj = g.todense()
+            adj = g.asformat("csr")
             tensor = False
         elif isinstance(g, np.ndarray):
             if g.ndim == 3:
-                adj = g
+                adj = [sp.csr_array(g[i, :, :]) for i in range(g.shape[0])]
                 tensor = True
             elif g.ndim == 2:
-                adj = g
+                adj = sp.csr_array(g)
                 tensor = False
             else:
                 raise ValueError("Adjacency array is neither 2 nor 3 dimensional.")
-        elif isinstance(g, list) and sp.issparse(g[0]):
-            adj = [x.todense() for x in g]
+        elif isinstance(g, list):
+            adj = [sp.csr_array(x) for x in g]
             tensor = True
         else:
             raise ValueError("g input not a graph or adjacency matrix.")
 
         # Ensure dimensions are correct
-        shape = (self.num_labels, self.num_vertices, self.num_vertices)
         if tensor:
             msg = (
                 "Passed graph adjacency tensor does not have the "
-                "correct shape: {0} instead of {1}".format(adj.shape, shape)
+                "correct number of layers: {0} instead of {1}".format(
+                    len(adj), self.num_labels
+                )
             )
-            if adj.shape != shape:
+            if len(adj) != self.num_labels:
                 raise ValueError(msg)
+            for i, x in enumerate(adj):
+                if x.shape != (self.num_vertices, self.num_vertices):
+                    msg = (
+                        "Passed graph adjacency tensor does not have the "
+                        "correct shape in layer{2}: {0} instead of {1}".format(
+                            adj.shape, (self.num_vertices, self.num_vertices), i
+                        )
+                    )
+                    raise ValueError(msg)
         else:
             if adj.shape != (self.num_vertices, self.num_vertices):
                 msg = (
@@ -1535,16 +1612,38 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         # Compute log likelihood of graph
         if tensor:
-            like = self._likelihood_tensor(
-                self.logp_ijk,
-                self.log1mp_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                adj,
-                selfloops,
+            # Transform properties to csc format to select labels quickly
+            prop_out = sp.csr_array(
+                self.tuple_list_to_csx(self.prop_out),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsc()
+            prop_out = self.csx_to_tuple_list(
+                prop_out.indptr, prop_out.indices, prop_out.data
             )
+            prop_in = sp.csr_array(
+                self.tuple_list_to_csx(self.prop_in),
+                shape=(self.num_vertices, self.num_labels),
+            ).tocsc()
+            prop_in = self.csx_to_tuple_list(
+                prop_in.indptr, prop_in.indices, prop_in.data
+            )
+
+            like = np.float64(0.0)
+            for i in range(self.num_labels):
+                tmp = self._likelihood_layer(
+                    self.logp_ijk,
+                    self.log1mp_ijk,
+                    self.param[i],
+                    prop_out[i],
+                    prop_in[i],
+                    self.prop_dyad,
+                    adj[i].indptr,
+                    adj[i].indices,
+                    selfloops,
+                )
+                if isinf(tmp):
+                    return tmp
+                like += tmp
         else:
             like = self._likelihood(
                 self.logp,
@@ -1553,7 +1652,8 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                 self.prop_out,
                 self.prop_in,
                 self.prop_dyad,
-                adj,
+                adj.indptr,
+                adj.indices,
                 selfloops,
             )
 
@@ -1607,15 +1707,29 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             for i in range(g.num_labels):
                 g.label_dict[i] = i
 
+        # Transform properties to csc format to select labels quickly
+        prop_out = sp.csr_array(
+            self.tuple_list_to_csx(self.prop_out),
+            shape=(self.num_vertices, self.num_labels),
+        ).tocsc()
+        prop_out = self.csx_to_tuple_list(
+            prop_out.indptr, prop_out.indices, prop_out.data
+        )
+        prop_in = sp.csr_array(
+            self.tuple_list_to_csx(self.prop_in),
+            shape=(self.num_vertices, self.num_labels),
+        ).tocsc()
+        prop_in = self.csx_to_tuple_list(prop_in.indptr, prop_in.indices, prop_in.data)
+
         # If weights are given check that they make sense
         if out_strength_label is None:
-            s_out_l = self.prop_out
+            s_out_l = prop_out
         else:
             # Check dimensions
-            if sp.issparse(out_strength_label):
-                out_strength_label = out_strength_label.todense()
-
             if isinstance(out_strength_label, np.ndarray):
+                out_strength_label = sp.csc_array(out_strength_label)
+
+            if sp.issparse(out_strength_label):
                 msg = (
                     "Out strength by label must have shape (num_vertices, "
                     "num_labels)."
@@ -1624,16 +1738,18 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                     self.num_vertices,
                     self.num_labels,
                 ), msg
+                tmp = out_strength_label.tocsc()
+                s_out_l = self.csx_to_tuple_list(tmp.indptr, tmp.indices, tmp.data)
             else:
                 raise ValueError("Out strength by label must be an array.")
 
         if in_strength_label is None:
-            s_in_l = self.prop_in
+            s_in_l = prop_in
         else:
-            if sp.issparse(in_strength_label):
-                in_strength_label = in_strength_label.todense()
-
             if isinstance(in_strength_label, np.ndarray):
+                in_strength_label = sp.csc_array(in_strength_label)
+
+            if sp.issparse(in_strength_label):
                 msg = (
                     "In strength by label must have shape (num_vertices, "
                     "num_labels)."
@@ -1642,58 +1758,78 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                     self.num_vertices,
                     self.num_labels,
                 ), msg
+                tmp = in_strength_label.tocsc()
+                s_in_l = self.csx_to_tuple_list(tmp.indptr, tmp.indices, tmp.data)
             else:
                 raise ValueError("In strength by label must be an array.")
 
         # Sample edges by layer
-        if weights is None:
-            lbls, rows, cols = self._binary_sample_tensor(
-                self.p_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                self.selfloops,
-            )
-            vals = np.ones(len(rows), dtype=bool)
-        elif weights == "cremb":
-            lbls, rows, cols, vals = self._cremb_sample_tensor(
-                self.p_ijk,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.prop_dyad,
-                s_out_l,
-                s_in_l,
-                self.selfloops,
-            )
-        else:
-            raise ValueError("Weights method not recognised or implemented.")
+        g.adj = []
+        for i in range(self.num_labels):
+            if weights is None:
+                rows, cols = self._binary_sample_layer(
+                    self.p_ijk,
+                    self.param[i],
+                    prop_out[i],
+                    prop_in[i],
+                    self.prop_dyad,
+                    self.selfloops,
+                )
+                vals = np.ones(len(rows), dtype=bool)
+            elif weights == "cremb":
+                rows, cols, vals = self._cremb_sample_layer(
+                    self.p_ijk,
+                    self.param[i],
+                    prop_out[i],
+                    prop_in[i],
+                    self.prop_dyad,
+                    s_out_l[i],
+                    s_in_l[i],
+                    self.selfloops,
+                )
+            else:
+                raise ValueError("Weights method not recognised or implemented.")
 
-        # Convert to adjacency matrix
-        g.adj = np.zeros((g.num_labels, g.num_vertices, g.num_vertices))
-        g.adj[lbls, rows, cols] = vals
+            # Convert to adjacency matrix
+            g.adj.append(
+                sp.csr_array(
+                    (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+                )
+            )
 
         return g
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_label(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
+    def exp_edges_label(
+        p_ijk, exp_edges_layer, param, prop_out, prop_in, prop_dyad, selfloops
+    ):
         """Compute the expected number of edges with one parameter controlling
         for the density for each label.
         """
         num_labels = len(prop_out)
         exp_edges = np.zeros(num_labels, dtype=np.float64)
 
-        for k in range(num_labels):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        exp_edges[k] += p_ijk(
-                            param[k], p_out_i, p_in_j, prop_dyad(i, j)
-                        )
+        for i in range(num_labels):
+            exp_edges[i] = exp_edges_layer(
+                p_ijk, param[i], prop_out[i], prop_in[i], prop_dyad, selfloops
+            )
 
         return exp_edges
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_layer(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
+        """Compute the expected number of edges with one parameter controlling
+        for the density for each label.
+        """
+        exp_e = 0.0
+        for i, p_out_i in zip(prop_out[0], prop_out[1]):
+            for j, p_in_j in zip(prop_in[0], prop_in[1]):
+                if (i != j) | selfloops:
+                    exp_e += p_ijk(param, p_out_i, p_in_j, prop_dyad(i, j))
+
+        return exp_e
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -1701,81 +1837,133 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         p_ijk, param, prop_out, prop_in, prop_dyad, num_v, num_l, selfloops
     ):
         """Compute the expected undirected, in and out degree sequences."""
-        exp_d = np.zeros((num_v, num_l), dtype=np.float64)
-        exp_d_out = np.zeros((num_v, num_l), dtype=np.float64)
-        exp_d_in = np.zeros((num_v, num_l), dtype=np.float64)
+        exp_d = {}
+        exp_d_out = {}
+        exp_d_in = {}
 
-        for lbl in range(num_l):
-            for i in range(num_v):
-                p_out_i = prop_out[i, lbl]
-                p_in_i = prop_in[i, lbl]
-                for j in range(i + 1):
-                    p_out_j = prop_out[j, lbl]
-                    p_in_j = prop_in[j, lbl]
+        for lbl, (p_out, p_in) in enumerate(zip(prop_out, prop_in)):
+            for i, p_out_i in zip(p_out[0], p_out[1]):
+                loc_i = p_in[0] == i
+                if np.any(loc_i):
+                    p_in_i = p_in[1][loc_i][0]
+                else:
+                    p_in_i = 0.0
+
+                for j, p_in_j in zip(p_in[0], p_in[1]):
+                    loc_j = p_out[0] == j
+                    if np.any(loc_j):
+                        p_out_j = p_out[1][loc_j][0]
+                    else:
+                        p_out_j = 0.0
 
                     if i != j:
                         pij = p_ijk(param[lbl], p_out_i, p_in_j, prop_dyad(i, j))
                         pji = p_ijk(param[lbl], p_out_j, p_in_i, prop_dyad(j, i))
                         p = pij + pji - pij * pji
+                        key = (np.int64(i), np.int64(lbl))
+                        if key in exp_d:
+                            exp_d[key] += p
+                            exp_d_out[key] += pij
+                            exp_d_in[key] += pji
+                        else:
+                            exp_d[key] = p
+                            exp_d_out[key] = pij
+                            exp_d_in[key] = pji
 
-                        exp_d[i, lbl] += p
-                        exp_d[j, lbl] += p
-                        exp_d_out[i, lbl] += pij
-                        exp_d_out[j, lbl] += pji
-                        exp_d_in[i, lbl] += pji
-                        exp_d_in[j, lbl] += pij
+                        key = (np.int64(j), np.int64(lbl))
+                        if key in exp_d:
+                            exp_d[key] += p
+                            exp_d_out[key] += pji
+                            exp_d_in[key] += pij
+                        else:
+                            exp_d[key] = p
+                            exp_d_out[key] = pji
+                            exp_d_in[key] = pij
 
                     elif selfloops:
                         pii = p_ijk(param[lbl], p_out_i, p_in_j, prop_dyad(i, j))
-                        exp_d[i, lbl] += pii
-                        exp_d_out[i, lbl] += pii
-                        exp_d_in[i, lbl] += pii
+                        key = (np.int64(i), np.int64(lbl))
+                        if key in exp_d:
+                            exp_d[key] += pii
+                            exp_d_out[key] += pii
+                            exp_d_in[key] += pii
+                        else:
+                            exp_d[key] = pii
+                            exp_d_out[key] = pii
+                            exp_d_in[key] = pii
 
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _likelihood_tensor(
-        logp_ijk, log1mp_ijk, param, prop_out, prop_in, prop_dyad, adj, selfloops
+    def _likelihood_layer(
+        logp_ijk,
+        log1mp_ijk,
+        param,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        indptr,
+        indices,
+        selfloops,
     ):
-        """Compute the log likelihood for the given adjacency tensor."""
+        """Compute the log likelihood for this layer."""
         like = np.float64(0.0)
+        N = len(indptr) - 1
 
-        for k in range(adj.shape[0]):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        if adj[k, i, j] != 0:
-                            tmp = logp_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
-                        else:
-                            tmp = log1mp_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
+        # Iterate over links in adj to check that there are no links with p==0
+        for i in range(N):
+            n = indptr[i]
+            m = indptr[i + 1]
+            if n != m:
+                ind = prop_out[0] == i
+                if not np.any(ind):
+                    return -np.infty
+                if np.any(prop_out[1][ind] == 0):
+                    return -np.infty
 
-                        if isinf(tmp):
-                            return tmp
+                j_list = indices[n:m]
+                for j in j_list:
+                    ind = prop_in[0] == j
+                    if not np.any(ind):
+                        return -np.infty
+                    if np.any(prop_in[1][ind] == 0):
+                        return -np.infty
 
-                        like += tmp
+        # Now compute likelihood due to non-zero values of pijk
+        for i, out_i in zip(prop_out[0], prop_out[1]):
+            n = indptr[i]
+            m = indptr[i + 1]
+            j_list = indices[n:m]
+            for j, in_j in zip(prop_in[0], prop_in[1]):
+                if (i != j) | selfloops:
+                    # Check if link exists
+                    if j in j_list:
+                        tmp = logp_ijk(param, out_i, in_j, prop_dyad(i, j))
+                    else:
+                        tmp = log1mp_ijk(param, out_i, in_j, prop_dyad(i, j))
 
+                    if isinf(tmp):
+                        return tmp
+                    like += tmp
         return like
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _binary_sample_tensor(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
+    def _binary_sample_layer(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
         """Sample from the ensemble."""
-        lbls = List()
         rows = List()
         cols = List()
 
-        for k in range(prop_out.shape[1]):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        p = p_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
-                        if rng.random() < p:
-                            lbls.append(k)
-                            rows.append(i)
-                            cols.append(j)
+        for i, p_out_i in zip(prop_out[0], prop_out[1]):
+            for j, p_in_j in zip(prop_in[0], prop_in[1]):
+                if (i != j) | selfloops:
+                    p = p_ijk(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
 
-        return lbls, rows, cols
+        return rows, cols
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -1787,25 +1975,31 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         msg = "Sum of in/out strengths not the same."
         assert np.abs(1 - np.sum(s_in[1]) / s_tot) < 1e-6, msg
 
-        lbls = List()
         rows = List()
         cols = List()
         vals = List()
 
-        for k in range(prop_out.shape[1]):
-            for i, p_out_i in enumerate(prop_out[:, k]):
-                for j, p_in_j in enumerate(prop_in[:, k]):
-                    if (i != j) | selfloops:
-                        p = p_ijk(param[k], p_out_i, p_in_j, prop_dyad(i, j))
-                        if rng.random() < p:
-                            lbls.append(k)
-                            rows.append(i)
-                            cols.append(j)
+        for i, p_out_i in zip(prop_out[0], prop_out[1]):
+            for j, p_in_j in zip(prop_in[0], prop_in[1]):
+                if (i != j) | selfloops:
+                    p = p_ijk(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
+                        ind_out = s_out[0] == i
+                        ind_in = s_in[0] == j
+                        if np.any(ind_out) or np.any(ind_in):
                             vals.append(
-                                rng.exponential(s_out[i, k] * s_in[j, k] / (s_tot * p))
+                                rng.exponential(
+                                    s_out[1][ind_out][0]
+                                    * s_in[1][ind_in][0]
+                                    / (s_tot * p)
+                                )
                             )
+                        else:
+                            vals.append(0.0)
 
-        return lbls, rows, cols, vals
+        return rows, cols, vals
 
 
 class MultiFitnessModel(MultiDiGraphEnsemble):
@@ -1946,18 +2140,24 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         assert isinstance(self.prop_in, np.ndarray) or sp.issparse(self.prop_in), msg
         assert self.prop_in.shape == (self.num_vertices, self.num_labels), msg
 
-        # Convert to dense arrays
-        if sp.issparse(self.prop_out):
-            self.prop_out = self.prop_out.todense()
-        if sp.issparse(self.prop_in):
-            self.prop_in = self.prop_in.todense()
+        # Convert to csr matrices
+        self.prop_out = sp.csr_array(self.prop_out)
+        self.prop_in = sp.csr_array(self.prop_in)
 
         # Ensure that all fitness are positive
-        if np.any(self.prop_out < 0):
+        if np.any(self.prop_out.data < 0):
             raise ValueError("Node out properties must contain positive values only.")
 
-        if np.any(self.prop_in < 0):
+        if np.any(self.prop_in.data < 0):
             raise ValueError("Node in properties must contain positive values only.")
+
+        # Convert to list of tuples
+        self.prop_out = self.csx_to_tuple_list(
+            self.prop_out.indptr, self.prop_out.indices, self.prop_out.data
+        )
+        self.prop_in = self.csx_to_tuple_list(
+            self.prop_in.indptr, self.prop_in.indices, self.prop_in.data
+        )
 
         # If num_edges is an array check if it has a single value or
         # one for each label.
@@ -2108,9 +2308,24 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 self.param = x0.copy()
 
                 # Transform properties to csc format to select labels quickly
+                prop_out = sp.csr_array(
+                    self.tuple_list_to_csx(self.prop_out),
+                    shape=(self.num_vertices, self.num_labels),
+                ).tocsc()
+                prop_out = self.csx_to_tuple_list(
+                    prop_out.indptr, prop_out.indices, prop_out.data
+                )
+                prop_in = sp.csr_array(
+                    self.tuple_list_to_csx(self.prop_in),
+                    shape=(self.num_vertices, self.num_labels),
+                ).tocsc()
+                prop_in = self.csx_to_tuple_list(
+                    prop_in.indptr, prop_in.indices, prop_in.data
+                )
+
                 for i in range(self.num_labels):
-                    p_out = self.prop_out[:, i]
-                    p_in = self.prop_in[:, i]
+                    p_out = prop_out[i]
+                    p_in = prop_in[i]
                     num_e = self.num_edges_label[i]
 
                     sol = monotonic_newton_solver(
@@ -2209,8 +2424,8 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         """
         f = np.float64(0.0)
         jac = np.float64(0.0)
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
+        for i, p_out_i in zip(prop_out[0], prop_out[1]):
+            for j, p_in_j in zip(prop_in[0], prop_in[1]):
                 if (i != j) | selfloops:
                     p_tmp, jac_tmp = p_jac_ijk(param, p_out_i, p_in_j)
                     f += p_tmp
@@ -2227,24 +2442,37 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         properties must be a tuple (indices, values) from a sparse matrix.
         """
         # Initialize result
+        i = 0
+        j = 0
         val = np.float64(1.0)
         jac = np.float64(0.0)
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (x_i != 0) and (y_i != 0):
-                tmp = x_i * y_i
-                if d[0] == 0:
-                    # In this case pij is zero but jac is not
-                    jac += tmp
-                else:
-                    # In this case the pij is not zero
-                    tmp1 = d[0] * tmp
-                    if isinf(tmp1):
-                        return 1.0, 0.0
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (x_val[i] != 0) and (y_val[j] != 0):
+                    if d[0] == 0:
+                        # In this case pij is zero but jac is not
+                        jac += x_val[i] * y_val[j]
                     else:
-                        val /= 1 + tmp1
-                        jac += tmp / (1 + tmp1)
+                        # In this case the pij is not zero
+                        tmp = x_val[i] * y_val[j]
+                        tmp1 = d[0] * tmp
+                        if isinf(tmp1):
+                            return 1.0, 0.0
+                        else:
+                            val /= 1 + tmp1
+                            jac += tmp / (1 + tmp1)
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         return 1 - val, val * jac
 
@@ -2269,6 +2497,40 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
+    def csx_to_tuple_list(indptr, indices, data):
+        N = len(indptr) - 1
+        res = List()
+        for i in range(N):
+            m = indptr[i]
+            n = indptr[i + 1]
+            res.append((indices[m:n], data[m:n]))
+        return res
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def tuple_list_to_csx(data):
+        # Get nnz elements
+        nnz = 0
+        for x, y in data:
+            nnz += len(x)
+
+        ind_type = data[0][0].dtype
+        val_type = data[0][1].dtype
+        indptr = np.zeros(len(data) + 1, dtype=ind_type)
+        indices = np.zeros(nnz, dtype=ind_type)
+        vals = np.zeros(nnz, dtype=val_type)
+        n = 0
+        for i, (x, y) in enumerate(data):
+            m = n
+            n += len(x)
+            indptr[i + 1] = n
+            indices[m:n] = x
+            vals[m:n] = y
+
+        return vals, indices, indptr
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
     def p_ij(d, prop_out, prop_in, prop_dyad):
         """Compute the probability of connection between node i and j.
 
@@ -2276,16 +2538,29 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         properties must be a tuple (indices, values) from a sparse matrix.
         """
         # Initialize result
-        val = np.float64(1.0)
+        i = 0
+        j = 0
+        val = 1.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 1.0
-                else:
-                    val /= 1 + tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         return 1 - val
 
@@ -2294,16 +2569,29 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
     def logp(d, prop_out, prop_in, prop_dyad):
         """Compute the log probability of connection between node i and j."""
         # Initialize result
-        val = np.float64(1.0)
+        i = 0
+        j = 0
+        val = 1.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 0.0
-                else:
-                    val /= 1 + tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 0.0
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         if val == 1.0:
             return -np.infty
@@ -2317,18 +2605,34 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         node i and j.
         """
         # Initialize result
-        val = np.float64(1.0)
+        i = 0
+        j = 0
+        val = 1.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return -np.infty
-                else:
-                    val /= 1 + tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return -np.infty
+                    else:
+                        val /= 1 + tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
-        return log(val)
+        if val == 1.0:
+            return 0.0
+        else:
+            return log(val)
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -2428,16 +2732,29 @@ class MultiInvariantModel(MultiFitnessModel):
             return 1.0, 0.0
 
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (x_i != 0) and (y_i != 0):
-                tmp = x_i * y_i
-                if isinf(tmp):
-                    return 1.0, 0.0
-                else:
-                    val += tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0, 0.0
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         val1 = d[0] * val
         if val1 == 0.0:
@@ -2473,37 +2790,60 @@ class MultiInvariantModel(MultiFitnessModel):
         properties must be a tuple (indices, values) from a sparse matrix.
         """
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 1.0
-                else:
-                    val += tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 1.0
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
-        if val == 0.0:
-            return 0.0
-        else:
-            return -expm1(-val)
+        return -expm1(-val)
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def logp(d, prop_out, prop_in, prop_dyad):
         """Compute the log probability of connection between node i and j."""
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return 0.0
-                else:
-                    val += tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return 0.0
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         if val == 0.0:
             return -np.infty
@@ -2517,16 +2857,29 @@ class MultiInvariantModel(MultiFitnessModel):
         node i and j.
         """
         # Initialize result
-        val = np.float64(0.0)
+        i = 0
+        j = 0
+        val = 0.0
 
         # Loop over all possibilities
-        for i, (x_i, y_i) in enumerate(zip(prop_out, prop_in)):
-            if (d[i] != 0) and (x_i != 0) and (y_i != 0):
-                tmp = d[i] * x_i * y_i
-                if isinf(tmp):
-                    return -np.infty
-                else:
-                    val += tmp
+        x_lbl = prop_out[0]
+        x_val = prop_out[1]
+        y_lbl = prop_in[0]
+        y_val = prop_in[1]
+        while i < len(x_lbl) and j < len(y_lbl):
+            if x_lbl[i] == y_lbl[j]:
+                if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
+                    tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
+                    if isinf(tmp):
+                        return -np.infty
+                    else:
+                        val += tmp
+                i += 1
+                j += 1
+            elif x_lbl[i] < y_lbl[j]:
+                i += 1
+            else:
+                j += 1
 
         return -val
 

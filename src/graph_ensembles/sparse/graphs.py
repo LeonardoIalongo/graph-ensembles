@@ -1,16 +1,16 @@
 """ This module defines the classes of graphs that support the creation of
-ensembles and the exploration of their properties.
+ensembles and the exploration of their properties. 
 
-This version stores all properties of the graphs as numpy arrays and is 
-recommended for small or dense graphs. For large sparse graphs consider the 
-sparse module or the spark one. 
+This version stores all adjacency matrices and two dimensional properties as 
+sparse arrays and is suitable for large graphs. 
 """
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
+from numba import jit
 import warnings
 import networkx as nx
-from numba import jit
 
 
 class Graph:
@@ -176,17 +176,20 @@ class Graph:
             msg = "Zero or negative edge weights are not supported."
             assert np.all(val_array > 0), msg
 
-            self.adj = self.construct_adj(
-                src_array, dst_array, val_array, (self.num_vertices, self.num_vertices)
-            )
+            self.adj = sp.coo_array(
+                (val_array, (src_array, dst_array)),
+                shape=(self.num_vertices, self.num_vertices),
+            ).tocsr()
         else:
             self.weighted = False
-            self.adj = np.zeros((self.num_vertices, self.num_vertices), dtype=bool)
-            self.adj[src_array, dst_array] = True
+            self.adj = sp.coo_array(
+                (np.ones(src_array.shape[0], bool), (src_array, dst_array)),
+                shape=(self.num_vertices, self.num_vertices),
+            ).tocsr()
 
         # Compute undirected degree
         adj = self.adj != 0
-        adj = adj | adj.T
+        adj = adj + adj.T
         d = adj.sum(axis=1)
 
         # Warn if vertices have no edges
@@ -208,22 +211,22 @@ class Graph:
         # Ensure matrix is symmetric as this is undirected
         if weighted:
             # Symmetrize
-            adj = self.adj + self.adj.T
-
-            # Remove double count diagonal
-            adj.ravel()[:: adj.shape[1] + 1] = np.diag(self.adj)
-
+            adj = (
+                self.adj
+                + self.adj.T
+                - sp.spdiags(self.adj.diagonal(), 0, m=self.adj.shape)
+            )
         else:
             adj = self.adj != 0
-            adj = adj | adj.T
+            adj = adj + adj.T
 
-        return adj
+        return adj.tocsr()
 
     def num_edges(self, recompute=False):
         """Compute the number of edges."""
         if not hasattr(self, "_num_edges") or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=False)
-            self._num_edges = (adj.sum() + np.diag(adj).sum()) / 2
+            self._num_edges = (adj.sum() + adj.diagonal().sum()) / 2
 
         return self._num_edges
 
@@ -231,7 +234,7 @@ class Graph:
         """Compute the sum of all the weights."""
         if not hasattr(self, "_total_weight") or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=True)
-            self._total_weight = (adj.sum() + np.diag(adj).sum()) / 2
+            self._total_weight = (adj.sum() + adj.diagonal().sum()) / 2
 
         return self._total_weight
 
@@ -247,7 +250,14 @@ class Graph:
         """Compute the undirected degree sequence to and from each group."""
         if not hasattr(self, "_degree_by_group") or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=False)
-            self._degree_by_group = self.sum_by_group(adj, self.groups)
+
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64
+            )
+
+            self._degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
 
         return self._degree_by_group
 
@@ -263,7 +273,14 @@ class Graph:
         """Compute the total strength sequence to and from each group."""
         if not hasattr(self, "_strength_by_group") or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=True)
-            self._strength_by_group = self.sum_by_group(adj, self.groups)
+
+            id_arr, grp_arr, val_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups
+            )
+
+            self._strength_by_group = sp.coo_array(
+                (val_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
 
         return self._strength_by_group
 
@@ -310,27 +327,33 @@ class Graph:
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def construct_adj(src, dst, val, shape):
-        adj = np.zeros(shape, dtype=val.dtype)
-        for i, j, v in zip(src, dst, val):
-            adj[i, j] += v
-        return adj
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def sum_by_group(mat, g_arr):
-        """Sums the values of the matrix along the second axis using the
+    def sum_by_group(indptr, indices, values, g_arr, dtype=np.float64):
+        """Sums the values of the matrix along the indices axis using the
         provided grouping.
         """
-        # Initialize empty result
-        M = g_arr.max() + 1
-        res = np.zeros((mat.shape[0], M), dtype=np.int64)
+        # Get number of index of first dimension
+        N = len(indptr) - 1
+
+        # Convert indices of matrix using group dict
+        groups = [g_arr[x] for x in indices]
 
         # Count group occurrences
-        for i in range(M):
-            res[:, i] = mat[:, np.where(g_arr == i)[0]].sum(axis=1)
-
-        return res
+        id_arr = []
+        grp_arr = []
+        sum_arr = []
+        for i in range(N):
+            m = indptr[i]
+            n = indptr[i + 1]
+            gcnt = {}
+            for g, v in zip(groups[m:n], values[m:n]):
+                if g in gcnt:
+                    gcnt[g] = gcnt[g] + dtype(v)
+                else:
+                    gcnt[g] = dtype(v)
+            id_arr.extend([i] * len(gcnt.keys()))
+            grp_arr.extend(gcnt.keys())
+            sum_arr.extend(gcnt.values())
+        return id_arr, grp_arr, sum_arr
 
 
 class DiGraph(Graph):
@@ -437,16 +460,17 @@ class DiGraph(Graph):
 
         elif not directed and weighted:
             # Symmetrize
-            adj = self.adj + self.adj.T
-
-            # Remove double count diagonal
-            adj.ravel()[:: adj.shape[1] + 1] = np.diag(self.adj)
+            adj = (
+                self.adj
+                + self.adj.T
+                - sp.spdiags(self.adj.diagonal(), 0, m=self.adj.shape)
+            )
 
         else:
             adj = self.adj != 0
-            adj = adj | adj.T
+            adj = adj + adj.T
 
-        return adj
+        return adj.tocsr()
 
     def num_edges(self, recompute=False):
         """Compute the number of edges."""
@@ -486,8 +510,19 @@ class DiGraph(Graph):
         """Compute the out degree sequence to each group."""
         if not hasattr(self, "_out_degree_by_group") or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
-            self._out_degree_by_group = self.sum_by_group(adj, self.groups)
-            self._in_degree_by_group = self.sum_by_group(adj.T, self.groups)
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64
+            )
+            self._out_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
+            adj = adj.tocsc()
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64
+            )
+            self._in_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
 
         return self._out_degree_by_group
 
@@ -495,8 +530,19 @@ class DiGraph(Graph):
         """Compute the in degree sequence from each group."""
         if not hasattr(self, "_in_degree_by_group") or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
-            self._out_degree_by_group = self.sum_by_group(adj, self.groups)
-            self._in_degree_by_group = self.sum_by_group(adj.T, self.groups)
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64
+            )
+            self._out_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
+            adj = adj.tocsc()
+            id_arr, grp_arr, cnt_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups, dtype=np.int64
+            )
+            self._in_degree_by_group = sp.coo_array(
+                (cnt_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
 
         return self._in_degree_by_group
 
@@ -520,15 +566,25 @@ class DiGraph(Graph):
         """Compute the out strength sequence to each group."""
         if not hasattr(self, "_out_strength_by_group") or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=True)
-            self._out_strength_by_group = self.sum_by_group(adj, self.groups)
+            id_arr, grp_arr, val_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups
+            )
+            self._out_strength_by_group = sp.coo_array(
+                (val_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
 
         return self._out_strength_by_group
 
     def in_strength_by_group(self, recompute=False):
         """Compute the in strength sequence from each group."""
         if not hasattr(self, "_in_strength_by_group") or recompute:
-            adj = self.adjacency_matrix(directed=True, weighted=True)
-            self._in_strength_by_group = self.sum_by_group(adj.T, self.groups)
+            adj = self.adjacency_matrix(directed=True, weighted=True).tocsc()
+            id_arr, grp_arr, val_arr = self.sum_by_group(
+                adj.indptr, adj.indices, adj.data, self.groups
+            )
+            self._in_strength_by_group = sp.coo_array(
+                (val_arr, (id_arr, grp_arr)), shape=(self.num_vertices, self.num_groups)
+            ).tocsr()
 
         return self._in_strength_by_group
 
@@ -592,8 +648,6 @@ class MultiGraph(Graph):
         Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
         Type of the id (e.g. np.uint16).
-    label_dict: dict
-        Dictionary to convert original identifiers to new position id.
     label_dtype: numpy.dtype
         The data type of the label internal id.
     num_groups: int  (or None)
@@ -692,33 +746,48 @@ class MultiGraph(Graph):
         # Construct adjacency tensor with dimensions (label, src, dst)
         if weight is not None:
             val_array = e[weight].values
-            self.adj = np.zeros(
-                (self.num_labels, self.num_vertices, self.num_vertices),
-                dtype=val_array.dtype,
-            )
-            self.adj[lbl_array, src_array, dst_array] = val_array
+
+            # Define adjacency tensor as list of sparse matrices
+            self.adj = []
+            for lbl in range(self.num_labels):
+                ind = lbl_array == lbl
+                self.adj.append(
+                    sp.coo_array(
+                        (val_array[ind], (src_array[ind], dst_array[ind])),
+                        shape=(self.num_vertices, self.num_vertices),
+                    ).tocsr()
+                )
+
         else:
-            self.adj = np.zeros(
-                (self.num_labels, self.num_vertices, self.num_vertices), dtype=bool
-            )
-            self.adj[lbl_array, src_array, dst_array] = True
+            # Define adjacency tensor as list of sparse matrices
+            self.adj = []
+            for lbl in range(self.num_labels):
+                ind = lbl_array == lbl
+                self.adj.append(
+                    sp.coo_array(
+                        (
+                            np.ones(len(src_array[ind]), bool),
+                            (src_array[ind], dst_array[ind]),
+                        ),
+                        shape=(self.num_vertices, self.num_vertices),
+                    ).tocsr()
+                )
 
     def adjacency_matrix(self, directed=False, weighted=False):
         """Return the adjacency matrix of the graph."""
         # Project tensor to two dimensions
-        adj = self.adj.sum(axis=0)
+        adj = self.adj[0]
+        for lbl in range(1, self.num_labels):
+            adj += self.adj[lbl]
 
         # Ensure matrix is symmetric as this is undirected
         if weighted:
             # Symmetrize
-            adj = adj + adj.T
-
-            # Remove double count diagonal
-            adj.ravel()[:: adj.shape[1] + 1] = np.diag(adj)
+            adj = adj + adj.T - sp.spdiags(adj.diagonal(), 0, m=adj.shape)
 
         else:
             adj = adj != 0
-            adj = adj | adj.T
+            adj = adj + adj.T
 
         return adj
 
@@ -727,28 +796,28 @@ class MultiGraph(Graph):
         # Ensure matrix for each layer is symmetric as this is undirected
         if weighted:
             # Symmetrize
-            adj = self.adj + self.adj.transpose((0, 2, 1))
-
-            # Remove double count diagonal
-            diag_index = [
-                i * (adj.shape[1] + 1) - adj.shape[1] * (i // adj.shape[1])
-                for i in range(adj.shape[0] * adj.shape[1])
-            ]
-            adj.ravel()[diag_index] = np.diagonal(self.adj, axis1=1, axis2=2).ravel()
+            sym = []
+            for lbl in range(self.num_labels):
+                adj = self.adj[lbl]
+                sym.append(adj + adj.T - sp.spdiags(adj.diagonal(), 0, m=adj.shape))
 
         else:
-            adj = self.adj != 0
-            adj = adj | adj.transpose((0, 2, 1))
+            sym = []
+            for lbl in range(self.num_labels):
+                adj = self.adj[lbl] != 0
+                sym.append(adj + adj.T)
 
-        return adj
+        return sym
 
     def num_edges_label(self, recompute=False):
         """Compute the number of edges."""
         if not hasattr(self, "_num_edges_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
-            self._num_edges_label = (
-                adj.sum(axis=(1, 2)) + np.diagonal(adj, axis1=1, axis2=2).sum(axis=1)
-            ) / 2
+            ne_lbl = []
+            for lbl in range(self.num_labels):
+                ne_lbl.append((adj[lbl].nnz + adj[lbl].diagonal().sum()) / 2)
+
+            self._num_edges_label = np.array(ne_lbl)
 
         return self._num_edges_label
 
@@ -756,9 +825,11 @@ class MultiGraph(Graph):
         """Compute the sum of all the weights."""
         if not hasattr(self, "_total_weight_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
-            self._total_weight_label = (
-                adj.sum(axis=(1, 2)) + np.diagonal(adj, axis1=1, axis2=2).sum(axis=1)
-            ) / 2
+            w_lbl = []
+            for lbl in range(self.num_labels):
+                w_lbl.append((adj[lbl].sum() + adj[lbl].diagonal().sum()) / 2)
+
+            self._total_weight_label = np.array(w_lbl)
 
         return self._total_weight_label
 
@@ -766,7 +837,11 @@ class MultiGraph(Graph):
         """Compute the degree sequence by label."""
         if not hasattr(self, "_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
-            self._degree_by_label = adj.sum(axis=2).T
+            d_label = []
+            for lbl in range(self.num_labels):
+                d_label.append(adj[lbl].sum(axis=1).tolist())
+
+            self._degree_by_label = np.array(d_label).T
 
         return self._degree_by_label
 
@@ -774,7 +849,11 @@ class MultiGraph(Graph):
         """Compute the strength sequence by label."""
         if not hasattr(self, "_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
-            self._strength_by_label = adj.sum(axis=2).T
+            s_label = []
+            for lbl in range(self.num_labels):
+                s_label.append(adj[lbl].sum(axis=1).tolist())
+
+            self._strength_by_label = np.array(s_label).T
 
         return self._strength_by_label
 
@@ -802,18 +881,18 @@ class MultiGraph(Graph):
             lbl_list[i] = lbl_id
 
         # Add edges per layer
-        lbl, row, col = np.nonzero(self.adj)
-        G.add_edges_from(
-            zip(
-                row,
-                col,
-                lbl,
-                [
-                    dict(weight=i, label=lbl_list[j])
-                    for i, j in zip(self.adj[self.adj != 0].ravel(), lbl)
-                ],
+        for k in range(self.num_labels):
+            adj = self.adj[k].tocoo()
+            lbl = np.empty(adj.nnz)
+            lbl[:] = k
+            G.add_edges_from(
+                zip(
+                    adj.row,
+                    adj.col,
+                    lbl,
+                    [dict(weight=i, label=lbl_list[k]) for i in adj.data],
+                )
             )
-        )
 
         return G
 
@@ -857,8 +936,6 @@ class MultiDiGraph(MultiGraph, DiGraph):
         Dictionary to convert original identifiers to new position id.
     id_dtype: numpy.dtype
         Type of the id (e.g. np.uint16).
-    label_dict: dict
-        Dictionary to convert original identifiers to new position id.
     label_dtype: numpy.dtype
         The data type of the label internal id.
     num_groups: int  (or None)
@@ -967,21 +1044,20 @@ class MultiDiGraph(MultiGraph, DiGraph):
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""
         # Project tensor to two dimensions
-        adj = self.adj.sum(axis=0)
+        adj = self.adj[0]
+        for lbl in range(1, self.num_labels):
+            adj += self.adj[lbl]
 
         if directed and not weighted:
             adj = adj != 0
 
         elif not directed and weighted:
             # Symmetrize
-            adj = adj + adj.T
-
-            # Remove double count diagonal
-            adj.ravel()[:: adj.shape[1] + 1] = np.diag(adj)
+            adj = adj + adj.T - sp.spdiags(adj.diagonal(), 0, m=adj.shape)
 
         elif not directed and not weighted:
             adj = adj != 0
-            adj = adj | adj.T
+            adj = adj + adj.T
 
         return adj
 
@@ -991,22 +1067,22 @@ class MultiDiGraph(MultiGraph, DiGraph):
             adj = self.adj
 
         elif directed and not weighted:
-            adj = self.adj != 0
+            adj = []
+            for lbl in range(self.num_labels):
+                adj.append(self.adj[lbl] != 0)
 
         elif not directed and weighted:
             # Symmetrize
-            adj = self.adj + self.adj.transpose((0, 2, 1))
-
-            # Remove double count diagonal
-            diag_index = [
-                i * (adj.shape[1] + 1) - adj.shape[1] * (i // adj.shape[1])
-                for i in range(adj.shape[0] * adj.shape[1])
-            ]
-            adj.ravel()[diag_index] = np.diagonal(self.adj, axis1=1, axis2=2).ravel()
+            adj = []
+            for lbl in range(self.num_labels):
+                tmp = self.adj[lbl]
+                adj.append(tmp + tmp.T - sp.spdiags(tmp.diagonal(), 0, m=tmp.shape))
 
         else:
-            adj = self.adj != 0
-            adj = adj | adj.transpose((0, 2, 1))
+            adj = []
+            for lbl in range(self.num_labels):
+                tmp = self.adj[lbl] != 0
+                adj.append(tmp + tmp.T)
 
         return adj
 
@@ -1014,7 +1090,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the number of edges."""
         if not hasattr(self, "_num_edges_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            self._num_edges_label = adj.sum(axis=(1, 2))
+            self._num_edges_label = np.array([a.nnz for a in adj])
 
         return self._num_edges_label
 
@@ -1022,7 +1098,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the sum of all the weights."""
         if not hasattr(self, "_total_weight_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=True)
-            self._total_weight_label = adj.sum(axis=(1, 2))
+            self._total_weight_label = np.array([a.sum() for a in adj])
 
         return self._total_weight_label
 
@@ -1030,8 +1106,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the out degree sequence by label."""
         if not hasattr(self, "_out_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            self._out_degree_by_label = adj.sum(axis=2).T
-            self._in_degree_by_label = adj.sum(axis=1).T
+            d_label = []
+            for lbl in range(self.num_labels):
+                d_label.append(adj[lbl].sum(axis=1).tolist())
+
+            self._out_degree_by_label = np.array(d_label).T
 
         return self._out_degree_by_label
 
@@ -1039,22 +1118,35 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the in degree sequence by label."""
         if not hasattr(self, "_in_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            self._out_degree_by_label = adj.sum(axis=2).T
-            self._in_degree_by_label = adj.sum(axis=1).T
+            d_label = []
+            for lbl in range(self.num_labels):
+                d_label.append(adj[lbl].sum(axis=0).tolist())
+
+            self._in_degree_by_label = np.array(d_label).T
 
         return self._in_degree_by_label
 
     def out_strength_by_label(self, recompute=False):
         """Compute the out strength sequence by label."""
         if not hasattr(self, "_out_strength_by_label") or recompute:
-            self._out_strength_by_label = self.adj.sum(axis=2).T
+            adj = self.adjacency_tensor(directed=True, weighted=True)
+            s_label = []
+            for lbl in range(self.num_labels):
+                s_label.append(adj[lbl].sum(axis=1).tolist())
+
+            self._out_strength_by_label = np.array(s_label).T
 
         return self._out_strength_by_label
 
     def in_strength_by_label(self, recompute=False):
         """Compute the in strength sequence by label."""
         if not hasattr(self, "_in_strength_by_label") or recompute:
-            self._in_strength_by_label = self.adj.sum(axis=1).T
+            adj = self.adjacency_tensor(directed=True, weighted=True)
+            s_label = []
+            for lbl in range(self.num_labels):
+                s_label.append(adj[lbl].sum(axis=0).tolist())
+
+            self._in_strength_by_label = np.array(s_label).T
 
         return self._in_strength_by_label
 
@@ -1082,17 +1174,17 @@ class MultiDiGraph(MultiGraph, DiGraph):
             lbl_list[i] = lbl_id
 
         # Add edges per layer
-        lbl, row, col = np.nonzero(self.adj)
-        G.add_edges_from(
-            zip(
-                row,
-                col,
-                lbl,
-                [
-                    dict(weight=i, label=lbl_list[j])
-                    for i, j in zip(self.adj[self.adj != 0].ravel(), lbl)
-                ],
+        for k in range(self.num_labels):
+            adj = self.adj[k].tocoo()
+            lbl = np.empty(adj.nnz)
+            lbl[:] = k
+            G.add_edges_from(
+                zip(
+                    adj.row,
+                    adj.col,
+                    lbl,
+                    [dict(weight=i, label=lbl_list[k]) for i in adj.data],
+                )
             )
-        )
 
         return G
