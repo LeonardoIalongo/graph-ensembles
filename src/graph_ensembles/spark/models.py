@@ -322,7 +322,7 @@ class DiGraphEnsemble(GraphEnsemble):
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
-        elif isinstance(g, sp.spmatrix) or isinstance(g, sp.sparray):
+        elif sp.issparse(g):
             adj = g.asformat("csr")
         elif isinstance(g, np.ndarray):
             adj = sp.csr_matrix(g)
@@ -1039,7 +1039,7 @@ class RandomDiGraph(DiGraphEnsemble):
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
-        elif isinstance(g, sp.spmatrix) or isinstance(g, sp.sparray):
+        elif sp.issparse(g):
             adj = g.asformat("csr")
         elif isinstance(g, np.ndarray):
             adj = sp.csr_matrix(g)
@@ -2083,7 +2083,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
             tensor = False
-        elif isinstance(g, sp.spmatrix) or isinstance(g, sp.sparray):
+        elif sp.issparse(g):
             adj = g.asformat("csr")
             tensor = False
         elif isinstance(g, np.ndarray):
@@ -2241,9 +2241,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             if isinstance(out_strength_label, np.ndarray):
                 out_strength_label = sp.csc_matrix(out_strength_label)
 
-            if isinstance(out_strength_label, sp.spmatrix) or isinstance(
-                out_strength_label, sp.sparray
-            ):
+            if sp.issparse(out_strength_label):
                 msg = (
                     "Out strength by label must have shape (num_vertices, "
                     "num_labels)."
@@ -2262,9 +2260,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             if isinstance(in_strength_label, np.ndarray):
                 in_strength_label = sp.csc_matrix(in_strength_label)
 
-            if isinstance(in_strength_label, sp.spmatrix) or isinstance(
-                in_strength_label, sp.sparray
-            ):
+            if sp.issparse(in_strength_label):
                 msg = (
                     "In strength by label must have shape (num_vertices, "
                     "num_labels)."
@@ -2917,22 +2913,14 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
             "Node out properties must be a two dimensional array with "
             "shape (num_vertices, num_labels)."
         )
-        assert (
-            isinstance(self.prop_out, np.ndarray)
-            or isinstance(self.prop_out, sp.spmatrix)
-            or isinstance(self.prop_out, sp.sparray)
-        ), msg
+        assert isinstance(self.prop_out, np.ndarray) or sp.issparse(self.prop_out), msg
         assert self.prop_out.shape == (self.num_vertices, self.num_labels), msg
 
         msg = (
             "Node in properties must be a two dimensional array with "
             "shape (num_vertices, num_labels)."
         )
-        assert (
-            isinstance(self.prop_in, np.ndarray)
-            or isinstance(self.prop_in, sp.spmatrix)
-            or isinstance(self.prop_in, sp.sparray)
-        ), msg
+        assert isinstance(self.prop_in, np.ndarray) or sp.issparse(self.prop_in), msg
         assert self.prop_in.shape == (self.num_vertices, self.num_labels), msg
 
         # Convert to csr matrices

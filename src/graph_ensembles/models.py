@@ -279,7 +279,7 @@ class DiGraphEnsemble(GraphEnsemble):
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
-        elif isinstance(g, sp.spmatrix) or isinstance(g, sp.sparray):
+        elif sp.issparse(g):
             adj = g.todense() != 0
         elif isinstance(g, np.ndarray):
             adj = g != 0
@@ -783,7 +783,7 @@ class RandomDiGraph(DiGraphEnsemble):
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
-        elif isinstance(g, sp.spmatrix) or isinstance(g, sp.sparray):
+        elif sp.issparse(g):
             adj = g.todense()
         elif isinstance(g, np.ndarray):
             adj = g != 0
@@ -1496,7 +1496,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             # Extract binary adjacency matrix from graph
             adj = g.adjacency_matrix(directed=True, weighted=False)
             tensor = False
-        elif isinstance(g, sp.spmatrix) or isinstance(g, sp.sparray):
+        elif sp.issparse(g):
             adj = g.todense()
             tensor = False
         elif isinstance(g, np.ndarray):
@@ -1508,7 +1508,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                 tensor = False
             else:
                 raise ValueError("Adjacency array is neither 2 nor 3 dimensional.")
-        elif isinstance(g, list) and isinstance(g[0], sp.sp_array):
+        elif isinstance(g, list) and sp.issparse(g[0]):
             adj = [x.todense() for x in g]
             tensor = True
         else:
@@ -1612,9 +1612,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             s_out_l = self.prop_out
         else:
             # Check dimensions
-            if isinstance(out_strength_label, sp.spmatrix) or isinstance(
-                out_strength_label, sp.sparray
-            ):
+            if sp.issparse(out_strength_label):
                 out_strength_label = out_strength_label.todense()
 
             if isinstance(out_strength_label, np.ndarray):
@@ -1632,9 +1630,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         if in_strength_label is None:
             s_in_l = self.prop_in
         else:
-            if isinstance(in_strength_label, sp.spmatrix) or isinstance(
-                in_strength_label, sp.sparray
-            ):
+            if sp.issparse(in_strength_label):
                 in_strength_label = in_strength_label.todense()
 
             if isinstance(in_strength_label, np.ndarray):
@@ -1940,32 +1936,20 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
             "Node out properties must be a two dimensional array with "
             "shape (num_vertices, num_labels)."
         )
-        assert (
-            isinstance(self.prop_out, np.ndarray)
-            or isinstance(self.prop_out, sp.spmatrix)
-            or isinstance(self.prop_out, sp.sparray)
-        ), msg
+        assert isinstance(self.prop_out, np.ndarray) or sp.issparse(self.prop_out), msg
         assert self.prop_out.shape == (self.num_vertices, self.num_labels), msg
 
         msg = (
             "Node in properties must be a two dimensional array with "
             "shape (num_vertices, num_labels)."
         )
-        assert (
-            isinstance(self.prop_in, np.ndarray)
-            or isinstance(self.prop_in, sp.spmatrix)
-            or isinstance(self.prop_in, sp.sparray)
-        ), msg
+        assert isinstance(self.prop_in, np.ndarray) or sp.issparse(self.prop_in), msg
         assert self.prop_in.shape == (self.num_vertices, self.num_labels), msg
 
         # Convert to dense arrays
-        if isinstance(self.prop_out, sp.spmatrix) or isinstance(
-            self.prop_out, sp.sparray
-        ):
+        if sp.issparse(self.prop_out):
             self.prop_out = self.prop_out.todense()
-        if isinstance(self.prop_in, sp.spmatrix) or isinstance(
-            self.prop_in, sp.sparray
-        ):
+        if sp.issparse(self.prop_in):
             self.prop_in = self.prop_in.todense()
 
         # Ensure that all fitness are positive
