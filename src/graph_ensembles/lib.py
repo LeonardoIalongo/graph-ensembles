@@ -13,7 +13,7 @@ def normalise_rows(rows, clms, weights):
         m = rows[i + 1]
         vals = weights[n:m]
 
-        if (n == m):
+        if n == m:
             continue
 
         new_w[n:m] = vals / np.sum(vals)
@@ -32,20 +32,20 @@ def propagate_measure(indptr, indices, weights, meas, absorb=False):
         neighbours = indices[n:m]
         vals = weights[n:m]
 
-        if (n == m):
+        if n == m:
             if not absorb:
                 for k in range(N):
-                    update[k] += meas[i]/N
+                    update[k] += meas[i] / N
         else:
             for k in range(len(neighbours)):
                 j = neighbours[k]
-                update[j] += vals[k]*meas[i]
+                update[j] += vals[k] * meas[i]
 
     return update
 
 
 def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
-    """ Compute the pagerank for all nodes in the graph.
+    """Compute the pagerank for all nodes in the graph.
 
     Note labelled graphs are compressed, meaning that the link multiplicity
     is eliminated by summing the weights over labels. If the graph is not
@@ -75,21 +75,21 @@ def pagerank(g, alpha=0.85, max_iter=100, tol=1e-6, weighted=True):
         new_rank = propagate_measure(i, j, w, rank)
 
         # Add damping factor
-        new_rank = new_rank*alpha + (1-alpha)/N
+        new_rank = new_rank * alpha + (1 - alpha) / N
 
         # Check for convergence
         old_rank = rank
         rank = new_rank
         if np.all(np.absolute(rank - old_rank) < tol):
-            print('Converged in ', n, ' iterations!')
+            print("Converged in ", n, " iterations!")
             return rank
 
-    print('Stopped after ', n + 1, ' iterations!')
+    print("Stopped after ", n + 1, " iterations!")
     return rank
 
 
 def trophic_depth(g, final, max_iter=100, tol=1e-3):
-    """ Compute the trophic depth of each node, given the weighted graph and
+    """Compute the trophic depth of each node, given the weighted graph and
     the size of the connection to the final node (which has depth zero).
     """
     # Get adj in csc for fast propagation
@@ -111,14 +111,14 @@ def trophic_depth(g, final, max_iter=100, tol=1e-3):
         new_depth = propagate_measure(j, i, w, depth + 1, absorb=True)
 
         # Divide by total strength
-        new_depth[idx] = (final + new_depth)[idx]/strength[idx]
+        new_depth[idx] = (final + new_depth)[idx] / strength[idx]
 
         # Check for convergence
         old_depth = depth
         depth = new_depth
         if np.all(np.absolute(depth - old_depth) < tol):
-            print('Converged in ', n, ' iterations!')
+            print("Converged in ", n, " iterations!")
             return depth
 
-    print('Stopped after ', n + 1, ' iterations!')
+    print("Stopped after ", n + 1, " iterations!")
     return depth
