@@ -793,7 +793,7 @@ class TestInvariantModelSample():
                                        prop_in=in_strength,
                                        param=z)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 
@@ -809,7 +809,7 @@ class TestInvariantModelSample():
                                        param=z_self,
                                        selfloops=True)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 

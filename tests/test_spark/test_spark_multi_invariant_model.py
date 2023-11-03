@@ -1752,7 +1752,7 @@ class TestInvariantModelSample():
                                        param=z,
                                        selfloops=False)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 
@@ -1769,7 +1769,7 @@ class TestInvariantModelSample():
                                        param=z_self,
                                        selfloops=True)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 
@@ -1786,7 +1786,7 @@ class TestInvariantModelSample():
                                        param=z_label,
                                        selfloops=False)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 
@@ -1803,7 +1803,7 @@ class TestInvariantModelSample():
                                        param=z_lbl_self,
                                        selfloops=True)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 

@@ -2,6 +2,13 @@
 History
 =======
 
+0.3.0 (2023-11-03)
+------------------
+* Major update of graph classes into four new categories (Graph, DiGraph, MultiGraph, MultiDiGraph) in line with Networkx. 
+* Cleaned up models and organized in three modules (dense, sparse, spark) based on how the computations are performed and results are stored. 
+* Introduced better inheritance through Ensemble classes based on the newly defined graph classes. 
+* Added testing in spark and updated testing of MultiDiGraph Ensemble classes.  
+
 0.2.3 (2023-07-03)
 ------------------
 * Improved and corrected spark submodule.

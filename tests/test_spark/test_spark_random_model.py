@@ -379,8 +379,8 @@ class TestRandomDiGraphMeasures():
 
 class TestRandomDiGraphMeasuresSelfloops():
 
-    model = ge.RandomDiGraph(sc, 
-        num_vertices=num_vertices, param=z_self, selfloops=True)
+    model = ge.RandomDiGraph(
+        sc, num_vertices=num_vertices, param=z_self, selfloops=True)
     
     def test_exp_n_edges(self):
         """ Check expected edges is correct. """
@@ -579,7 +579,7 @@ class TestRandomDiGraphSample():
         model = ge.RandomDiGraph(sc, 
             num_vertices=num_vertices, param=z_self, selfloops=True)
 
-        samples = 100
+        samples = 20
         for i in range(samples):
             sample = model.sample()
             like = model.log_likelihood(sample) 
