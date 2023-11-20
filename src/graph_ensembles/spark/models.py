@@ -35,6 +35,12 @@ class empty_index:
     def __getitem__(self, index):
         return 1.0
 
+    def max(self):
+        return 1.0
+
+    def min(self):
+        return 1.0
+
 
 # Global function definitions
 @jit(nopython=True)  # pragma: no cover
@@ -377,17 +383,13 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # If thresholds are not given or is an int compute automatically
         if thresholds is None:
-            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
-            p_min = -expm1(
-                -self.param[0]*self.prop_out[self.prop_out != 0].min() * 
-                self.prop_in[self.prop_in != 0].min())
+            p_max = self.p_ij(self.param, self.prop_out.max(), self.prop_in.max(), None)
+            p_min = self.p_ij(self.param, self.prop_out.min(), self.prop_in.min(), None)
             thresholds = np.logspace(log(p_min), log(p_max), 20)
 
         elif isinstance(thresholds, int):
-            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
-            p_min = -expm1(
-                -self.param[0]*self.prop_out[self.prop_out != 0].min() *
-                self.prop_in[self.prop_in != 0].min())
+            p_max = self.p_ij(self.param, self.prop_out.max(), self.prop_in.max(), None)
+            p_min = self.p_ij(self.param, self.prop_out.min(), self.prop_in.min(), None)
             thresholds = np.logspace(log(p_min), log(p_max), thresholds)
 
         elif not isinstance(thresholds, np.ndarray):
@@ -1017,7 +1019,7 @@ class RandomDiGraph(DiGraphEnsemble):
                 else:
                     y = (j * step, (j + 1) * step)
                 elements.append(
-                    ((x, y), self.prop_out[x[0] : x[1]], self.prop_in[y[0] : y[1]])
+                    ((x, y), np.ones(x[1]-x[0]), np.ones(y[1]-y[0]))
                 )
 
         self.p_iter_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
@@ -1041,8 +1043,8 @@ class RandomDiGraph(DiGraphEnsemble):
         self.p_sym_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
 
         # Assign to each parallel partition the correct fitness values
-        fin = self.prop_in
-        fout = self.prop_out
+        fin = np.ones(self.num_vertices)
+        fout = np.ones(self.num_vertices)
         fmap = self.fit_map
         self.p_sym_rdd = self.p_sym_rdd.map(lambda x: fmap(x, fout, fin))
 
@@ -2314,7 +2316,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         return like
 
-    def pn_rates_multi(self, g, thresholds=None, selfloops=None):
+    def pn_rates(self, g, thresholds=None, selfloops=None):
         """Compute the likelihood a graph given the fitted model.
         Accepts as input either a graph or an adjacency matrix.
         """

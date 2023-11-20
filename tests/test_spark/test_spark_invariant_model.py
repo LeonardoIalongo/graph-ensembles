@@ -632,6 +632,31 @@ class TestInvariantModelMeasures:
         with pytest.raises(ValueError, match=msg):
             self.model.log_likelihood("dfsg")
 
+    def test_pn_rates(self):
+        """ Test positive and negative counts."""
+        adj = g.adjacency_matrix().todense()
+        thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5,
+                               0.6, 0.7, 0.8, 0.9, 1.001])
+        # Last threshold is for numerical reasons (test is less accurate)
+        tp = np.zeros(thresholds.shape, dtype=int)
+        fp = np.zeros(thresholds.shape, dtype=int)
+        tn = np.zeros(thresholds.shape, dtype=int)
+        fn = np.zeros(thresholds.shape, dtype=int)
+        for i, th in enumerate(thresholds):
+            tp[i] = np.sum(adj[p_ref >= th]) 
+            fp[i] = np.sum(1 - adj[p_ref >= th])
+            tn[i] = np.sum(1 - adj[p_ref < th])
+            fn[i] = np.sum(adj[p_ref < th])
+        # Remove selfloops
+        fp[0] -= 4
+        tn[1:] -= 4
+
+        test = self.model.pn_rates(g, thresholds=thresholds)
+        assert np.all(test[0] == tp), (test[0], tp)
+        assert np.all(test[1] == fp), (test[1], fp)
+        assert np.all(test[2] == tn), (test[2], tn)
+        assert np.all(test[3] == fn), (test[3], fn)
+
 
 class TestInvariantModelMeasuresSelfloops:
     model = ge.ScaleInvariantModel(
@@ -829,6 +854,27 @@ class TestInvariantModelMeasuresSelfloops:
         msg = "g input not a graph or adjacency matrix."
         with pytest.raises(ValueError, match=msg):
             self.model.log_likelihood("dfsg")
+
+    def test_pn_rates(self):
+        """ Test positive and negative counts."""
+        adj = g.adjacency_matrix().todense()
+        thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5,
+                               0.6, 0.7, 0.8, 0.9, 1])
+        tp = np.zeros(thresholds.shape, dtype=int)
+        fp = np.zeros(thresholds.shape, dtype=int)
+        tn = np.zeros(thresholds.shape, dtype=int)
+        fn = np.zeros(thresholds.shape, dtype=int)
+        for i, th in enumerate(thresholds):
+            tp[i] = np.sum(adj[p_self >= th]) 
+            fp[i] = np.sum(1 - adj[p_self >= th])
+            tn[i] = np.sum(1 - adj[p_self < th])
+            fn[i] = np.sum(adj[p_self < th])
+
+        test = self.model.pn_rates(g, thresholds=thresholds)
+        assert np.all(test[0] == tp), (test[0], tp)
+        assert np.all(test[1] == fp), (test[1], fp)
+        assert np.all(test[2] == tn), (test[2], tn)
+        assert np.all(test[3] == fn), (test[3], fn)
 
 
 class TestInvariantModelSample:
