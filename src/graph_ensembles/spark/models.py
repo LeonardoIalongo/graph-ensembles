@@ -364,6 +364,87 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return like
 
+    def pn_rates(self, g, thresholds=None, selfloops=None):
+        """Compute the true/false positive/negative rates for the model
+        at the given probability thresholds levels.
+        """
+
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # If thresholds are not given or is an int compute automatically
+        if thresholds is None:
+            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
+            p_min = -expm1(
+                -self.param[0]*self.prop_out[self.prop_out != 0].min() * 
+                self.prop_in[self.prop_in != 0].min())
+            thresholds = np.logspace(log(p_min), log(p_max), 20)
+
+        elif isinstance(thresholds, int):
+            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
+            p_min = -expm1(
+                -self.param[0]*self.prop_out[self.prop_out != 0].min() *
+                self.prop_in[self.prop_in != 0].min())
+            thresholds = np.logspace(log(p_min), log(p_max), thresholds)
+
+        elif not isinstance(thresholds, np.ndarray):
+            raise ValueError('Thresholds must be an array or an integer.')
+
+        if isinstance(g, graphs.Graph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(directed=True, weighted=False)
+        elif sp.issparse(g):
+            adj = g.asformat("csr")
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError("g input not a graph or adjacency matrix.")
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = (
+                "Passed graph adjacency matrix does not have the correct "
+                "shape: {0} instead of {1}".format(
+                    adj.shape, (self.num_vertices, self.num_vertices)
+                )
+            )
+            raise ValueError(msg)
+
+        # Compute log likelihood of graph
+        e_fun = self._pn_rates
+        p = self.p_ij
+        delta = self.param
+        pdyad = self.prop_dyad
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                thresholds,
+                p,
+                delta,
+                x[0][0],
+                x[0][1],
+                x[1],
+                x[2],
+                pdyad,
+                adj.indptr,
+                adj.indices,
+                selfloops,
+            )
+        )
+        tp = np.zeros(thresholds.shape, dtype=np.int64)
+        fp = np.zeros(thresholds.shape, dtype=np.int64)
+        tn = np.zeros(thresholds.shape, dtype=np.int64)
+        fn = np.zeros(thresholds.shape, dtype=np.int64)
+        res = tmp.fold((tp, fp, tn, fn),
+                       lambda x, y: (x[0] + y[0],
+                                     x[1] + y[1],
+                                     x[2] + y[2],
+                                     x[3] + y[3]))
+
+        return res[0], res[1], res[2], res[3]
+
     def sample(
         self,
         ref_g=None,
@@ -643,6 +724,54 @@ class DiGraphEnsemble(GraphEnsemble):
                     like += tmp
 
         return like
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _pn_rates(
+        thresholds,
+        pij,
+        param,
+        ind_out,
+        ind_in,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        adj_i,
+        adj_j,
+        selfloops,
+    ):
+        """Compute the binary log likelihood of a graph given the fitted model."""
+        tp = np.zeros(thresholds.shape, dtype=np.int64)
+        fp = np.zeros(thresholds.shape, dtype=np.int64)
+        tn = np.zeros(thresholds.shape, dtype=np.int64)
+        fn = np.zeros(thresholds.shape, dtype=np.int64)
+
+        for i in range(ind_out[1] - ind_out[0]):
+            ind_i = ind_out[0] + i
+            p_out_i = prop_out[i]
+            n = adj_i[ind_i]
+            m = adj_i[ind_i + 1]
+            j_list = adj_j[n:m]
+
+            for j in range(ind_in[1] - ind_in[0]):
+                ind_j = ind_in[0] + j
+                if (ind_i != ind_j) | selfloops:
+                    p_in_j = prop_in[j]
+                    p = pij(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    if ind_j in j_list:
+                        for k, th in enumerate(thresholds):
+                            if p >= th:
+                                tp[k] += 1
+                            else:
+                                fn[k] += 1
+                    else:
+                        for k, th in enumerate(thresholds):
+                            if p >= th:
+                                fp[k] += 1
+                            else:
+                                tn[k] += 1
+
+        return tp, fp, tn, fn
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -2185,6 +2314,90 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         return like
 
+    def pn_rates_multi(self, g, thresholds=None, selfloops=None):
+        """Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or an adjacency matrix.
+        """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # If thresholds are not given or is an int compute automatically
+        if thresholds is None:
+            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
+            p_min = -expm1(
+                -self.param[0]*self.prop_out[self.prop_out != 0].min() *
+                self.prop_in[self.prop_in != 0].min())
+            thresholds = np.logspace(log(p_min), log(p_max), 20)
+
+        elif isinstance(thresholds, int):
+            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
+            p_min = -expm1(
+                -self.param[0]*self.prop_out[self.prop_out != 0].min() *
+                self.prop_in[self.prop_in != 0].min())
+            thresholds = np.logspace(log(p_min), log(p_max), thresholds)
+
+        elif not isinstance(thresholds, np.ndarray):
+            raise ValueError('Thresholds must be an array or an integer.')
+
+        if isinstance(g, graphs.Graph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(directed=True, weighted=False)
+        elif sp.issparse(g):
+            adj = g.asformat("csr")
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_matrix(g)
+        else:
+            raise ValueError("g input not a graph or adjacency matrix.")
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = (
+                "Passed graph adjacency matrix does not have the correct "
+                "shape: {0} instead of {1}".format(
+                    adj.shape, (self.num_vertices, self.num_vertices)
+                )
+            )
+            raise ValueError(msg)
+
+        # Compute positive and negative rates of graph
+        e_fun = self._pn_rates
+        p = self.p_ij
+        delta = self.param
+        pdyad = self.prop_dyad
+        tmp = self.p_iter_rdd.map(
+            lambda x: e_fun(
+                thresholds,
+                p,
+                delta,
+                x[0][0],
+                x[0][1],
+                x[1].indptr,
+                x[2].indptr,
+                x[1].indices,
+                x[2].indices,
+                x[1].data,
+                x[2].data,
+                pdyad,
+                adj.indptr,
+                adj.indices,
+                selfloops,
+            )
+        )
+        tp = np.zeros(thresholds.shape, dtype=np.int64)
+        fp = np.zeros(thresholds.shape, dtype=np.int64)
+        tn = np.zeros(thresholds.shape, dtype=np.int64)
+        fn = np.zeros(thresholds.shape, dtype=np.int64)
+        res = tmp.fold((tp, fp, tn, fn),
+                       lambda x, y: (x[0] + y[0],
+                                     x[1] + y[1],
+                                     x[2] + y[2],
+                                     x[3] + y[3]))
+
+        return res[0], res[1], res[2], res[3]
+
     def sample(
         self,
         ref_g=None,
@@ -2691,6 +2904,58 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                         return tmp
                     like += tmp
         return like
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _pn_rates(
+        thresholds,
+        pij,
+        param,
+        ind_out,
+        ind_in,
+        indptr_out,
+        indptr_in,
+        lbl_out,
+        lbl_in,
+        prop_out,
+        prop_in,
+        prop_dyad,
+        adj_i,
+        adj_j,
+        selfloops,
+    ):
+        """Compute the binary log likelihood of a graph given the fitted model."""
+        tp = np.zeros(thresholds.shape, dtype=np.int64)
+        fp = np.zeros(thresholds.shape, dtype=np.int64)
+        tn = np.zeros(thresholds.shape, dtype=np.int64)
+        fn = np.zeros(thresholds.shape, dtype=np.int64)
+
+        for i in range(ind_out[1] - ind_out[0]):
+            f_out_i = ind_out[0] + i
+            f_out_l = lbl_out[indptr_out[i] : indptr_out[i + 1]]
+            f_out_v = prop_out[indptr_out[i] : indptr_out[i + 1]]
+            j_list = adj_j[adj_i[f_out_i] : adj_i[f_out_i + 1]]
+
+            for j in range(ind_in[1] - ind_in[0]):
+                f_in_j = ind_in[0] + j
+                if (f_out_i != f_in_j) | selfloops:
+                    f_in_l = lbl_in[indptr_in[j] : indptr_in[j + 1]]
+                    f_in_v = prop_in[indptr_in[j] : indptr_in[j + 1]]
+                    p = pij(param, f_out_l, f_out_v, f_in_l, f_in_v, prop_dyad(i, j))
+                    if f_in_j in j_list:
+                        for k, th in enumerate(thresholds):
+                            if p >= th:
+                                tp[k] += 1
+                            else:
+                                fn[k] += 1
+                    else:
+                        for k, th in enumerate(thresholds):
+                            if p >= th:
+                                fp[k] += 1
+                            else:
+                                tn[k] += 1
+
+        return tp, fp, tn, fn
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
