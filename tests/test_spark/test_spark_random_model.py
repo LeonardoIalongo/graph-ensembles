@@ -370,7 +370,7 @@ class TestRandomDiGraphMeasures:
         with pytest.raises(ValueError, match=msg):
             model.log_likelihood("dfsg")
 
-    def test_pn_rates(self):
+    def test_confusion_matrix(self):
         """Test positive and negative counts."""
         adj = g.adjacency_matrix().todense()
         thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1])
@@ -387,7 +387,7 @@ class TestRandomDiGraphMeasures:
         fp[0] -= 4
         tn[1:] -= 4
 
-        test = self.model.pn_rates(g, thresholds=thresholds)
+        test = self.model.confusion_matrix(g, thresholds=thresholds)
         assert np.all(test[0] == tp), (test[0], tp)
         assert np.all(test[1] == fp), (test[1], fp)
         assert np.all(test[2] == tn), (test[2], tn)
@@ -571,7 +571,7 @@ class TestRandomDiGraphMeasuresSelfloops:
         with pytest.raises(ValueError, match=msg):
             self.model.log_likelihood("dfsg")
 
-    def test_pn_rates(self):
+    def test_confusion_matrix(self):
         """Test positive and negative counts."""
         adj = g.adjacency_matrix().todense()
         thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1])
@@ -585,7 +585,7 @@ class TestRandomDiGraphMeasuresSelfloops:
             tn[i] = np.sum(1 - adj[p_self < th])
             fn[i] = np.sum(adj[p_self < th])
 
-        test = self.model.pn_rates(g, thresholds=thresholds)
+        test = self.model.confusion_matrix(g, thresholds=thresholds)
         assert np.all(test[0] == tp), (test[0], tp)
         assert np.all(test[1] == fp), (test[1], fp)
         assert np.all(test[2] == tn), (test[2], tn)

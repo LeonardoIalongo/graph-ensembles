@@ -370,7 +370,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return like
 
-    def pn_rates(self, g, thresholds=None, selfloops=None):
+    def confusion_matrix(self, g, thresholds=None, selfloops=None):
         """Compute the true/false positive/negative rates for the model
         at the given probability thresholds levels.
         """
@@ -416,7 +416,7 @@ class DiGraphEnsemble(GraphEnsemble):
             raise ValueError(msg)
 
         # Compute log likelihood of graph
-        e_fun = self._pn_rates
+        e_fun = self._confusion_matrix
         p = self.p_ij
         delta = self.param
         pdyad = self.prop_dyad
@@ -728,7 +728,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _pn_rates(
+    def _confusion_matrix(
         thresholds,
         pij,
         param,
@@ -2313,7 +2313,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         return like
 
-    def pn_rates(self, g, thresholds=None, selfloops=None):
+    def confusion_matrix(self, g, thresholds=None, selfloops=None):
         """Compute the likelihood a graph given the fitted model.
         Accepts as input either a graph or an adjacency matrix.
         """
@@ -2366,7 +2366,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             raise ValueError(msg)
 
         # Compute positive and negative rates of graph
-        e_fun = self._pn_rates
+        e_fun = self._confusion_matrix
         p = self.p_ij
         delta = self.param
         pdyad = self.prop_dyad
@@ -2909,7 +2909,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _pn_rates(
+    def _confusion_matrix(
         thresholds,
         pij,
         param,
