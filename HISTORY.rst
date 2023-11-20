@@ -2,6 +2,10 @@
 History
 =======
 
+0.3.1 (2023-11-20)
+------------------
+* Added to the spark module a function to compute the confusion matrix elements at various thresholds of the probability matrix.
+
 0.3.0 (2023-11-03)
 ------------------
 * Major update of graph classes into four new categories (Graph, DiGraph, MultiGraph, MultiDiGraph) in line with Networkx. 
