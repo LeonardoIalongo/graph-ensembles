@@ -371,16 +371,15 @@ class TestRandomDiGraphMeasures:
             model.log_likelihood("dfsg")
 
     def test_pn_rates(self):
-        """ Test positive and negative counts."""
+        """Test positive and negative counts."""
         adj = g.adjacency_matrix().todense()
-        thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5,
-                               0.6, 0.7, 0.8, 0.9, 1])
+        thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1])
         tp = np.zeros(thresholds.shape, dtype=int)
         fp = np.zeros(thresholds.shape, dtype=int)
         tn = np.zeros(thresholds.shape, dtype=int)
         fn = np.zeros(thresholds.shape, dtype=int)
         for i, th in enumerate(thresholds):
-            tp[i] = np.sum(adj[p_ref >= th]) 
+            tp[i] = np.sum(adj[p_ref >= th])
             fp[i] = np.sum(1 - adj[p_ref >= th])
             tn[i] = np.sum(1 - adj[p_ref < th])
             fn[i] = np.sum(adj[p_ref < th])
@@ -573,16 +572,15 @@ class TestRandomDiGraphMeasuresSelfloops:
             self.model.log_likelihood("dfsg")
 
     def test_pn_rates(self):
-        """ Test positive and negative counts."""
+        """Test positive and negative counts."""
         adj = g.adjacency_matrix().todense()
-        thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5,
-                               0.6, 0.7, 0.8, 0.9, 1])
+        thresholds = np.array([0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1])
         tp = np.zeros(thresholds.shape, dtype=int)
         fp = np.zeros(thresholds.shape, dtype=int)
         tn = np.zeros(thresholds.shape, dtype=int)
         fn = np.zeros(thresholds.shape, dtype=int)
         for i, th in enumerate(thresholds):
-            tp[i] = np.sum(adj[p_self >= th]) 
+            tp[i] = np.sum(adj[p_self >= th])
             fp[i] = np.sum(1 - adj[p_self >= th])
             tn[i] = np.sum(1 - adj[p_self < th])
             fn[i] = np.sum(adj[p_self < th])

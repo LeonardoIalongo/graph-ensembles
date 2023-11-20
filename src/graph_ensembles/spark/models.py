@@ -393,7 +393,7 @@ class DiGraphEnsemble(GraphEnsemble):
             thresholds = np.logspace(log(p_min), log(p_max), thresholds)
 
         elif not isinstance(thresholds, np.ndarray):
-            raise ValueError('Thresholds must be an array or an integer.')
+            raise ValueError("Thresholds must be an array or an integer.")
 
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
@@ -439,11 +439,10 @@ class DiGraphEnsemble(GraphEnsemble):
         fp = np.zeros(thresholds.shape, dtype=np.int64)
         tn = np.zeros(thresholds.shape, dtype=np.int64)
         fn = np.zeros(thresholds.shape, dtype=np.int64)
-        res = tmp.fold((tp, fp, tn, fn),
-                       lambda x, y: (x[0] + y[0],
-                                     x[1] + y[1],
-                                     x[2] + y[2],
-                                     x[3] + y[3]))
+        res = tmp.fold(
+            (tp, fp, tn, fn),
+            lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2], x[3] + y[3]),
+        )
 
         return res[0], res[1], res[2], res[3]
 
@@ -1018,9 +1017,7 @@ class RandomDiGraph(DiGraphEnsemble):
                     y = (j * step, self.num_vertices)
                 else:
                     y = (j * step, (j + 1) * step)
-                elements.append(
-                    ((x, y), np.ones(x[1]-x[0]), np.ones(y[1]-y[0]))
-                )
+                elements.append(((x, y), np.ones(x[1] - x[0]), np.ones(y[1] - y[0])))
 
         self.p_iter_rdd = self.sc.parallelize(elements, numSlices=len(elements)).cache()
 
@@ -2328,21 +2325,25 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         # If thresholds are not given or is an int compute automatically
         if thresholds is None:
-            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
+            p_max = -expm1(-self.param[0] * self.prop_out.max() * self.prop_in.max())
             p_min = -expm1(
-                -self.param[0]*self.prop_out[self.prop_out != 0].min() *
-                self.prop_in[self.prop_in != 0].min())
+                -self.param[0]
+                * self.prop_out[self.prop_out != 0].min()
+                * self.prop_in[self.prop_in != 0].min()
+            )
             thresholds = np.logspace(log(p_min), log(p_max), 20)
 
         elif isinstance(thresholds, int):
-            p_max = -expm1(-self.param[0]*self.prop_out.max()*self.prop_in.max())
+            p_max = -expm1(-self.param[0] * self.prop_out.max() * self.prop_in.max())
             p_min = -expm1(
-                -self.param[0]*self.prop_out[self.prop_out != 0].min() *
-                self.prop_in[self.prop_in != 0].min())
+                -self.param[0]
+                * self.prop_out[self.prop_out != 0].min()
+                * self.prop_in[self.prop_in != 0].min()
+            )
             thresholds = np.logspace(log(p_min), log(p_max), thresholds)
 
         elif not isinstance(thresholds, np.ndarray):
-            raise ValueError('Thresholds must be an array or an integer.')
+            raise ValueError("Thresholds must be an array or an integer.")
 
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
@@ -2392,11 +2393,10 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         fp = np.zeros(thresholds.shape, dtype=np.int64)
         tn = np.zeros(thresholds.shape, dtype=np.int64)
         fn = np.zeros(thresholds.shape, dtype=np.int64)
-        res = tmp.fold((tp, fp, tn, fn),
-                       lambda x, y: (x[0] + y[0],
-                                     x[1] + y[1],
-                                     x[2] + y[2],
-                                     x[3] + y[3]))
+        res = tmp.fold(
+            (tp, fp, tn, fn),
+            lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2], x[3] + y[3]),
+        )
 
         return res[0], res[1], res[2], res[3]
 
