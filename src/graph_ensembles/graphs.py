@@ -119,7 +119,7 @@ class Graph:
             self.id_dict = self.generate_id_dict(v, "_node", check_unique=True)
 
             # Create index with new id value and sort
-            v = v.set_index(v["_node"].apply(lambda x: self.id_dict.get(x)).values)
+            v = v.set_index(v["_node"].map(lambda x: self.id_dict.get(x)).values)
             v = v.sort_index()
 
         except ValueError as err:
@@ -141,7 +141,7 @@ class Graph:
             self.group_dtype = np.dtype("u" + str(num_bytes))
             self.groups = (
                 v["_group"]
-                .apply(lambda x: self.group_dict.get(x))
+                .map(lambda x: self.group_dict.get(x))
                 .values.astype(self.group_dtype)
             )
 
@@ -157,8 +157,8 @@ class Graph:
             raise ValueError("src and dst can be either both lists or str.")
 
         msg = "Some vertices in e are not in v."
-        e["_src"] = e["_src"].apply(lambda x: self.id_dict.get(x))
-        e["_dst"] = e["_dst"].apply(lambda x: self.id_dict.get(x))
+        e["_src"] = e["_src"].map(lambda x: self.id_dict.get(x))
+        e["_dst"] = e["_dst"].map(lambda x: self.id_dict.get(x))
 
         # Check for nans
         assert not (np.any(np.isnan(e["_src"])) or np.any(np.isnan(e["_dst"]))), msg
@@ -175,10 +175,11 @@ class Graph:
             # Ensure all weights are positive
             msg = "Zero or negative edge weights are not supported."
             assert np.all(val_array > 0), msg
-
-            self.adj = self.construct_adj(
-                src_array, dst_array, val_array, (self.num_vertices, self.num_vertices)
+            self.adj = np.zeros(
+                (self.num_vertices, self.num_vertices), dtype=val_array.dtype
             )
+            self.adj[src_array, dst_array] = val_array
+
         else:
             self.weighted = False
             self.adj = np.zeros((self.num_vertices, self.num_vertices), dtype=bool)
@@ -307,14 +308,6 @@ class Graph:
             id_dict[x] = i
 
         return id_dict
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def construct_adj(src, dst, val, shape):
-        adj = np.zeros(shape, dtype=val.dtype)
-        for i, j, v in zip(src, dst, val):
-            adj[i, j] += v
-        return adj
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -684,7 +677,7 @@ class MultiGraph(Graph):
         self.label_dtype = np.dtype("u" + str(num_bytes))
 
         # Convert labels to construct adjacency matrix by layer
-        e["_label"] = e["_label"].apply(lambda x: self.label_dict.get(x))
+        e["_label"] = e["_label"].map(lambda x: self.label_dict.get(x))
         lbl_array = e["_label"].values.astype(self.label_dtype)
         src_array = e["_src"].values.astype(self.id_dtype)
         dst_array = e["_dst"].values.astype(self.id_dtype)

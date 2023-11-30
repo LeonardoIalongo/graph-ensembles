@@ -33,5 +33,11 @@ setup(
     ],
     packages=["graph_ensembles", "graph_ensembles.sparse", "graph_ensembles.spark"],
     package_dir={"": "src"},
-    install_requires=["numpy>=1.22", "numba>=0.56", "scipy>=1.9", "pandas>=1.1"],
+    install_requires=[
+        "numpy>=1.22", 
+        "numba>=0.56", 
+        "scipy>=1.9", 
+        "pandas>=1.1",
+        "networkx>=3.0"
+    ],
 )

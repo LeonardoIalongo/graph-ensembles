@@ -119,7 +119,7 @@ class Graph:
             self.id_dict = self.generate_id_dict(v, "_node", check_unique=True)
 
             # Create index with new id value and sort
-            v = v.set_index(v["_node"].apply(lambda x: self.id_dict.get(x)).values)
+            v = v.set_index(v["_node"].map(lambda x: self.id_dict.get(x)).values)
             v = v.sort_index()
 
         except ValueError as err:
@@ -141,7 +141,7 @@ class Graph:
             self.group_dtype = np.dtype("u" + str(num_bytes))
             self.groups = (
                 v["_group"]
-                .apply(lambda x: self.group_dict.get(x))
+                .map(lambda x: self.group_dict.get(x))
                 .values.astype(self.group_dtype)
             )
 
@@ -157,8 +157,8 @@ class Graph:
             raise ValueError("src and dst can be either both lists or str.")
 
         msg = "Some vertices in e are not in v."
-        e["_src"] = e["_src"].apply(lambda x: self.id_dict.get(x))
-        e["_dst"] = e["_dst"].apply(lambda x: self.id_dict.get(x))
+        e["_src"] = e["_src"].map(lambda x: self.id_dict.get(x))
+        e["_dst"] = e["_dst"].map(lambda x: self.id_dict.get(x))
 
         # Check for nans
         assert not (np.any(np.isnan(e["_src"])) or np.any(np.isnan(e["_dst"]))), msg
@@ -738,7 +738,7 @@ class MultiGraph(Graph):
         self.label_dtype = np.dtype("u" + str(num_bytes))
 
         # Convert labels to construct adjacency matrix by layer
-        e["_label"] = e["_label"].apply(lambda x: self.label_dict.get(x))
+        e["_label"] = e["_label"].map(lambda x: self.label_dict.get(x))
         lbl_array = e["_label"].values.astype(self.label_dtype)
         src_array = e["_src"].values.astype(self.id_dtype)
         dst_array = e["_dst"].values.astype(self.id_dtype)
@@ -837,11 +837,11 @@ class MultiGraph(Graph):
         """Compute the degree sequence by label."""
         if not hasattr(self, "_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
-            d_label = []
+            d_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                d_label.append(adj[lbl].sum(axis=1).tolist())
+                d_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._degree_by_label = np.array(d_label).T
+            self._degree_by_label = d_label.T.tocsr()
 
         return self._degree_by_label
 
@@ -849,11 +849,11 @@ class MultiGraph(Graph):
         """Compute the strength sequence by label."""
         if not hasattr(self, "_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
-            s_label = []
+            s_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                s_label.append(adj[lbl].sum(axis=1).tolist())
+                s_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._strength_by_label = np.array(s_label).T
+            self._strength_by_label = s_label.T.tocsr()
 
         return self._strength_by_label
 
@@ -1106,11 +1106,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the out degree sequence by label."""
         if not hasattr(self, "_out_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            d_label = []
+            d_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                d_label.append(adj[lbl].sum(axis=1).tolist())
+                d_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._out_degree_by_label = np.array(d_label).T
+            self._out_degree_by_label = d_label.T.tocsr()
 
         return self._out_degree_by_label
 
@@ -1118,11 +1118,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the in degree sequence by label."""
         if not hasattr(self, "_in_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            d_label = []
+            d_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                d_label.append(adj[lbl].sum(axis=0).tolist())
+                d_label[lbl, :] = adj[lbl].sum(axis=0)
 
-            self._in_degree_by_label = np.array(d_label).T
+            self._in_degree_by_label = d_label.T.tocsr()
 
         return self._in_degree_by_label
 
@@ -1130,11 +1130,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the out strength sequence by label."""
         if not hasattr(self, "_out_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=True)
-            s_label = []
+            s_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                s_label.append(adj[lbl].sum(axis=1).tolist())
+                s_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._out_strength_by_label = np.array(s_label).T
+            self._out_strength_by_label = s_label.T.tocsr()
 
         return self._out_strength_by_label
 
@@ -1142,11 +1142,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the in strength sequence by label."""
         if not hasattr(self, "_in_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=True)
-            s_label = []
+            s_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                s_label.append(adj[lbl].sum(axis=0).tolist())
+                s_label[lbl, :] = adj[lbl].sum(axis=0)
 
-            self._in_strength_by_label = np.array(s_label).T
+            self._in_strength_by_label = s_label.T.tocsr()
 
         return self._in_strength_by_label
 
