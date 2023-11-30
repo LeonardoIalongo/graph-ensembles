@@ -381,8 +381,7 @@ class Graph:
 
         return res
 
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
+    @staticmethod  # pragma: no cover
     def av_nn_prop(adj, prop, selfloops):
         """Computes the sum of the nearest neighbours' properties."""
         # If no self loops remove diagonal
@@ -392,7 +391,7 @@ class Graph:
         # Compute sum
         res = adj.dot(prop)
 
-        return res
+        return res.astype(np.float64)
 
 
 class DiGraph(Graph):

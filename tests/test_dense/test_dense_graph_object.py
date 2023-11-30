@@ -198,6 +198,43 @@ class TestGraph:
         assert np.all(s_test == s), s_test
         assert np.all(g._strength_by_group == s), g._strength_by_group
 
+    def test_av_nn_prop_ones(self):
+        g = ge.Graph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        prop = np.ones(g.num_vertices)
+        avnn = g.average_nn_property(prop)
+
+        assert np.all(avnn == prop), avnn
+
+    def test_av_nn_prop_zeros(self):
+        g = ge.Graph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        prop = np.zeros(g.num_vertices)
+        avnn = g.average_nn_property(prop)
+
+        assert np.all(avnn == 0), avnn
+
+    def test_av_nn_prop_scale(self):
+        g = ge.Graph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        prop = np.arange(g.num_vertices)
+        avnn = g.average_nn_property(prop)
+        test = np.array([1.5, 1. , 0.5])
+
+        assert np.all(avnn == test), avnn
+
+    def test_av_nn_deg(self):
+        g = ge.Graph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        avnn = g.average_nn_degree()
+        test = np.array([2, 2, 2])
+
+        assert np.all(avnn == test), avnn
+
     def test_vertices_with_no_edge(self):
         v = pd.DataFrame([["ING"], ["ABN"], ["BNP"], ["RAB"]], columns=["name"])
 
@@ -582,6 +619,54 @@ class TestDiGraph:
 
         assert np.all(s_test == s), s_test
         assert np.all(g._in_strength_by_group == s), g._in_strength_by_group
+
+    def test_av_nn_prop_ones(self):
+        g = ge.DiGraph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        prop = np.ones(g.num_vertices)
+        avnn = g.average_nn_property(prop)
+
+        assert np.all(avnn == prop), avnn
+
+    def test_av_nn_prop_zeros(self):
+        g = ge.DiGraph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        prop = np.zeros(g.num_vertices)
+        avnn = g.average_nn_property(prop)
+
+        assert np.all(avnn == 0), avnn
+
+    def test_av_nn_prop_scale(self):
+        g = ge.DiGraph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        prop = np.arange(g.num_vertices)
+        avnn = g.average_nn_property(prop)
+        test = np.array([1, 1, 0])
+
+        assert np.all(avnn == test), avnn
+
+    def test_av_nn_deg(self):
+        g = ge.DiGraph(
+            self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
+        )
+        avnn = g.average_nn_degree(ddir='out', ndir='out')
+        test = np.array([2, 1, 1])
+        assert np.all(avnn == test), avnn
+        avnn = g.average_nn_degree(ddir='out', ndir='in')
+        test = np.array([1.5, 1, 2])
+        assert np.all(avnn == test), avnn
+        avnn = g.average_nn_degree(ddir='in', ndir='out')
+        test = np.array([1, 1.5, 2])
+        assert np.all(avnn == test), avnn
+        avnn = g.average_nn_degree(ddir='in', ndir='in')
+        test = np.array([1, 2, 1])
+        assert np.all(avnn == test), avnn
+        avnn = g.average_nn_degree(ddir='out-in', ndir='out-in')
+        test = np.array([2, 2, 2])
+        assert np.all(avnn == test), avnn
 
     def test_multi_id_init(self):
         v = pd.DataFrame(

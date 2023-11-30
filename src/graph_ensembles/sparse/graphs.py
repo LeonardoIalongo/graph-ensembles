@@ -419,7 +419,7 @@ class Graph:
         """Computes the sum of the nearest neighbours' properties."""
         # Get number of index of first dimension
         N = len(indptr) - 1
-        res = np.zeros(prop.shape, dtype=prop.dtype)
+        res = np.zeros(prop.shape, dtype=np.float64)
 
         for i in range(N):
             m = indptr[i]
@@ -692,7 +692,7 @@ class DiGraph(Graph):
             adj = self.adjacency_matrix(directed=True, weighted=False)
         elif ndir == "in":
             deg = self.in_degree(recompute=deg_recompute)
-            adj = self.adjacency_matrix(directed=True, weighted=False).T
+            adj = self.adjacency_matrix(directed=True, weighted=False).tocsc()
         elif ndir == "out-in":
             deg = self.degree(recompute=deg_recompute)
             adj = self.adjacency_matrix(directed=False, weighted=False)
@@ -704,7 +704,7 @@ class DiGraph(Graph):
 
         # It is necessary to select the elements or pickling will fail
         av_nn = self.av_nn_prop(adj.indptr, adj.indices, prop, selfloops)
-
+        
         # Test that mask is the same
         ind = deg != 0
         msg = "Got a av_nn for an empty neighbourhood."
