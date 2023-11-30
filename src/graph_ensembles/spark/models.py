@@ -233,7 +233,7 @@ class DiGraphEnsemble(GraphEnsemble):
         return self._exp_in_degree
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -286,7 +286,7 @@ class DiGraphEnsemble(GraphEnsemble):
         self,
         ddir="out",
         ndir="out",
-        selfloops=None,
+        selfloops=False,
         deg_recompute=False,
         recompute=None,
     ):
@@ -1104,7 +1104,7 @@ class RandomDiGraph(DiGraphEnsemble):
         return self.expected_out_degree(recompute=recompute)
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -2097,7 +2097,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         return self._exp_in_degree_label
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
@@ -2164,7 +2164,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         self,
         ddir="out",
         ndir="out",
-        selfloops=None,
+        selfloops=False,
         deg_recompute=False,
         recompute=None,
     ):

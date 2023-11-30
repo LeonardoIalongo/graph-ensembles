@@ -184,7 +184,7 @@ class DiGraphEnsemble(GraphEnsemble):
         return self._exp_in_degree
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
