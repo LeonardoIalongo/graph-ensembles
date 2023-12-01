@@ -247,8 +247,13 @@ class DiGraphEnsemble(GraphEnsemble):
             )
             raise ValueError(msg)
 
+        # Set selfloops option
+        tmp_self = self.selfloops
         if selfloops is None:
             selfloops = self.selfloops
+        elif selfloops != self.selfloops:
+            deg_recompute = True
+            self.selfloops = selfloops
 
         # Compute correct expected degree
         if ndir == "out":
@@ -280,6 +285,16 @@ class DiGraphEnsemble(GraphEnsemble):
         # Average results
         av_nn[ind] = av_nn[ind] / deg[ind]
 
+        # Restore model self-loops properties if they have been modified
+        if tmp_self != self.selfloops:
+            self.selfloops = tmp_self 
+            if ndir == "out":
+                del self._exp_out_degree
+            elif ndir == "in":
+                del self._exp_in_degree
+            elif ndir == "out-in":
+                del self._exp_degree
+
         return av_nn
 
     def expected_av_nn_degree(
@@ -297,6 +312,14 @@ class DiGraphEnsemble(GraphEnsemble):
         name = "exp_av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
 
         if not hasattr(self, name) or recompute or deg_recompute:
+            # Set selfloops option
+            tmp_self = self.selfloops
+            if selfloops is None:
+                selfloops = self.selfloops
+            elif selfloops != self.selfloops:
+                deg_recompute = True
+                self.selfloops = selfloops
+
             # Compute correct expected degree
             if ddir == "out":
                 deg = self.expected_out_degree(recompute=deg_recompute)
@@ -312,6 +335,29 @@ class DiGraphEnsemble(GraphEnsemble):
                 deg, ndir=ndir, selfloops=selfloops, deg_recompute=False
             )
             setattr(self, name, res)
+
+            # Restore model self-loops properties if they have been modified
+            if tmp_self != self.selfloops:
+                self.selfloops = tmp_self 
+                if ndir == "out":
+                    if hasattr(self, '_exp_out_degree'):
+                        del self._exp_out_degree
+                elif ndir == "in":
+                    if hasattr(self, '_exp_in_degree'):
+                        del self._exp_in_degree
+                elif ndir == "out-in":
+                    if hasattr(self, '_exp_degree'):
+                        del self._exp_degree
+
+                if ddir == "out":
+                    if hasattr(self, '_exp_out_degree'):
+                        del self._exp_out_degree
+                elif ddir == "in":
+                    if hasattr(self, '_exp_in_degree'):
+                        del self._exp_in_degree
+                elif ddir == "out-in":
+                    if hasattr(self, '_exp_degree'):
+                        del self._exp_degree
 
         return getattr(self, name)
 
@@ -1084,10 +1130,10 @@ class RandomDiGraph(DiGraphEnsemble):
     def expected_degree(self, recompute=False):
         """Compute the expected undirected degree."""
         d = np.empty(self.num_vertices, dtype=np.float64)
+        d[:] = (2 * self.param[0] - self.param[0] ** 2) * (self.num_vertices - 1)
         if self.selfloops:
-            d[:] = (2 * self.param[0] - self.param[0] ** 2) * self.num_vertices
-        else:
-            d[:] = (2 * self.param[0] - self.param[0] ** 2) * (self.num_vertices - 1)
+            d[:] += self.param[0]
+            
         return d
 
     def expected_out_degree(self, recompute=False):
@@ -1118,8 +1164,13 @@ class RandomDiGraph(DiGraphEnsemble):
             )
             raise ValueError(msg)
 
+        # Set selfloops option
+        tmp_self = self.selfloops
         if selfloops is None:
             selfloops = self.selfloops
+        elif selfloops != self.selfloops:
+            deg_recompute = True
+            self.selfloops = selfloops
 
         # Compute correct expected degree
         if ndir == "out":
@@ -1132,15 +1183,15 @@ class RandomDiGraph(DiGraphEnsemble):
             raise ValueError("Neighbourhood direction not recognised.")
 
         # It is necessary to select the elements or pickling will fail
-        av_nn = np.empty(self.num_vertices, dtype=np.float64)
+        av_nn = np.empty(prop.shape, dtype=np.float64)
         if (ndir == "out") or (ndir == "in"):
-            av_nn[:] = np.sum(self.param[0] * prop)
+            av_nn[:] = np.sum(self.param[0] * prop, axis=0)
             if not self.selfloops:
-                av_nn += -self.param[0] * prop
+                av_nn -= self.param[0] * prop
         elif ndir == "out-in":
-            av_nn[:] = np.sum((2 * self.param[0] - self.param[0] ** 2) * prop)
+            av_nn[:] = np.sum((2 * self.param[0] - self.param[0] ** 2) * prop, axis=0)
             if not self.selfloops:
-                av_nn += -(2 * self.param[0] - self.param[0] ** 2) * prop
+                av_nn -= (2 * self.param[0] - self.param[0] ** 2) * prop
         else:
             raise ValueError("Direction of neighbourhood not right.")
 
@@ -1151,6 +1202,10 @@ class RandomDiGraph(DiGraphEnsemble):
 
         # Average results
         av_nn[ind] = av_nn[ind] / deg[ind]
+
+        # Restore model self-loops properties if they have been modified
+        if tmp_self != self.selfloops:
+            self.selfloops = tmp_self 
 
         return av_nn
 
