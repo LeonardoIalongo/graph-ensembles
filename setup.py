@@ -11,7 +11,7 @@ setup(
     author="Leonardo Niccolò Ialongo",
     author_email="leonardo.ialongo@gmail.com",
     python_requires=">=3.0",
-    version="0.3.1",
+    version="0.3.2",
     url="https://github.com/LeonardoIalongo/graph-ensembles",
     description=(
         "The graph ensemble package contains a set of methods to"
@@ -33,5 +33,11 @@ setup(
     ],
     packages=["graph_ensembles", "graph_ensembles.sparse", "graph_ensembles.spark"],
     package_dir={"": "src"},
-    install_requires=["numpy>=1.22", "numba>=0.56", "scipy>=1.9", "pandas>=1.1"],
+    install_requires=[
+        "numpy>=1.22",
+        "numba>=0.56",
+        "scipy>=1.9",
+        "pandas>=1.1",
+        "networkx>=3.0",
+    ],
 )

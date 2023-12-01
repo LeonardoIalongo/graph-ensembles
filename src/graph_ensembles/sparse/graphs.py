@@ -57,6 +57,10 @@ class Graph:
         Compute the total strength sequence.
     strength_by_group:
         Compute the total strength sequence by group as a 2D array.
+    average_nn_property:
+        Compute the average nearest neighbour property of each node.
+    average_nn_degree:
+        Compute the average nearest neighbour degree of each node.
     adjacency_matrix:
         Return the adjacency matrix of the graph.
     to_networkx:
@@ -119,7 +123,7 @@ class Graph:
             self.id_dict = self.generate_id_dict(v, "_node", check_unique=True)
 
             # Create index with new id value and sort
-            v = v.set_index(v["_node"].apply(lambda x: self.id_dict.get(x)).values)
+            v = v.set_index(v["_node"].map(lambda x: self.id_dict.get(x)).values)
             v = v.sort_index()
 
         except ValueError as err:
@@ -141,7 +145,7 @@ class Graph:
             self.group_dtype = np.dtype("u" + str(num_bytes))
             self.groups = (
                 v["_group"]
-                .apply(lambda x: self.group_dict.get(x))
+                .map(lambda x: self.group_dict.get(x))
                 .values.astype(self.group_dtype)
             )
 
@@ -157,8 +161,8 @@ class Graph:
             raise ValueError("src and dst can be either both lists or str.")
 
         msg = "Some vertices in e are not in v."
-        e["_src"] = e["_src"].apply(lambda x: self.id_dict.get(x))
-        e["_dst"] = e["_dst"].apply(lambda x: self.id_dict.get(x))
+        e["_src"] = e["_src"].map(lambda x: self.id_dict.get(x))
+        e["_dst"] = e["_dst"].map(lambda x: self.id_dict.get(x))
 
         # Check for nans
         assert not (np.any(np.isnan(e["_src"])) or np.any(np.isnan(e["_dst"]))), msg
@@ -284,6 +288,60 @@ class Graph:
 
         return self._strength_by_group
 
+    def average_nn_property(self, prop, selfloops=False, deg_recompute=False):
+        """Computes the nearest neighbour average of
+        the property array. The array must have the first dimension
+        corresponding to the vertex index.
+        """
+        # Check first dimension of property array is correct
+        if prop.shape[0] != self.num_vertices:
+            msg = (
+                "Property array must have first dimension size be equal to"
+                " the number of vertices."
+            )
+            raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # Compute correct degree
+        deg = self.degree(recompute=deg_recompute)
+
+        if sp.issparse(prop):
+            prop = prop.todense()
+
+        # It is necessary to select the elements or pickling will fail
+        adj = self.adjacency_matrix(directed=False, weighted=False)
+        av_nn = self.av_nn_prop(adj.indptr, adj.indices, prop, selfloops)
+
+        # Test that mask is the same
+        ind = deg != 0
+        msg = "Got a av_nn for an empty neighbourhood."
+        assert np.all(av_nn[~ind] == 0), msg
+
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def average_nn_degree(self, selfloops=False, recompute=False, deg_recompute=False):
+        """Computes the average nearest neighbour degree of each node."""
+        # Compute property name
+        name = "av_nn_degree"
+        if not hasattr(self, name) or recompute or deg_recompute:
+            if selfloops is None:
+                selfloops = self.selfloops
+
+            # Compute correct degree
+            deg = self.degree(recompute=deg_recompute)
+
+            res = self.average_nn_property(
+                deg, selfloops=selfloops, deg_recompute=False
+            )
+            setattr(self, name, res)
+
+        return getattr(self, name)
+
     def to_networkx(self):
         """Return a networkx Graph object for this graph."""
         # Initialize Graph object
@@ -355,6 +413,23 @@ class Graph:
             sum_arr.extend(gcnt.values())
         return id_arr, grp_arr, sum_arr
 
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def av_nn_prop(indptr, indices, prop, selfloops):
+        """Computes the sum of the nearest neighbours' properties."""
+        # Get number of index of first dimension
+        N = len(indptr) - 1
+        res = np.zeros(prop.shape, dtype=np.float64)
+
+        for i in range(N):
+            m = indptr[i]
+            n = indptr[i + 1]
+            for j in indices[m:n]:
+                if (i != j) or selfloops:
+                    res[i] += prop[j]
+
+        return res
+
 
 class DiGraph(Graph):
     """General class for directed graphs.
@@ -415,6 +490,10 @@ class DiGraph(Graph):
         Compute the out strength sequence by group as a 2D array.
     in_strength_by_group:
         Compute the in strength sequence by group as a 2D array.
+    average_nn_property:
+        Compute the average nearest neighbour property of each node.
+    average_nn_degree:
+        Compute the average nearest neighbour degree of each node.
     adjacency_matrix:
         Return the adjacency matrix of the graph.
     to_networkx:
@@ -588,6 +667,91 @@ class DiGraph(Graph):
 
         return self._in_strength_by_group
 
+    def average_nn_property(
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
+    ):
+        """Computes the nearest neighbour average of the property array.
+        The array must have the first dimension corresponding to the vertex
+        index. It expects one of three options for the neighbourhood
+        direction: 'out', 'in', 'out-in'. The last corresponds to the undirected case.
+        """
+        # Check first dimension of property array is correct
+        if prop.shape[0] != self.num_vertices:
+            msg = (
+                "Property array must have first dimension size be equal to"
+                " the number of vertices."
+            )
+            raise ValueError(msg)
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # Compute correct degree
+        if ndir == "out":
+            deg = self.out_degree(recompute=deg_recompute)
+            adj = self.adjacency_matrix(directed=True, weighted=False)
+        elif ndir == "in":
+            deg = self.in_degree(recompute=deg_recompute)
+            adj = self.adjacency_matrix(directed=True, weighted=False).tocsc()
+        elif ndir == "out-in":
+            deg = self.degree(recompute=deg_recompute)
+            adj = self.adjacency_matrix(directed=False, weighted=False)
+        else:
+            raise ValueError("Neighbourhood direction not recognised.")
+
+        if sp.issparse(prop):
+            prop = prop.todense()
+
+        # It is necessary to select the elements or pickling will fail
+        av_nn = self.av_nn_prop(adj.indptr, adj.indices, prop, selfloops)
+
+        # Test that mask is the same
+        ind = deg != 0
+        msg = "Got a av_nn for an empty neighbourhood."
+        assert np.all(av_nn[~ind] == 0), msg
+
+        # Average results
+        av_nn[ind] = av_nn[ind] / deg[ind]
+
+        return av_nn
+
+    def average_nn_degree(
+        self,
+        ndir="out",
+        ddir="out",
+        selfloops=False,
+        recompute=False,
+        deg_recompute=False,
+    ):
+        """Computes the average nearest neighbour degree of each node.
+        It expects one of three options for the degree direction and the
+        neighbourhood direction: 'out', 'in', 'out-in'. The last corresponds
+        to the undirected case.
+        """
+        # Compute property name
+        name = "av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
+        if not hasattr(self, name) or recompute or deg_recompute:
+            if selfloops is None:
+                selfloops = self.selfloops
+
+            # Compute correct degree
+            if ddir == "out":
+                deg = self.out_degree(recompute=deg_recompute)
+            elif ddir == "in":
+                deg = self.in_degree(recompute=deg_recompute)
+            elif ddir == "out-in":
+                deg = self.degree(recompute=deg_recompute)
+            else:
+                raise ValueError("Degree type not recognised.")
+
+            # It is necessary to select the elements or pickling will fail
+            res = self.average_nn_property(
+                deg, ndir=ndir, selfloops=selfloops, deg_recompute=False
+            )
+            setattr(self, name, res)
+
+        return getattr(self, name)
+
     def to_networkx(self, original=False):
         """Return a networkx DiGraph object for this graph."""
         # Initialize DiGraph object
@@ -683,6 +847,10 @@ class MultiGraph(Graph):
         Compute the strength of each vertex by label.
     strength_by_group:
         Compute the total strength sequence by group as a 2D array.
+    average_nn_property:
+        Compute the average nearest neighbour property of each node.
+    average_nn_degree:
+        Compute the average nearest neighbour degree of each node.
     adjacency_matrix:
         Return the adjacency matrix of the graph.
     adjacency_tensor:
@@ -738,7 +906,7 @@ class MultiGraph(Graph):
         self.label_dtype = np.dtype("u" + str(num_bytes))
 
         # Convert labels to construct adjacency matrix by layer
-        e["_label"] = e["_label"].apply(lambda x: self.label_dict.get(x))
+        e["_label"] = e["_label"].map(lambda x: self.label_dict.get(x))
         lbl_array = e["_label"].values.astype(self.label_dtype)
         src_array = e["_src"].values.astype(self.id_dtype)
         dst_array = e["_dst"].values.astype(self.id_dtype)
@@ -837,11 +1005,11 @@ class MultiGraph(Graph):
         """Compute the degree sequence by label."""
         if not hasattr(self, "_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=False)
-            d_label = []
+            d_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                d_label.append(adj[lbl].sum(axis=1).tolist())
+                d_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._degree_by_label = np.array(d_label).T
+            self._degree_by_label = d_label.T.tocsr()
 
         return self._degree_by_label
 
@@ -849,11 +1017,11 @@ class MultiGraph(Graph):
         """Compute the strength sequence by label."""
         if not hasattr(self, "_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=False, weighted=True)
-            s_label = []
+            s_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                s_label.append(adj[lbl].sum(axis=1).tolist())
+                s_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._strength_by_label = np.array(s_label).T
+            self._strength_by_label = s_label.T.tocsr()
 
         return self._strength_by_label
 
@@ -995,6 +1163,10 @@ class MultiDiGraph(MultiGraph, DiGraph):
         Compute the out strength sequence by group as a 2D array.
     in_strength_by_group:
         Compute the in strength sequence by group as a 2D array.
+    average_nn_property:
+        Compute the average nearest neighbour property of each node.
+    average_nn_degree:
+        Compute the average nearest neighbour degree of each node.
     adjacency_matrix:
         Return the adjacency matrix of the graph.
     adjacency_tensor:
@@ -1106,11 +1278,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the out degree sequence by label."""
         if not hasattr(self, "_out_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            d_label = []
+            d_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                d_label.append(adj[lbl].sum(axis=1).tolist())
+                d_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._out_degree_by_label = np.array(d_label).T
+            self._out_degree_by_label = d_label.T.tocsr()
 
         return self._out_degree_by_label
 
@@ -1118,11 +1290,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the in degree sequence by label."""
         if not hasattr(self, "_in_degree_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=False)
-            d_label = []
+            d_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                d_label.append(adj[lbl].sum(axis=0).tolist())
+                d_label[lbl, :] = adj[lbl].sum(axis=0)
 
-            self._in_degree_by_label = np.array(d_label).T
+            self._in_degree_by_label = d_label.T.tocsr()
 
         return self._in_degree_by_label
 
@@ -1130,11 +1302,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the out strength sequence by label."""
         if not hasattr(self, "_out_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=True)
-            s_label = []
+            s_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                s_label.append(adj[lbl].sum(axis=1).tolist())
+                s_label[lbl, :] = adj[lbl].sum(axis=1)
 
-            self._out_strength_by_label = np.array(s_label).T
+            self._out_strength_by_label = s_label.T.tocsr()
 
         return self._out_strength_by_label
 
@@ -1142,11 +1314,11 @@ class MultiDiGraph(MultiGraph, DiGraph):
         """Compute the in strength sequence by label."""
         if not hasattr(self, "_in_strength_by_label") or recompute:
             adj = self.adjacency_tensor(directed=True, weighted=True)
-            s_label = []
+            s_label = sp.lil_array((self.num_labels, self.num_vertices))
             for lbl in range(self.num_labels):
-                s_label.append(adj[lbl].sum(axis=0).tolist())
+                s_label[lbl, :] = adj[lbl].sum(axis=0)
 
-            self._in_strength_by_label = np.array(s_label).T
+            self._in_strength_by_label = s_label.T.tocsr()
 
         return self._in_strength_by_label
 

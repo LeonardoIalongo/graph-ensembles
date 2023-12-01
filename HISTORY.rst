@@ -2,6 +2,10 @@
 History
 =======
 
+0.3.2 (2023-12-01)
+------------------
+* Improved and corrected support for the computation of average nearest neighbour properties and degrees. 
+
 0.3.1 (2023-11-20)
 ------------------
 * Added to the spark module a function to compute the confusion matrix elements at various thresholds of the probability matrix.

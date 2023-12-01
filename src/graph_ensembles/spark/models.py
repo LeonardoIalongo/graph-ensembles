@@ -150,6 +150,9 @@ class DiGraphEnsemble(GraphEnsemble):
 
     def expected_degree(self, recompute=False):
         """Compute the expected undirected degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         if not hasattr(self, "_exp_degree") or recompute:
             # It is necessary to select the elements or pickling will fail
             e_fun = self.exp_degrees
@@ -179,66 +182,27 @@ class DiGraphEnsemble(GraphEnsemble):
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
         if not hasattr(self, "_exp_out_degree") or recompute:
-            # It is necessary to select the elements or pickling will fail
-            e_fun = self.exp_degrees
-            p_ij = self.p_ij
-            delta = self.param
-            pdyad = self.prop_dyad
-            slflp = self.selfloops
-            num_v = self.num_vertices
-            tmp = self.p_sym_rdd.map(
-                lambda x: e_fun(
-                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, num_v, slflp
-                )
-            )
-            exp_d = np.zeros(num_v, dtype=np.float64)
-            exp_d_out = np.zeros(num_v, dtype=np.float64)
-            exp_d_in = np.zeros(num_v, dtype=np.float64)
-            res = tmp.fold(
-                (exp_d, exp_d_out, exp_d_in),
-                lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]),
-            )
-            self._exp_degree = res[0]
-            self._exp_out_degree = res[1]
-            self._exp_in_degree = res[2]
+            _ = self.expected_degree(recompute=recompute)
 
         return self._exp_out_degree
 
     def expected_in_degree(self, recompute=False):
         """Compute the expected in degree."""
         if not hasattr(self, "_exp_in_degree") or recompute:
-            # It is necessary to select the elements or pickling will fail
-            e_fun = self.exp_degrees
-            p_ij = self.p_ij
-            delta = self.param
-            pdyad = self.prop_dyad
-            slflp = self.selfloops
-            num_v = self.num_vertices
-            tmp = self.p_sym_rdd.map(
-                lambda x: e_fun(
-                    p_ij, delta, x[0][0], x[0][1], x[1], x[2], pdyad, num_v, slflp
-                )
-            )
-            exp_d = np.zeros(num_v, dtype=np.float64)
-            exp_d_out = np.zeros(num_v, dtype=np.float64)
-            exp_d_in = np.zeros(num_v, dtype=np.float64)
-            res = tmp.fold(
-                (exp_d, exp_d_out, exp_d_in),
-                lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]),
-            )
-            self._exp_degree = res[0]
-            self._exp_out_degree = res[1]
-            self._exp_in_degree = res[2]
+            _ = self.expected_degree(recompute=recompute)
 
         return self._exp_in_degree
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
         corresponding to the vertex index.
         """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         # Check first dimension of property array is correct
         if not prop.shape[0] == self.num_vertices:
             msg = (
@@ -247,8 +211,13 @@ class DiGraphEnsemble(GraphEnsemble):
             )
             raise ValueError(msg)
 
+        # Set selfloops option
+        tmp_self = self.selfloops
         if selfloops is None:
             selfloops = self.selfloops
+        elif selfloops != self.selfloops:
+            deg_recompute = True
+            self.selfloops = selfloops
 
         # Compute correct expected degree
         if ndir == "out":
@@ -280,23 +249,44 @@ class DiGraphEnsemble(GraphEnsemble):
         # Average results
         av_nn[ind] = av_nn[ind] / deg[ind]
 
+        # Restore model self-loops properties if they have been modified
+        if tmp_self != self.selfloops:
+            self.selfloops = tmp_self
+            if hasattr(self, "_exp_out_degree"):
+                del self._exp_out_degree
+            if hasattr(self, "_exp_in_degree"):
+                del self._exp_in_degree
+            if hasattr(self, "_exp_degree"):
+                del self._exp_degree
+
         return av_nn
 
     def expected_av_nn_degree(
         self,
         ddir="out",
         ndir="out",
-        selfloops=None,
+        selfloops=False,
         deg_recompute=False,
         recompute=None,
     ):
         """Computes the expected value of the nearest neighbour average of
         the degree.
         """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         # Compute property name
         name = "exp_av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
 
         if not hasattr(self, name) or recompute or deg_recompute:
+            # Set selfloops option
+            tmp_self = self.selfloops
+            if selfloops is None:
+                selfloops = self.selfloops
+            elif selfloops != self.selfloops:
+                deg_recompute = True
+                self.selfloops = selfloops
+
             # Compute correct expected degree
             if ddir == "out":
                 deg = self.expected_out_degree(recompute=deg_recompute)
@@ -312,6 +302,16 @@ class DiGraphEnsemble(GraphEnsemble):
                 deg, ndir=ndir, selfloops=selfloops, deg_recompute=False
             )
             setattr(self, name, res)
+
+            # Restore model self-loops properties if they have been modified
+            if tmp_self != self.selfloops:
+                self.selfloops = tmp_self
+                if hasattr(self, "_exp_out_degree"):
+                    del self._exp_out_degree
+                if hasattr(self, "_exp_in_degree"):
+                    del self._exp_in_degree
+                if hasattr(self, "_exp_degree"):
+                    del self._exp_degree
 
         return getattr(self, name)
 
@@ -374,7 +374,6 @@ class DiGraphEnsemble(GraphEnsemble):
         """Compute the true/false positive/negative rates for the model
         at the given probability thresholds levels.
         """
-
         if not hasattr(self, "param"):
             raise Exception("Ensemble has to be fitted before.")
 
@@ -1064,6 +1063,9 @@ class RandomDiGraph(DiGraphEnsemble):
 
     def expected_num_edges(self, recompute=False):
         """Compute the expected number of edges (per label) given p."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         if self.selfloops:
             self.exp_num_edges = self.param[0] * self.num_vertices**2
         else:
@@ -1074,6 +1076,9 @@ class RandomDiGraph(DiGraphEnsemble):
 
     def expected_total_weight(self, recompute=False):
         """Compute the expected total weight (per label) given q."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         if self.discrete_weights:
             self.exp_tot_weight = self.num_edges / (1 - self.q)
         else:
@@ -1083,15 +1088,21 @@ class RandomDiGraph(DiGraphEnsemble):
 
     def expected_degree(self, recompute=False):
         """Compute the expected undirected degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         d = np.empty(self.num_vertices, dtype=np.float64)
+        d[:] = (2 * self.param[0] - self.param[0] ** 2) * (self.num_vertices - 1)
         if self.selfloops:
-            d[:] = (2 * self.param[0] - self.param[0] ** 2) * self.num_vertices
-        else:
-            d[:] = (2 * self.param[0] - self.param[0] ** 2) * (self.num_vertices - 1)
+            d[:] += self.param[0]
+
         return d
 
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         d = np.empty(self.num_vertices, dtype=np.float64)
         if self.selfloops:
             d[:] = self.param[0] * self.num_vertices
@@ -1101,15 +1112,21 @@ class RandomDiGraph(DiGraphEnsemble):
 
     def expected_in_degree(self, recompute=False):
         """Compute the expected in degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         return self.expected_out_degree(recompute=recompute)
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
         corresponding to the vertex index.
         """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         # Check first dimension of property array is correct
         if not prop.shape[0] == self.num_vertices:
             msg = (
@@ -1118,8 +1135,13 @@ class RandomDiGraph(DiGraphEnsemble):
             )
             raise ValueError(msg)
 
+        # Set selfloops option
+        tmp_self = self.selfloops
         if selfloops is None:
             selfloops = self.selfloops
+        elif selfloops != self.selfloops:
+            deg_recompute = True
+            self.selfloops = selfloops
 
         # Compute correct expected degree
         if ndir == "out":
@@ -1132,15 +1154,15 @@ class RandomDiGraph(DiGraphEnsemble):
             raise ValueError("Neighbourhood direction not recognised.")
 
         # It is necessary to select the elements or pickling will fail
-        av_nn = np.empty(self.num_vertices, dtype=np.float64)
+        av_nn = np.empty(prop.shape, dtype=np.float64)
         if (ndir == "out") or (ndir == "in"):
-            av_nn[:] = np.sum(self.param[0] * prop)
+            av_nn[:] = np.sum(self.param[0] * prop, axis=0)
             if not self.selfloops:
-                av_nn += -self.param[0] * prop
+                av_nn -= self.param[0] * prop
         elif ndir == "out-in":
-            av_nn[:] = np.sum((2 * self.param[0] - self.param[0] ** 2) * prop)
+            av_nn[:] = np.sum((2 * self.param[0] - self.param[0] ** 2) * prop, axis=0)
             if not self.selfloops:
-                av_nn += -(2 * self.param[0] - self.param[0] ** 2) * prop
+                av_nn -= (2 * self.param[0] - self.param[0] ** 2) * prop
         else:
             raise ValueError("Direction of neighbourhood not right.")
 
@@ -1151,6 +1173,10 @@ class RandomDiGraph(DiGraphEnsemble):
 
         # Average results
         av_nn[ind] = av_nn[ind] / deg[ind]
+
+        # Restore model self-loops properties if they have been modified
+        if tmp_self != self.selfloops:
+            self.selfloops = tmp_self
 
         return av_nn
 
@@ -2025,19 +2051,22 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
         if not hasattr(self, "_exp_out_degree") or recompute:
-            _ = self.expected_degree()
+            _ = self.expected_degree(recompute=recompute)
 
         return self._exp_out_degree
 
-    def expected_in_degree_by(self, recompute=False):
+    def expected_in_degree(self, recompute=False):
         """Compute the expected in degree."""
         if not hasattr(self, "_exp_in_degree") or recompute:
-            _ = self.expected_degree()
+            _ = self.expected_degree(recompute=recompute)
 
         return self._exp_in_degree
 
     def expected_degree_by_label(self, recompute=False):
         """Compute the expected undirected degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         if not hasattr(self, "_exp_degree_label") or recompute:
             # It is necessary to select the elements or pickling will fail
             delta = self.param
@@ -2097,12 +2126,15 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         return self._exp_in_degree_label
 
     def expected_av_nn_property(
-        self, prop, ndir="out", selfloops=None, deg_recompute=False
+        self, prop, ndir="out", selfloops=False, deg_recompute=False
     ):
         """Computes the expected value of the nearest neighbour average of
         the property array. The array must have the first dimension
         corresponding to the vertex index.
         """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         # Check first dimension of property array is correct
         if not prop.shape[0] == self.num_vertices:
             msg = (
@@ -2111,8 +2143,13 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             )
             raise ValueError(msg)
 
+        # Set selfloops option
+        tmp_self = self.selfloops
         if selfloops is None:
             selfloops = self.selfloops
+        elif selfloops != self.selfloops:
+            deg_recompute = True
+            self.selfloops = selfloops
 
         # Compute correct expected degree
         if ndir == "out":
@@ -2158,23 +2195,44 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         # Average results
         av_nn[ind] = av_nn[ind] / deg[ind]
 
+        # Restore model self-loops properties if they have been modified
+        if tmp_self != self.selfloops:
+            self.selfloops = tmp_self
+            if hasattr(self, "_exp_out_degree"):
+                del self._exp_out_degree
+            if hasattr(self, "_exp_in_degree"):
+                del self._exp_in_degree
+            if hasattr(self, "_exp_degree"):
+                del self._exp_degree
+
         return av_nn
 
     def expected_av_nn_degree(
         self,
         ddir="out",
         ndir="out",
-        selfloops=None,
+        selfloops=False,
         deg_recompute=False,
-        recompute=None,
+        recompute=False,
     ):
         """Computes the expected value of the nearest neighbour average of
         the degree.
         """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
         # Compute property name
         name = "exp_av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
 
         if not hasattr(self, name) or recompute or deg_recompute:
+            # Set selfloops option
+            tmp_self = self.selfloops
+            if selfloops is None:
+                selfloops = self.selfloops
+            elif selfloops != self.selfloops:
+                deg_recompute = True
+                self.selfloops = selfloops
+
             # Compute correct expected degree
             if ddir == "out":
                 deg = self.expected_out_degree(recompute=deg_recompute)
@@ -2190,6 +2248,16 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                 deg, ndir=ndir, selfloops=selfloops, deg_recompute=False
             )
             setattr(self, name, res)
+
+            # Restore model self-loops properties if they have been modified
+            if tmp_self != self.selfloops:
+                self.selfloops = tmp_self
+                if hasattr(self, "_exp_out_degree"):
+                    del self._exp_out_degree
+                if hasattr(self, "_exp_in_degree"):
+                    del self._exp_in_degree
+                if hasattr(self, "_exp_degree"):
+                    del self._exp_degree
 
         return getattr(self, name)
 
