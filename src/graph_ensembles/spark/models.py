@@ -287,12 +287,12 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # Restore model self-loops properties if they have been modified
         if tmp_self != self.selfloops:
-            self.selfloops = tmp_self 
-            if ndir == "out":
+            self.selfloops = tmp_self
+            if hasattr(self, "_exp_out_degree"):
                 del self._exp_out_degree
-            elif ndir == "in":
+            if hasattr(self, "_exp_in_degree"):
                 del self._exp_in_degree
-            elif ndir == "out-in":
+            if hasattr(self, "_exp_degree"):
                 del self._exp_degree
 
         return av_nn
@@ -338,26 +338,13 @@ class DiGraphEnsemble(GraphEnsemble):
 
             # Restore model self-loops properties if they have been modified
             if tmp_self != self.selfloops:
-                self.selfloops = tmp_self 
-                if ndir == "out":
-                    if hasattr(self, '_exp_out_degree'):
-                        del self._exp_out_degree
-                elif ndir == "in":
-                    if hasattr(self, '_exp_in_degree'):
-                        del self._exp_in_degree
-                elif ndir == "out-in":
-                    if hasattr(self, '_exp_degree'):
-                        del self._exp_degree
-
-                if ddir == "out":
-                    if hasattr(self, '_exp_out_degree'):
-                        del self._exp_out_degree
-                elif ddir == "in":
-                    if hasattr(self, '_exp_in_degree'):
-                        del self._exp_in_degree
-                elif ddir == "out-in":
-                    if hasattr(self, '_exp_degree'):
-                        del self._exp_degree
+                self.selfloops = tmp_self
+                if hasattr(self, "_exp_out_degree"):
+                    del self._exp_out_degree
+                if hasattr(self, "_exp_in_degree"):
+                    del self._exp_in_degree
+                if hasattr(self, "_exp_degree"):
+                    del self._exp_degree
 
         return getattr(self, name)
 
@@ -1133,7 +1120,7 @@ class RandomDiGraph(DiGraphEnsemble):
         d[:] = (2 * self.param[0] - self.param[0] ** 2) * (self.num_vertices - 1)
         if self.selfloops:
             d[:] += self.param[0]
-            
+
         return d
 
     def expected_out_degree(self, recompute=False):
@@ -1205,7 +1192,7 @@ class RandomDiGraph(DiGraphEnsemble):
 
         # Restore model self-loops properties if they have been modified
         if tmp_self != self.selfloops:
-            self.selfloops = tmp_self 
+            self.selfloops = tmp_self
 
         return av_nn
 

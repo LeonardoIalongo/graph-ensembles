@@ -225,7 +225,7 @@ class TestGraph:
         )
         prop = np.arange(g.num_vertices)
         avnn = g.average_nn_property(prop)
-        test = np.array([1.5, 1. , 0.5])
+        test = np.array([1.5, 1.0, 0.5])
 
         assert np.all(avnn == test), avnn
 
@@ -659,19 +659,19 @@ class TestDiGraph:
         g = ge.DiGraph(
             self.v, self.e, v_id="name", src="creditor", dst="debtor", weight="value"
         )
-        avnn = g.average_nn_degree(ddir='out', ndir='out')
+        avnn = g.average_nn_degree(ddir="out", ndir="out")
         test = np.array([2, 1, 1])
         assert np.all(avnn == test), avnn
-        avnn = g.average_nn_degree(ddir='out', ndir='in')
+        avnn = g.average_nn_degree(ddir="out", ndir="in")
         test = np.array([1.5, 1, 2])
         assert np.all(avnn == test), avnn
-        avnn = g.average_nn_degree(ddir='in', ndir='out')
+        avnn = g.average_nn_degree(ddir="in", ndir="out")
         test = np.array([1, 1.5, 2])
         assert np.all(avnn == test), avnn
-        avnn = g.average_nn_degree(ddir='in', ndir='in')
+        avnn = g.average_nn_degree(ddir="in", ndir="in")
         test = np.array([1, 2, 1])
         assert np.all(avnn == test), avnn
-        avnn = g.average_nn_degree(ddir='out-in', ndir='out-in')
+        avnn = g.average_nn_degree(ddir="out-in", ndir="out-in")
         test = np.array([2, 2, 2])
         assert np.all(avnn == test), avnn
 

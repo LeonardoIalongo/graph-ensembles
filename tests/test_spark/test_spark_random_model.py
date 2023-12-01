@@ -451,22 +451,22 @@ class TestRandomDiGraphMeasuresSelfloops:
         """Test correct value of av_nn_prop using simple local prop."""
         prop = np.arange(num_vertices) + 1
         p_u = 1 - (1 - p_self) * (1 - p_self.T)  # Only valid if no self loops
-        d = p_u.sum(axis=0) - (1 - (1-z_self)**2)
+        d = p_u.sum(axis=0) - (1 - (1 - z_self) ** 2)
         d_out = p_self.sum(axis=1) - z_self
         d_in = p_self.sum(axis=0) - z_self
 
-        exp = np.dot(p_self, prop) - z_self*prop
+        exp = np.dot(p_self, prop) - z_self * prop
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(p_self.T, prop) - z_self*prop
+        exp = np.dot(p_self.T, prop) - z_self * prop
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         res = self.model.expected_av_nn_property(prop, ndir="in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
         exp = np.dot(p_u, prop)
-        exp -= (1 - (1-z_self)**2)*prop
+        exp -= (1 - (1 - z_self) ** 2) * prop
         exp[d != 0] = exp[d != 0] / d[d != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out-in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
@@ -477,26 +477,26 @@ class TestRandomDiGraphMeasuresSelfloops:
         d_in = self.model.expected_in_degree() - z_self
 
         self.model.expected_av_nn_degree(ddir="out", ndir="out")
-        exp = np.dot(p_self, d_out) - z_self*d_out
+        exp = np.dot(p_self, d_out) - z_self * d_out
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="out", ndir="in")
-        exp = np.dot(p_self.T, d_out) - z_self*d_out
+        exp = np.dot(p_self.T, d_out) - z_self * d_out
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(
             self.model.exp_av_in_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="in", ndir="in")
-        exp = np.dot(p_self.T, d_in) - z_self*d_in
+        exp = np.dot(p_self.T, d_in) - z_self * d_in
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(self.model.exp_av_in_nn_d_in, exp, atol=1e-5, rtol=0)
 
         self.model.expected_av_nn_degree(ddir="in", ndir="out")
-        exp = np.dot(p_self, d_in) - z_self*d_in
+        exp = np.dot(p_self, d_in) - z_self * d_in
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_in, exp, atol=1e-5, rtol=0
@@ -504,8 +504,8 @@ class TestRandomDiGraphMeasuresSelfloops:
 
         self.model.expected_av_nn_degree(ddir="out-in", ndir="out-in")
         d = self.model.expected_degree() - z_self
-        exp = np.dot((1 - (1 - p_self) * (1 - p_self.T)), d) 
-        exp -= (1 - (1-z_self)**2)*d
+        exp = np.dot((1 - (1 - p_self) * (1 - p_self.T)), d)
+        exp -= (1 - (1 - z_self) ** 2) * d
         exp[d != 0] = exp[d != 0] / d[d != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_in_nn_d_out_in, exp, atol=1e-5, rtol=0

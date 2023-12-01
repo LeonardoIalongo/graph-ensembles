@@ -704,7 +704,7 @@ class DiGraph(Graph):
 
         # It is necessary to select the elements or pickling will fail
         av_nn = self.av_nn_prop(adj.indptr, adj.indices, prop, selfloops)
-        
+
         # Test that mask is the same
         ind = deg != 0
         msg = "Got a av_nn for an empty neighbourhood."

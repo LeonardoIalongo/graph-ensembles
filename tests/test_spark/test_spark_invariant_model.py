@@ -722,20 +722,19 @@ class TestInvariantModelMeasuresSelfloops:
 
     def test_av_nn_prop_scale(self):
         """Test correct value of av_nn_prop using simple local prop."""
-
         prop = np.arange(num_vertices) + 1
         p_u = 1 - (1 - p_self) * (1 - p_self.T)
-        p_u.ravel()[:: num_vertices + 1] = p_self.ravel()[:: num_vertices + 1]
+        p_u.ravel()[:: num_vertices + 1] = 0
         d = p_u.sum(axis=0)
-        d_out = p_self.sum(axis=1)
-        d_in = p_self.sum(axis=0)
+        d_out = p_self.sum(axis=1) - np.diagonal(p_self)
+        d_in = p_self.sum(axis=0) - np.diagonal(p_self)
 
-        exp = np.dot(p_self, prop)
+        exp = np.dot(p_self, prop) - np.diagonal(p_self) * prop
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(p_self.T, prop)
+        exp = np.dot(p_self.T, prop) - np.diagonal(p_self) * prop
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         res = self.model.expected_av_nn_property(prop, ndir="in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
@@ -747,40 +746,39 @@ class TestInvariantModelMeasuresSelfloops:
 
     def test_av_nn_deg(self):
         """Test average nn degree."""
-
-        d_out = self.model.expected_out_degree()
-        d_in = self.model.expected_in_degree()
+        d_out = self.model.expected_out_degree() - p_self.ravel()[:: num_vertices + 1]
+        d_in = self.model.expected_in_degree() - p_self.ravel()[:: num_vertices + 1]
 
         self.model.expected_av_nn_degree(ddir="out", ndir="out")
-        exp = np.dot(p_self, d_out)
+        exp = np.dot(p_self, d_out) - np.diagonal(p_self) * d_out
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="out", ndir="in")
-        exp = np.dot(p_self.T, d_out)
+        exp = np.dot(p_self.T, d_out) - np.diagonal(p_self) * d_out
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(
             self.model.exp_av_in_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="in", ndir="in")
-        exp = np.dot(p_self.T, d_in)
+        exp = np.dot(p_self.T, d_in) - np.diagonal(p_self) * d_in
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(self.model.exp_av_in_nn_d_in, exp, atol=1e-5, rtol=0)
 
         self.model.expected_av_nn_degree(ddir="in", ndir="out")
-        exp = np.dot(p_self, d_in)
+        exp = np.dot(p_self, d_in) - np.diagonal(p_self) * d_in
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_in, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="out-in", ndir="out-in")
-        d = self.model.expected_degree()
+        d = self.model.expected_degree() - p_self.ravel()[:: num_vertices + 1]
         p_u = 1 - (1 - p_self) * (1 - p_self.T)
-        p_u.ravel()[:: num_vertices + 1] = p_self.ravel()[:: num_vertices + 1]
+        p_u.ravel()[:: num_vertices + 1] = 0
         exp = np.dot(p_u, d)
         exp[d != 0] = exp[d != 0] / d[d != 0]
         np.testing.assert_allclose(
