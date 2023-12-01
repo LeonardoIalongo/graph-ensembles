@@ -2220,7 +2220,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         """
         if not hasattr(self, "param"):
             raise Exception("Ensemble has to be fitted before.")
-            
+
         # Compute property name
         name = "exp_av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
 

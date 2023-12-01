@@ -1093,17 +1093,17 @@ class TestFitnessModelMeasuresSelfloops:
         d_out = self.p_proj.sum(axis=1) - np.diagonal(self.p_proj)
         d_in = self.p_proj.sum(axis=0) - np.diagonal(self.p_proj)
 
-        exp = np.dot(self.p_proj, prop) - np.diagonal(self.p_proj)*prop
+        exp = np.dot(self.p_proj, prop) - np.diagonal(self.p_proj) * prop
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(self.p_proj.T, prop) - np.diagonal(self.p_proj)*prop
+        exp = np.dot(self.p_proj.T, prop) - np.diagonal(self.p_proj) * prop
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         res = self.model.expected_av_nn_property(prop, ndir="in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(self.p_proj_sym, prop) - np.diagonal(self.p_proj_sym)*prop
+        exp = np.dot(self.p_proj_sym, prop) - np.diagonal(self.p_proj_sym) * prop
         exp[d != 0] = exp[d != 0] / d[d != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out-in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
@@ -1114,26 +1114,26 @@ class TestFitnessModelMeasuresSelfloops:
         d_in = self.model.expected_in_degree() - np.diagonal(self.p_proj)
 
         self.model.expected_av_nn_degree(ddir="out", ndir="out")
-        exp = np.dot(self.p_proj, d_out) - np.diagonal(self.p_proj)*d_out
+        exp = np.dot(self.p_proj, d_out) - np.diagonal(self.p_proj) * d_out
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="out", ndir="in")
-        exp = np.dot(self.p_proj.T, d_out) - np.diagonal(self.p_proj)*d_out
+        exp = np.dot(self.p_proj.T, d_out) - np.diagonal(self.p_proj) * d_out
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(
             self.model.exp_av_in_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="in", ndir="in")
-        exp = np.dot(self.p_proj.T, d_in) - np.diagonal(self.p_proj)*d_in
+        exp = np.dot(self.p_proj.T, d_in) - np.diagonal(self.p_proj) * d_in
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(self.model.exp_av_in_nn_d_in, exp, atol=1e-5, rtol=0)
 
         self.model.expected_av_nn_degree(ddir="in", ndir="out")
-        exp = np.dot(self.p_proj, d_in) - np.diagonal(self.p_proj)*d_in
+        exp = np.dot(self.p_proj, d_in) - np.diagonal(self.p_proj) * d_in
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_in, exp, atol=1e-5, rtol=0
@@ -1141,7 +1141,7 @@ class TestFitnessModelMeasuresSelfloops:
 
         self.model.expected_av_nn_degree(ddir="out-in", ndir="out-in")
         d = self.model.expected_degree() - np.diagonal(self.p_proj_sym)
-        exp = np.dot(self.p_proj_sym, d) - np.diagonal(self.p_proj)*d
+        exp = np.dot(self.p_proj_sym, d) - np.diagonal(self.p_proj) * d
         exp[d != 0] = exp[d != 0] / d[d != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_in_nn_d_out_in, exp, atol=1e-5, rtol=0
@@ -1725,17 +1725,17 @@ class TestFitnessModelMeasuresSelfPerlabel:
         d_out = self.p_proj.sum(axis=1) - np.diagonal(self.p_proj)
         d_in = self.p_proj.sum(axis=0) - np.diagonal(self.p_proj)
 
-        exp = np.dot(self.p_proj, prop) - np.diagonal(self.p_proj)*prop
+        exp = np.dot(self.p_proj, prop) - np.diagonal(self.p_proj) * prop
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(self.p_proj.T, prop) - np.diagonal(self.p_proj)*prop
+        exp = np.dot(self.p_proj.T, prop) - np.diagonal(self.p_proj) * prop
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         res = self.model.expected_av_nn_property(prop, ndir="in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
 
-        exp = np.dot(self.p_proj_sym, prop) - np.diagonal(self.p_proj_sym)*prop
+        exp = np.dot(self.p_proj_sym, prop) - np.diagonal(self.p_proj_sym) * prop
         exp[d != 0] = exp[d != 0] / d[d != 0]
         res = self.model.expected_av_nn_property(prop, ndir="out-in")
         np.testing.assert_allclose(res, exp, atol=1e-3, rtol=0)
@@ -1746,26 +1746,26 @@ class TestFitnessModelMeasuresSelfPerlabel:
         d_in = self.model.expected_in_degree() - np.diagonal(self.p_proj)
 
         self.model.expected_av_nn_degree(ddir="out", ndir="out")
-        exp = np.dot(self.p_proj, d_out) - np.diagonal(self.p_proj)*d_out
+        exp = np.dot(self.p_proj, d_out) - np.diagonal(self.p_proj) * d_out
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="out", ndir="in")
-        exp = np.dot(self.p_proj.T, d_out) - np.diagonal(self.p_proj)*d_out
+        exp = np.dot(self.p_proj.T, d_out) - np.diagonal(self.p_proj) * d_out
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(
             self.model.exp_av_in_nn_d_out, exp, atol=1e-5, rtol=0
         )
 
         self.model.expected_av_nn_degree(ddir="in", ndir="in")
-        exp = np.dot(self.p_proj.T, d_in) - np.diagonal(self.p_proj)*d_in
+        exp = np.dot(self.p_proj.T, d_in) - np.diagonal(self.p_proj) * d_in
         exp[d_in != 0] = exp[d_in != 0] / d_in[d_in != 0]
         np.testing.assert_allclose(self.model.exp_av_in_nn_d_in, exp, atol=1e-5, rtol=0)
 
         self.model.expected_av_nn_degree(ddir="in", ndir="out")
-        exp = np.dot(self.p_proj, d_in) - np.diagonal(self.p_proj)*d_in
+        exp = np.dot(self.p_proj, d_in) - np.diagonal(self.p_proj) * d_in
         exp[d_out != 0] = exp[d_out != 0] / d_out[d_out != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_nn_d_in, exp, atol=1e-5, rtol=0
@@ -1773,7 +1773,7 @@ class TestFitnessModelMeasuresSelfPerlabel:
 
         self.model.expected_av_nn_degree(ddir="out-in", ndir="out-in")
         d = self.model.expected_degree() - np.diagonal(self.p_proj_sym)
-        exp = np.dot(self.p_proj_sym, d) - np.diagonal(self.p_proj)*d
+        exp = np.dot(self.p_proj_sym, d) - np.diagonal(self.p_proj) * d
         exp[d != 0] = exp[d != 0] / d[d != 0]
         np.testing.assert_allclose(
             self.model.exp_av_out_in_nn_d_out_in, exp, atol=1e-5, rtol=0
