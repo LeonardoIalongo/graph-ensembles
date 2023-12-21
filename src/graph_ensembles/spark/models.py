@@ -3098,7 +3098,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
         rows_arr = np.empty(len(rows), dtype=np.int64)
         cols_arr = np.empty(len(cols), dtype=np.int64)
-        vals_arr = np.empty(len(vals), dtype=np.int64)
+        vals_arr = np.empty(len(vals), dtype=np.float64)
 
         for i, (r, c, v) in enumerate(zip(rows, cols, vals)):
             rows_arr[i] = r
