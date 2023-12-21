@@ -1450,6 +1450,389 @@ class ScaleInvariantModel(FitnessModel):
             return -tmp
 
 
+class ConditionalScaleInvariantModel(ScaleInvariantModel):
+    """The Conditional Scale Invariant model is a ScaleInvariantModel that is
+    conditioned on the observation of a coarse grained graph. This changes the
+    probability distribution and the computation of certain properties.
+
+
+    Attributes
+    ----------
+    prop_out: np.ndarray
+        The out fitness sequence.
+    prop_in: np.ndarray
+        the in fitness sequence.
+    prop_dyad: function
+        A function that returns the dyadic properties of two nodes.
+    groups: np.ndarray
+        An array that returns the macro-node to which each node belongs to.
+    adj:
+        The coarse-grained adjacency matrix.
+    num_edges: int
+        The total number of edges.
+    num_vertices: int
+        The total number of nodes.
+    param: float
+        The free parameters of the model.
+    selfloops: bool
+        Selects if self loops (connections from i to i) are allowed.
+
+    Methods
+    -------
+    fit:
+        Fit the parameters of the model with the given method.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Return a ConditionalScaleInvariantModel for the given graph data.
+
+        The model accepts as arguments either: two DiGraphs, in which case the
+        strengths are used as fitnesses, or directly the fitness sequences (in
+        and out). The model accepts the fitness sequences as numpy arrays. The
+        two DiGraphs are assumed to be respectively the micro and observed macro.
+
+        In order to do the conditioning the model requires the groups array,
+        which should be a numpy array with the group identifier, and the
+        adjacency matrix of the observed coarse-grained graph. This last matrix
+        can be given as a dense or sparse matrix.
+
+
+        """
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.DiGraph):
+                g = args[0]
+                self.num_vertices = g.num_vertices
+                self.num_edges = g.num_edges()
+                self.prop_out = g.out_strength()
+                self.prop_in = g.in_strength()
+                if hasattr(g, "groups"):
+                    self.groups = g.groups
+            else:
+                raise ValueError("First argument passed must be a " "DiGraph.")
+
+            if len(args) > 1:
+                if isinstance(args[1], graphs.DiGraph):
+                    g = args[1]
+                    self.adj = g.adjacency_matrix(directed=True, weighted=False)
+                else:
+                    raise ValueError("Second argument passed must be a " "DiGraph.")
+
+            if len(args) > 2:
+                msg = "Unnamed arguments other than the Graph have been " "ignored."
+                warnings.warn(msg, UserWarning)
+
+        # Get options from keyword arguments
+        allowed_arguments = [
+            "num_vertices",
+            "num_edges",
+            "prop_out",
+            "prop_in",
+            "groups",
+            "adj",
+            "param",
+            "selfloops",
+        ]
+        for name in kwargs:
+            if name not in allowed_arguments:
+                raise ValueError("Illegal argument passed: " + name)
+            else:
+                setattr(self, name, kwargs[name])
+
+        # Ensure that all necessary fields have been set
+        if not hasattr(self, "num_vertices"):
+            raise ValueError("Number of vertices not set.")
+        else:
+            try:
+                assert self.num_vertices / int(self.num_vertices) == 1
+                self.num_vertices = int(self.num_vertices)
+            except Exception:
+                raise ValueError("Number of vertices must be an integer.")
+
+            if self.num_vertices <= 0:
+                raise ValueError("Number of vertices must be a positive number.")
+
+        if not hasattr(self, "prop_out"):
+            raise ValueError("prop_out not set.")
+        elif isinstance(self.prop_out, empty_index):
+            raise ValueError("prop_out not set.")
+
+        if not hasattr(self, "prop_in"):
+            raise ValueError("prop_in not set.")
+        elif isinstance(self.prop_in, empty_index):
+            raise ValueError("prop_in not set.")
+
+        if not hasattr(self, "selfloops"):
+            self.selfloops = False
+
+        # Ensure that fitnesses passed adhere to format (ndarray)
+        msg = "Node out properties must be a numpy array of length " + str(
+            self.num_vertices
+        )
+        assert isinstance(self.prop_out, np.ndarray), msg
+        assert self.prop_out.shape == (self.num_vertices,), msg
+
+        msg = "Node in properties must be a numpy array of length " + str(
+            self.num_vertices
+        )
+        assert isinstance(self.prop_in, np.ndarray), msg
+        assert self.prop_in.shape == (self.num_vertices,), msg
+
+        # Ensure that fitnesses have positive values only
+        msg = "Node out properties must contain positive values only."
+        assert np.all(self.prop_out >= 0), msg
+
+        msg = "Node in properties must contain positive values only."
+        assert np.all(self.prop_in >= 0), msg
+
+        # Ensure that number of edges is a positive number
+        if hasattr(self, "num_edges"):
+            try:
+                tmp = len(self.num_edges)
+                if tmp == 1:
+                    self.num_edges = self.num_edges[0]
+                else:
+                    raise ValueError("Number of edges must be a number.")
+            except TypeError:
+                pass
+
+            try:
+                self.num_edges = self.num_edges * 1.0
+            except TypeError:
+                raise ValueError("Number of edges must be a number.")
+
+            if self.num_edges < 0:
+                raise ValueError("Number of edges must be a positive number.")
+
+        # Ensure that parameter is a single positive number
+        if hasattr(self, "param"):
+            if not isinstance(self.param, np.ndarray):
+                self.param = np.array([self.param])
+
+            else:
+                if not (len(self.param) == 1):
+                    raise ValueError("The model requires one parameter.")
+
+            if not np.issubdtype(self.param.dtype, np.number):
+                raise ValueError("Parameters must be numeric.")
+
+            if np.any(self.param < 0):
+                raise ValueError("Parameters must be positive.")
+
+        if not (hasattr(self, "num_edges") or hasattr(self, "param")):
+            raise ValueError("Either num_edges or param must be set.")
+
+        # Ensure that the number of groups and adj have been set
+        if not hasattr(self, "adj") or not hasattr(self, "groups"):
+            raise ValueError(
+                "Both the adjacency matrix of the observed graph "
+                " and the partitioning groups of the graph must be set."
+            )
+
+        # If adj is sparse set to dense
+        if not sp.issparse(self.adj):
+            self.adj = sp.csr_array(self.adj)
+
+        # Check that the two are consistent
+        self.num_groups = self.adj.shape[0]
+        assert self.adj.ndim == 2, "Adjacency matrix must be 2 dimensional."
+        assert self.adj.shape[1] == self.num_groups, "Adjacency matrix must be square."
+        assert isinstance(
+            self.groups[0], (int, np.integer)
+        ), "groups array must be of integers."
+        assert (
+            np.max(self.groups) + 1 == self.num_groups
+        ), "Number of groups in adj and groups array does not match."
+
+    def fit(
+        self,
+        x0=None,
+        method="density",
+        atol=1e-24,
+        rtol=1e-9,
+        maxiter=100,
+        verbose=False,
+    ):
+        """Fit the parameter either to match the given number of edges or
+            using maximum likelihood estimation.
+
+        Parameters
+        ----------
+        x0: float
+            Optional initial conditions for parameters.
+        method: 'density' or 'mle'
+            Selects whether to fit param using maximum likelihood estimation
+            or by ensuring that the expected density matches the given one.
+        atol : float
+            Absolute tolerance for the exit condition.
+        rtol : float
+            Relative tolerance for the exit condition.
+        max_iter : int or float
+            Maximum number of iteration.
+        verbose: boolean
+            If true print debug info while iterating.
+        """
+        if x0 is None:
+            x0 = np.array([0], dtype=np.float64)
+
+        if not isinstance(x0, np.ndarray):
+            x0 = np.array([x0])
+
+        if not (len(x0) == 1):
+            raise ValueError("The model requires one parameter.")
+
+        if not np.issubdtype(x0.dtype, np.number):
+            raise ValueError("x0 must be numeric.")
+
+        if np.any(x0 < 0):
+            raise ValueError("x0 must be positive.")
+
+        if method == "density":
+            # Ensure that num_edges is set
+            if not hasattr(self, "num_edges"):
+                raise ValueError("Number of edges must be set for density solver.")
+            sol = monotonic_newton_solver(
+                x0,
+                self.density_fit_fun,
+                self.num_edges,
+                atol=atol,
+                rtol=rtol,
+                x_l=0.0,
+                x_u=np.infty,
+                max_iter=maxiter,
+                full_return=True,
+                verbose=verbose,
+            )
+
+        elif method == "mle":
+            raise ValueError("Method not implemented.")
+
+        else:
+            raise ValueError("The selected method is not valid.")
+
+        # Update results and check convergence
+        self.param = sol.x
+        self.solver_output = sol
+
+        if not self.solver_output.converged:
+            warnings.warn("Fit did not converge", UserWarning)
+
+    def density_fit_fun(self, delta):
+        """Return the objective function value and the Jacobian
+        for a given value of delta.
+        """
+        f, jac = self.exp_edges_f_jac(
+            self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops
+        )
+
+        return f, jac
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+        """Compute the objective function of the density solver and its
+        derivative.
+        """
+        f = 0.0
+        jac = 0.0
+        for i, p_out_i in enumerate(prop_out):
+            for j, p_in_j in enumerate(prop_in):
+                if (i != j) | selfloops:
+                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
+                    f += p_tmp
+                    jac += jac_tmp
+
+        return f, jac
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def p_jac_ij(d, x_i, y_j, x_I, y_J):
+        """Compute the probability of connection and the jacobian
+        contribution of node i and j.
+        """
+        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
+            return 0.0, 0.0
+
+        a = x_i * y_j
+        b = x_I * y_J
+        da = d[0] * a
+        db = d[0] * b
+        expdbm1 = -expm1(-db)
+
+        if expdbm1 < 1e-12:
+            return ((x_i / x_I) * (y_j / y_J), (1 / 2 - (a / (2 * b))) * a)
+
+        if isinf(da):
+            return 1.0, 0.0
+        elif isinf(db):
+            return -expm1(-da), a * exp(-da)
+        else:
+            return (
+                -expm1(-da) / (-expm1(-db)),
+                a * exp(-da) / (-expm1(-db))
+                - b * exp(-db) * (-expm1(-da)) / (expm1(-db) ** 2),
+            )
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def p_ij(d, x_i, y_j, x_I, y_J):
+        """Compute the probability of connection between node i and j."""
+        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
+            return 0.0
+
+        if d[0] == 0:
+            return (x_i / x_I) * (y_j / y_J)
+
+        tmp = d[0] * x_i * y_j
+        tmp1 = d[0] * x_I * y_J
+        if isinf(tmp):
+            return 1.0
+        elif isinf(tmp1):
+            return -expm1(-tmp)
+        else:
+            return (-expm1(-tmp)) / (-expm1(-tmp1))
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def logp(d, x_i, y_j, x_I, y_J):
+        """Compute the log probability of connection between node i and j."""
+        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
+            return -np.infty
+
+        if d[0] == 0:
+            return log((x_i / x_I) * (y_j / y_J))
+
+        tmp = d[0] * x_i * y_j
+        tmp1 = d[0] * x_I * y_J
+        if isinf(tmp):
+            return 0.0
+        elif isinf(tmp1):
+            return log(-expm1(-tmp))
+        else:
+            return log((-expm1(-tmp)) / (-expm1(-tmp1)))
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def log1mp(d, x_i, y_j, x_I, y_J):
+        """Compute the log of 1 minus the probability of connection between
+        node i and j.
+        """
+        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
+            return 0.0
+
+        if d[0] == 0:
+            return log1p(-(x_i / x_I) * (y_j / y_J))
+
+        tmp = d[0] * x_i * y_j
+        tmp1 = d[0] * x_I * y_J
+        if isinf(tmp):
+            return -np.infty
+        elif isinf(tmp1):
+            return -tmp
+        else:
+            return log1p(expm1(-tmp) / (-expm1(-tmp1)))
+
+
 class MultiGraphEnsemble(GraphEnsemble):
     """General class for MultiGraph ensembles."""
 
