@@ -1515,8 +1515,14 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
                 if isinstance(args[1], graphs.DiGraph):
                     g = args[1]
                     self.adj = g.adjacency_matrix(directed=True, weighted=False)
+                elif isinstance(args[1], np.ndarray):
+                    self.adj = args[1]
+                elif sp.issparse(args[1]):
+                    self.adj = args[1]
                 else:
-                    raise ValueError("Second argument passed must be a " "DiGraph.")
+                    raise ValueError(
+                        "Second argument passed must be a DiGraph or an adjacency matrix."
+                    )
 
             if len(args) > 2:
                 msg = "Unnamed arguments other than the Graph have been " "ignored."
@@ -1644,6 +1650,58 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
             np.max(self.groups) + 1 == self.num_groups
         ), "Number of groups in adj and groups array does not match."
 
+    def expected_num_edges(self, recompute=False):
+        """Compute the expected number of edges."""
+        if not hasattr(self, "param"):
+            raise Exception("Model must be fitted beforehand.")
+
+        if not hasattr(self, "_exp_num_edges") or recompute:
+            self._exp_num_edges = self.exp_edges(
+                self.p_ij,
+                self.param,
+                self.prop_out,
+                self.prop_in,
+                self.groups,
+                self.selfloops,
+            )
+
+        return self._exp_num_edges
+
+    def expected_degree(self, recompute=False):
+        """Compute the expected undirected degree."""
+        if not hasattr(self, "param"):
+            raise Exception("Model must be fitted beforehand.")
+
+        if not hasattr(self, "_exp_degree") or recompute:
+            res = self.exp_degrees(
+                self.p_ij,
+                self.param,
+                self.prop_out,
+                self.prop_in,
+                self.groups,
+                self.num_vertices,
+                self.selfloops,
+            )
+            self._exp_degree = res[0]
+            self._exp_out_degree = res[1]
+            self._exp_in_degree = res[2]
+
+        return self._exp_degree
+
+    def expected_out_degree(self, recompute=False):
+        """Compute the expected out degree."""
+        if not hasattr(self, "_exp_out_degree") or recompute:
+            _ = self.expected_degree(recompute=recompute)
+
+        return self._exp_out_degree
+
+    def expected_in_degree(self, recompute=False):
+        """Compute the expected in degree."""
+        if not hasattr(self, "_exp_in_degree") or recompute:
+            _ = self.expected_degree(recompute=recompute)
+
+        return self._exp_in_degree
+
     def fit(
         self,
         x0=None,
@@ -1722,23 +1780,120 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
         for a given value of delta.
         """
         f, jac = self.exp_edges_f_jac(
-            self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops
+            self.p_jac_ij,
+            delta,
+            self.prop_out,
+            self.prop_in,
+            self.groups,
+            self.selfloops,
         )
 
         return f, jac
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+    def exp_edges(p_ij, param, prop_out, prop_in, groups, selfloops):
+        """Compute the expected number of edges."""
+        # Compute aggregate properties
+        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
+        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+
+        # Compute expected edges
+        exp_e = 0.0
+        for i, x_i in enumerate(prop_out):
+            for j, y_j in enumerate(prop_in):
+                if (i != j) | selfloops:
+                    exp_e += p_ij(
+                        param, x_i, y_j, agg_p_out[groups[i]], agg_p_in[groups[j]]
+                    )
+
+        return exp_e
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_degrees(p_ij, param, prop_out, prop_in, groups, num_v, selfloops):
+        """Compute the expected undirected, in and out degree sequences."""
+        # Compute aggregate properties
+        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
+        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+
+        # Compute expected edges
+        exp_d = np.zeros(num_v, dtype=np.float64)
+        exp_d_out = np.zeros(num_v, dtype=np.float64)
+        exp_d_in = np.zeros(num_v, dtype=np.float64)
+
+        for i, p_out_i in enumerate(prop_out):
+            p_in_i = prop_in[i]
+            for j in range(i + 1):
+                p_out_j = prop_out[j]
+                p_in_j = prop_in[j]
+                if i != j:
+                    pij = p_ij(
+                        param,
+                        p_out_i,
+                        p_in_j,
+                        agg_p_out[groups[i]],
+                        agg_p_in[groups[j]],
+                    )
+                    pji = p_ij(
+                        param,
+                        p_out_j,
+                        p_in_i,
+                        agg_p_out[groups[j]],
+                        agg_p_in[groups[i]],
+                    )
+                    p = pij + pji - pij * pji
+                    exp_d[i] += p
+                    exp_d[j] += p
+                    exp_d_out[i] += pij
+                    exp_d_out[j] += pji
+                    exp_d_in[j] += pij
+                    exp_d_in[i] += pji
+                elif selfloops:
+                    pii = p_ij(
+                        param,
+                        p_out_i,
+                        p_in_j,
+                        agg_p_out[groups[i]],
+                        agg_p_in[groups[j]],
+                    )
+                    exp_d[i] += pii
+                    exp_d_out[i] += pii
+                    exp_d_in[j] += pii
+
+        return exp_d, exp_d_out, exp_d_in
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, groups, selfloops):
         """Compute the objective function of the density solver and its
         derivative.
         """
+        # Compute aggregate properties
+        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
+        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+
         f = 0.0
         jac = 0.0
         for i, p_out_i in enumerate(prop_out):
             for j, p_in_j in enumerate(prop_in):
                 if (i != j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
+                    p_tmp, jac_tmp = p_jac_ij(
+                        param,
+                        p_out_i,
+                        p_in_j,
+                        agg_p_out[groups[i]],
+                        agg_p_in[groups[j]],
+                    )
                     f += p_tmp
                     jac += jac_tmp
 
