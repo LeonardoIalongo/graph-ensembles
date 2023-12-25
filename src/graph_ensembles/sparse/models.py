@@ -1450,8 +1450,8 @@ class ScaleInvariantModel(FitnessModel):
             return -tmp
 
 
-class ConditionalScaleInvariantModel(ScaleInvariantModel):
-    """The Conditional Scale Invariant model is a ScaleInvariantModel that is
+class ConditionalInvariantModel(ScaleInvariantModel):
+    """The Conditional Invariant model is a ScaleInvariantModel that is
     conditioned on the observation of a coarse grained graph. This changes the
     probability distribution and the computation of certain properties.
 
