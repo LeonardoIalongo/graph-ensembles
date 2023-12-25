@@ -2,6 +2,11 @@
 History
 =======
 
+0.3.3 (2023-12-25)
+------------------
+* Added the sparse ConditionalInvariantModel 
+* Corrected issues with CremB sampling
+
 0.3.2 (2023-12-01)
 ------------------
 * Improved and corrected support for the computation of average nearest neighbour properties and degrees. 

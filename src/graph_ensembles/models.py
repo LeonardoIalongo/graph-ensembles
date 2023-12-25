@@ -385,17 +385,17 @@ class DiGraphEnsemble(GraphEnsemble):
             g.adj[rows, cols] = True
         elif weights == "cremb":
             if out_strength is None:
-                s_out = self.prop_out
+                out_strength = self.prop_out
             if in_strength is None:
-                s_in = self.prop_in
+                in_strength = self.prop_in
             rows, cols, vals = self._cremb_sample(
                 self.p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
                 self.prop_dyad,
-                s_out,
-                s_in,
+                out_strength,
+                in_strength,
                 self.selfloops,
             )
             g.adj = np.zeros((g.num_vertices, g.num_vertices))
@@ -930,11 +930,11 @@ class RandomDiGraph(DiGraphEnsemble):
         elif weights == "cremb":
             g.adj = np.zeros((g.num_vertices, g.num_vertices))
             if out_strength is None:
-                s_out = self.prop_out
+                out_strength = self.prop_out
             if in_strength is None:
-                s_in = self.prop_in
+                in_strength = self.prop_in
             rows, cols, vals = self._cremb_sample(
-                self.param, self.num_vertices, s_out, s_in, self.selfloops
+                self.param, self.num_vertices, out_strength, in_strength, self.selfloops
             )
             g.adj[rows, cols] = vals
         else:
@@ -1676,6 +1676,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                 ), msg
             else:
                 raise ValueError("Out strength by label must be an array.")
+            s_out_l = out_strength_label
 
         if in_strength_label is None:
             s_in_l = self.prop_in
@@ -1694,6 +1695,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                 ), msg
             else:
                 raise ValueError("In strength by label must be an array.")
+            s_in_l = in_strength_label
 
         # Sample edges by layer
         if weights is None:
