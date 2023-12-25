@@ -2049,20 +2049,20 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                             return -np.infty
 
                         tmp = logp(
-                            param, 
-                            p_out_i, 
-                            p_in_j, 
+                            param,
+                            p_out_i,
+                            p_in_j,
                             agg_p_out[groups[i]],
-                            agg_p_in[groups[j]]
+                            agg_p_in[groups[j]],
                         )
                     else:
                         if groups[j] in gr_list:
                             tmp = log1mp(
-                                param, 
-                                p_out_i, 
-                                p_in_j, 
+                                param,
+                                p_out_i,
+                                p_in_j,
                                 agg_p_out[groups[i]],
-                                agg_p_in[groups[j]]
+                                agg_p_in[groups[j]],
                             )
 
                     if isinf(tmp):
