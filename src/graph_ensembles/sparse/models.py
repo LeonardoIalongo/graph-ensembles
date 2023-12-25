@@ -1662,6 +1662,8 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
                 self.prop_out,
                 self.prop_in,
                 self.groups,
+                self.adj.indptr,
+                self.adj.indices,
                 self.selfloops,
             )
 
@@ -1679,7 +1681,8 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
                 self.prop_out,
                 self.prop_in,
                 self.groups,
-                self.num_vertices,
+                self.adj.indptr,
+                self.adj.indices,
                 self.selfloops,
             )
             self._exp_degree = res[0]
@@ -1701,6 +1704,134 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
             _ = self.expected_degree(recompute=recompute)
 
         return self._exp_in_degree
+
+    def log_likelihood(self, g, selfloops=None):
+        """Compute the likelihood a graph given the fitted model.
+        Accepts as input either a graph or an adjacency matrix.
+        """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before.")
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        if isinstance(g, graphs.Graph):
+            # Extract binary adjacency matrix from graph
+            adj = g.adjacency_matrix(directed=True, weighted=False)
+        elif sp.issparse(g):
+            adj = g.asformat("csr")
+        elif isinstance(g, np.ndarray):
+            adj = sp.csr_array(g)
+        else:
+            raise ValueError("g input not a graph or adjacency matrix.")
+
+        # Ensure dimensions are correct
+        if adj.shape != (self.num_vertices, self.num_vertices):
+            msg = (
+                "Passed graph adjacency matrix does not have the correct "
+                "shape: {0} instead of {1}".format(
+                    adj.shape, (self.num_vertices, self.num_vertices)
+                )
+            )
+            raise ValueError(msg)
+
+        # Compute log likelihood of graph
+        like = self._likelihood(
+            self.logp,
+            self.log1mp,
+            self.param,
+            self.prop_out,
+            self.prop_in,
+            self.groups,
+            self.adj.indptr,
+            self.adj.indices,
+            adj.indptr,
+            adj.indices,
+            self.selfloops,
+        )
+
+        return like
+
+    def sample(
+        self,
+        ref_g=None,
+        weights=None,
+        out_strength=None,
+        in_strength=None,
+        selfloops=None,
+    ):
+        """Return a Graph sampled from the ensemble.
+
+        If a reference graph is passed (ref_g) then the properties of the graph
+        will be copied to the new samples.
+        """
+        if not hasattr(self, "param"):
+            raise Exception("Ensemble has to be fitted before sampling.")
+
+        if selfloops is None:
+            selfloops = self.selfloops
+
+        # Generate uninitialised graph object
+        g = graphs.DiGraph.__new__(graphs.DiGraph)
+
+        # Initialise common object attributes
+        g.num_vertices = self.num_vertices
+        num_bytes = g.get_num_bytes(g.num_vertices)
+        g.id_dtype = np.dtype("u" + str(num_bytes))
+
+        # Check if reference graph is available
+        if ref_g is not None:
+            if hasattr(ref_g, "num_groups"):
+                g.num_groups = ref_g.num_groups
+                g.group_dict = ref_g.group_dict
+                g.group_dtype = ref_g.group_dtype
+                g.groups = ref_g.groups
+
+            g.id_dict = ref_g.id_dict
+        else:
+            g.id_dict = {}
+            for i in range(g.num_vertices):
+                g.id_dict[i] = i
+
+        # Sample edges
+        if weights is None:
+            rows, cols = self._binary_sample(
+                self.p_ij,
+                self.param,
+                self.prop_out,
+                self.prop_in,
+                self.groups,
+                self.adj.indptr,
+                self.adj.indices,
+                self.selfloops,
+            )
+            vals = np.ones(len(rows), dtype=bool)
+        elif weights == "cremb":
+            if out_strength is None:
+                out_strength = self.prop_out
+            if in_strength is None:
+                in_strength = self.prop_in
+            rows, cols, vals = self._cremb_sample(
+                self.p_ij,
+                self.param,
+                self.prop_out,
+                self.prop_in,
+                self.groups,
+                self.adj.indptr,
+                self.adj.indices,
+                out_strength,
+                in_strength,
+                self.selfloops,
+            )
+        else:
+            raise ValueError("Weights method not recognised or implemented.")
+
+        # Convert to adjacency matrix
+        g.adj = sp.csr_array(
+            (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
+        )
+
+        return g
 
     def fit(
         self,
@@ -1785,6 +1916,8 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
             self.prop_out,
             self.prop_in,
             self.groups,
+            self.adj.indptr,
+            self.adj.indices,
             self.selfloops,
         )
 
@@ -1792,7 +1925,7 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges(p_ij, param, prop_out, prop_in, groups, selfloops):
+    def exp_edges(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
         """Compute the expected number of edges."""
         # Compute aggregate properties
         agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
@@ -1804,8 +1937,11 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
         # Compute expected edges
         exp_e = 0.0
         for i, x_i in enumerate(prop_out):
+            n = adj_i[groups[i]]
+            m = adj_i[groups[i] + 1]
+            gr_list = adj_j[n:m]
             for j, y_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+                if (groups[j] in gr_list) and ((i != j) or selfloops):
                     exp_e += p_ij(
                         param, x_i, y_j, agg_p_out[groups[i]], agg_p_in[groups[j]]
                     )
@@ -1814,7 +1950,7 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_degrees(p_ij, param, prop_out, prop_in, groups, num_v, selfloops):
+    def exp_degrees(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
         """Compute the expected undirected, in and out degree sequences."""
         # Compute aggregate properties
         agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
@@ -1824,54 +1960,195 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
             agg_p_in[gr] += prop_in[i]
 
         # Compute expected edges
+        num_v = len(groups)
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
         exp_d_in = np.zeros(num_v, dtype=np.float64)
 
         for i, p_out_i in enumerate(prop_out):
             p_in_i = prop_in[i]
+            n = adj_i[groups[i]]
+            m = adj_i[groups[i] + 1]
+            gr_list = adj_j[n:m]
             for j in range(i + 1):
-                p_out_j = prop_out[j]
-                p_in_j = prop_in[j]
-                if i != j:
-                    pij = p_ij(
-                        param,
-                        p_out_i,
-                        p_in_j,
-                        agg_p_out[groups[i]],
-                        agg_p_in[groups[j]],
-                    )
-                    pji = p_ij(
-                        param,
-                        p_out_j,
-                        p_in_i,
-                        agg_p_out[groups[j]],
-                        agg_p_in[groups[i]],
-                    )
-                    p = pij + pji - pij * pji
-                    exp_d[i] += p
-                    exp_d[j] += p
-                    exp_d_out[i] += pij
-                    exp_d_out[j] += pji
-                    exp_d_in[j] += pij
-                    exp_d_in[i] += pji
-                elif selfloops:
-                    pii = p_ij(
-                        param,
-                        p_out_i,
-                        p_in_j,
-                        agg_p_out[groups[i]],
-                        agg_p_in[groups[j]],
-                    )
-                    exp_d[i] += pii
-                    exp_d_out[i] += pii
-                    exp_d_in[j] += pii
+                if groups[j] in gr_list:
+                    p_out_j = prop_out[j]
+                    p_in_j = prop_in[j]
+                    if i != j:
+                        pij = p_ij(
+                            param,
+                            p_out_i,
+                            p_in_j,
+                            agg_p_out[groups[i]],
+                            agg_p_in[groups[j]],
+                        )
+                        pji = p_ij(
+                            param,
+                            p_out_j,
+                            p_in_i,
+                            agg_p_out[groups[j]],
+                            agg_p_in[groups[i]],
+                        )
+                        p = pij + pji - pij * pji
+                        exp_d[i] += p
+                        exp_d[j] += p
+                        exp_d_out[i] += pij
+                        exp_d_out[j] += pji
+                        exp_d_in[j] += pij
+                        exp_d_in[i] += pji
+                    elif selfloops:
+                        pii = p_ij(
+                            param,
+                            p_out_i,
+                            p_in_j,
+                            agg_p_out[groups[i]],
+                            agg_p_in[groups[j]],
+                        )
+                        exp_d[i] += pii
+                        exp_d_out[i] += pii
+                        exp_d_in[j] += pii
 
         return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, groups, selfloops):
+    def _likelihood(
+        logp,
+        log1mp,
+        param,
+        prop_out,
+        prop_in,
+        groups,
+        agg_a_i,
+        agg_a_j,
+        adj_i,
+        adj_j,
+        selfloops,
+    ):
+        """Compute the binary log likelihood of a graph given the fitted model."""
+        # Compute aggregate properties
+        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
+        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+
+        like = 0
+        for i, p_out_i in enumerate(prop_out):
+            n = adj_i[i]
+            m = adj_i[i + 1]
+            j_list = adj_j[n:m]
+            n = agg_a_i[groups[i]]
+            m = agg_a_i[groups[i] + 1]
+            gr_list = agg_a_j[n:m]
+            for j, p_in_j in enumerate(prop_in):
+                if (i != j) | selfloops:
+                    # Check if link exists
+                    if j in j_list:
+                        if groups[j] not in gr_list:
+                            return -np.infty
+
+                        tmp = logp(
+                            param, 
+                            p_out_i, 
+                            p_in_j, 
+                            agg_p_out[groups[i]],
+                            agg_p_in[groups[j]]
+                        )
+                    else:
+                        if groups[j] in gr_list:
+                            tmp = log1mp(
+                                param, 
+                                p_out_i, 
+                                p_in_j, 
+                                agg_p_out[groups[i]],
+                                agg_p_in[groups[j]]
+                            )
+
+                    if isinf(tmp):
+                        return tmp
+                    like += tmp
+
+        return like
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _binary_sample(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
+        """Sample from the ensemble."""
+        rows = []
+        cols = []
+
+        # Compute aggregate properties
+        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
+        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+
+        for i, p_out_i in enumerate(prop_out):
+            n = adj_i[groups[i]]
+            m = adj_i[groups[i] + 1]
+            gr_list = adj_j[n:m]
+            for j, p_in_j in enumerate(prop_in):
+                if (groups[j] in gr_list) and ((i != j) | selfloops):
+                    p = p_ij(
+                        param,
+                        p_out_i,
+                        p_in_j,
+                        agg_p_out[groups[i]],
+                        agg_p_in[groups[j]],
+                    )
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
+
+        return rows, cols
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _cremb_sample(
+        p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, s_out, s_in, selfloops
+    ):
+        """Sample from the ensemble with weights from the CremB model."""
+        s_tot = np.sum(s_out)
+        msg = "Sum of in/out strengths not the same."
+        assert np.abs(1 - np.sum(s_in) / s_tot) < 1e-6, msg
+        rows = []
+        cols = []
+        vals = []
+
+        # Compute aggregate properties
+        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
+        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+
+        for i, p_out_i in enumerate(prop_out):
+            n = adj_i[groups[i]]
+            m = adj_i[groups[i] + 1]
+            gr_list = adj_j[n:m]
+            for j, p_in_j in enumerate(prop_in):
+                if (groups[j] in gr_list) and ((i != j) | selfloops):
+                    p = p_ij(
+                        param,
+                        p_out_i,
+                        p_in_j,
+                        agg_p_out[groups[i]],
+                        agg_p_in[groups[j]],
+                    )
+                    if rng.random() < p:
+                        rows.append(i)
+                        cols.append(j)
+                        vals.append(rng.exponential(s_out[i] * s_in[j] / (s_tot * p)))
+
+        return rows, cols, vals
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def exp_edges_f_jac(
+        p_jac_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops
+    ):
         """Compute the objective function of the density solver and its
         derivative.
         """
@@ -1885,8 +2162,11 @@ class ConditionalScaleInvariantModel(ScaleInvariantModel):
         f = 0.0
         jac = 0.0
         for i, p_out_i in enumerate(prop_out):
+            n = adj_i[groups[i]]
+            m = adj_i[groups[i] + 1]
+            gr_list = adj_j[n:m]
             for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
+                if (groups[j] in gr_list) and ((i != j) | selfloops):
                     p_tmp, jac_tmp = p_jac_ij(
                         param,
                         p_out_i,
