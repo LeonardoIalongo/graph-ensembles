@@ -385,17 +385,17 @@ class DiGraphEnsemble(GraphEnsemble):
             vals = np.ones(len(rows), dtype=bool)
         elif weights == "cremb":
             if out_strength is None:
-                s_out = self.prop_out
+                out_strength = self.prop_out
             if in_strength is None:
-                s_in = self.prop_in
+                in_strength = self.prop_in
             rows, cols, vals = self._cremb_sample(
                 self.p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
                 self.prop_dyad,
-                s_out,
-                s_in,
+                out_strength,
+                in_strength,
                 self.selfloops,
             )
         else:
@@ -932,11 +932,11 @@ class RandomDiGraph(DiGraphEnsemble):
                 )
         elif weights == "cremb":
             if out_strength is None:
-                s_out = self.prop_out
+                out_strength = self.prop_out
             if in_strength is None:
-                s_in = self.prop_in
+                in_strength = self.prop_in
             rows, cols, vals = self._cremb_sample(
-                self.param, self.num_vertices, s_out, s_in, self.selfloops
+                self.param, self.num_vertices, out_strength, in_strength, self.selfloops
             )
         else:
             raise ValueError("Weights method not recognised or implemented.")
