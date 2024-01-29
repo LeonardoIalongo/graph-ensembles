@@ -360,7 +360,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         # Sample edges
         if weights is None:
             rows, cols = self._binary_sample(
-                self.p_ij,
+                self.unc_p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
@@ -643,28 +643,47 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         cols = []
 
         # Compute aggregate properties
-        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
-        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        M = np.max(groups) + 1
+        agg_p_out = np.zeros(M, np.float64)
+        agg_p_in = np.zeros(M, np.float64)
         for i, gr in enumerate(groups):
             agg_p_out[gr] += prop_out[i]
             agg_p_in[gr] += prop_in[i]
 
-        for i, p_out_i in enumerate(prop_out):
-            n = adj_i[groups[i]]
-            m = adj_i[groups[i] + 1]
-            gr_list = adj_j[n:m]
-            for j, p_in_j in enumerate(prop_in):
-                if (groups[j] in gr_list) and ((i != j) | selfloops):
-                    p = p_ij(
-                        param,
-                        p_out_i,
-                        p_in_j,
-                        agg_p_out[groups[i]],
-                        agg_p_in[groups[j]],
-                    )
-                    if rng.random() < p:
-                        rows.append(i)
-                        cols.append(j)
+        # Iterate over aggregated adj
+        for a in range(M):
+            # Get all node indices in a
+            i_in_a = np.where(groups == a)[0]
+
+            # For each group find connected groups
+            n = adj_i[a]
+            m = adj_i[a + 1]
+            b_list = adj_j[n:m]
+
+            for b in b_list:
+                # Get all node indices in b
+                j_in_b = np.where(groups == b)[0]
+
+                # Iterate in order over pij that compose A_ab
+                atleastone = False
+                pnorm = p_ij(param, agg_p_out[a], agg_p_in[b])
+                for i in i_in_a:
+                    p_out_i = prop_out[i]
+                    for j in j_in_b:
+                        if (i != j) | selfloops:
+                            p = p_ij(param, p_out_i, prop_in[j])
+
+                            if atleastone:
+                                p_sample = p
+                            else:
+                                p_sample = p / pnorm
+
+                            if rng.random() < p_sample:
+                                rows.append(i)
+                                cols.append(j)
+                                atleastone = True
+                            else:
+                                pnorm = 1 - ((1 - pnorm) / (1 - p))
 
         return rows, cols
 
@@ -767,10 +786,22 @@ class ConditionalInvariantModel(ScaleInvariantModel):
             return -expm1(-da), a * exp(-da)
         else:
             return (
-                -expm1(-da) / (-expm1(-db)),
-                a * exp(-da) / (-expm1(-db))
-                - b * exp(-db) * (-expm1(-da)) / (expm1(-db) ** 2),
+                -expm1(-da) / expdbm1,
+                a * exp(-da) / expdbm1 - b * exp(-db) * (-expm1(-da)) / (expdbm1**2),
             )
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def unc_p_ij(d, x_i, y_j):
+        """Compute the unconditional probability of connection between node i and j."""
+        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+            return 0.0
+
+        tmp = d[0] * x_i * y_j
+        if isinf(tmp):
+            return 1.0
+        else:
+            return -expm1(-tmp)
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
