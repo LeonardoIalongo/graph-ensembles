@@ -240,14 +240,19 @@ class FitnessModel(DiGraphEnsemble):
         for a given value of delta.
         """
         f, jac = self.exp_edges_f_jac(
-            self.p_jac_ij, delta, self.prop_out, self.prop_in, self.selfloops
+            self.p_jac_ij,
+            delta,
+            self.prop_out,
+            self.prop_in,
+            self.prop_dyad,
+            self.selfloops,
         )
 
         return f, jac
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
+    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, pdyad, selfloops):
         """Compute the objective function of the density solver and its
         derivative.
         """
@@ -256,7 +261,7 @@ class FitnessModel(DiGraphEnsemble):
         for i, p_out_i in enumerate(prop_out):
             for j, p_in_j in enumerate(prop_in):
                 if (i != j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j)
+                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j, pdyad(i, j))
                     f += p_tmp
                     jac += jac_tmp
 
@@ -264,17 +269,17 @@ class FitnessModel(DiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_jac_ij(d, x_i, y_j):
+    def p_jac_ij(d, x_i, y_j, z_ij):
         """Compute the probability of connection and the jacobian
         contribution of node i and j.
         """
-        if (x_i == 0) or (y_j == 0):
+        if (x_i == 0) or (y_j == 0) or (z_ij == 0):
             return 0.0, 0.0
 
         if d[0] == 0:
-            return 0.0, x_i * y_j
+            return 0.0, x_i * y_j * z_ij
 
-        tmp = x_i * y_j
+        tmp = x_i * y_j * z_ij
         tmp1 = d[0] * tmp
         if isinf(tmp1):
             return 1.0, 0.0
@@ -285,10 +290,10 @@ class FitnessModel(DiGraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def p_ij(d, x_i, y_j, z_ij):
         """Compute the probability of connection between node i and j."""
-        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+        if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
             return 0.0
 
-        tmp = d[0] * x_i * y_j
+        tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
             return 1.0
         else:
@@ -298,10 +303,10 @@ class FitnessModel(DiGraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
-        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+        if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
             return -np.infty
 
-        tmp = d[0] * x_i * y_j
+        tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
             return 0.0
         else:
@@ -313,10 +318,10 @@ class FitnessModel(DiGraphEnsemble):
         """Compute the log of 1 minus the probability of connection between
         node i and j.
         """
-        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
+        if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
             return 0.0
 
-        tmp = d[0] * x_i * y_j
+        tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
             return -np.infty
         else:

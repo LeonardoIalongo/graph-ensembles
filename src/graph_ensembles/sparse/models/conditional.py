@@ -267,15 +267,12 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
         return self._exp_in_degree
 
-    def log_likelihood(self, g, selfloops=None):
+    def log_likelihood(self, g):
         """Compute the likelihood a graph given the fitted model.
         Accepts as input either a graph or an adjacency matrix.
         """
         if not hasattr(self, "param"):
             raise Exception("Ensemble has to be fitted before.")
-
-        if selfloops is None:
-            selfloops = self.selfloops
 
         if isinstance(g, graphs.Graph):
             # Extract binary adjacency matrix from graph
@@ -297,6 +294,14 @@ class ConditionalInvariantModel(ScaleInvariantModel):
             )
             raise ValueError(msg)
 
+        # Check if adjacency matrix compatible with aggregate conditional
+        M = self.groups.max() + 1
+        N = self.num_vertices
+        Gmat = sp.csr_array((np.ones(N), (self.groups, np.arange(N))), shape=(M, N))
+        agg_adj = Gmat.dot(adj).dot(Gmat.T) > 0
+        if (agg_adj != (self.adj > 0)).nnz != 0:
+            return -np.infty
+
         # Compute log likelihood of graph
         like = self._likelihood(
             self.logp,
@@ -304,15 +309,26 @@ class ConditionalInvariantModel(ScaleInvariantModel):
             self.param,
             self.prop_out,
             self.prop_in,
-            self.groups,
-            self.adj.indptr,
-            self.adj.indices,
+            self.prop_dyad,
             adj.indptr,
             adj.indices,
             self.selfloops,
         )
 
-        return like
+        # Compute log likelihood of agg graph
+        agg_like = self._agg_likelihood(
+            self.logp,
+            self.log1mp,
+            self.param,
+            self.prop_out,
+            self.prop_in,
+            self.groups,
+            agg_adj.indptr,
+            agg_adj.indices,
+            self.selfloops,
+        )
+
+        return like - agg_like
 
     def sample(
         self,
@@ -615,67 +631,6 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _likelihood(
-        logp,
-        log1mp,
-        param,
-        prop_out,
-        prop_in,
-        groups,
-        agg_a_i,
-        agg_a_j,
-        adj_i,
-        adj_j,
-        selfloops,
-    ):
-        """Compute the binary log likelihood of a graph given the fitted model."""
-        # Compute aggregate properties
-        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
-        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
-        for i, gr in enumerate(groups):
-            agg_p_out[gr] += prop_out[i]
-            agg_p_in[gr] += prop_in[i]
-
-        like = 0
-        for i, p_out_i in enumerate(prop_out):
-            n = adj_i[i]
-            m = adj_i[i + 1]
-            j_list = adj_j[n:m]
-            n = agg_a_i[groups[i]]
-            m = agg_a_i[groups[i] + 1]
-            gr_list = agg_a_j[n:m]
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
-                    # Check if link exists
-                    if j in j_list:
-                        if groups[j] not in gr_list:
-                            return -np.infty
-
-                        tmp = logp(
-                            param,
-                            p_out_i,
-                            p_in_j,
-                            agg_p_out[groups[i]],
-                            agg_p_in[groups[j]],
-                        )
-                    else:
-                        if groups[j] in gr_list:
-                            tmp = log1mp(
-                                param,
-                                p_out_i,
-                                p_in_j,
-                                agg_p_out[groups[i]],
-                                agg_p_in[groups[j]],
-                            )
-
-                    if isinf(tmp):
-                        return tmp
-                    like += tmp
-
-        return like
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
     def _binary_sample(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
         """Sample from the ensemble."""
         rows = []
@@ -851,3 +806,69 @@ class ConditionalInvariantModel(ScaleInvariantModel):
             return -expm1(-tmp)
         else:
             return (-expm1(-tmp)) / (-expm1(-tmp1))
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def prop_dyad(i, j):
+        """Define empy dyadic property as it is not always defined."""
+        return 1.0
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _agg_likelihood(
+        logp,
+        log1mp,
+        param,
+        prop_out,
+        prop_in,
+        groups,
+        adj_i,
+        adj_j,
+        selfloops,
+    ):
+        # Compute aggregate properties
+        M = np.max(groups) + 1
+        agg_p_out = np.zeros(M, np.float64)
+        agg_p_in = np.zeros(M, np.float64)
+        if not selfloops:
+            agg_diag = np.zeros(M, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+            if not selfloops:
+                agg_diag[gr] += prop_out[i] * prop_in[i]
+
+        like = 0
+        for i, p_out_i in enumerate(agg_p_out):
+            n = adj_i[i]
+            m = adj_i[i + 1]
+            j_list = adj_j[n:m]
+            for j, p_in_j in enumerate(agg_p_in):
+                if not selfloops and (i == j):
+                    # Check if link exists
+                    if j in j_list:
+                        tmp = logp(
+                            param,
+                            p_out_i,
+                            p_in_j,
+                            1 - agg_diag[i] / (agg_p_out[i] * agg_p_in[j]),
+                        )
+                    else:
+                        tmp = log1mp(
+                            param,
+                            p_out_i,
+                            p_in_j,
+                            1 - agg_diag[i] / (agg_p_out[i] * agg_p_in[j]),
+                        )
+                else:
+                    # Check if link exists
+                    if j in j_list:
+                        tmp = logp(param, p_out_i, p_in_j, 1.0)
+                    else:
+                        tmp = log1mp(param, p_out_i, p_in_j, 1.0)
+
+                if isinf(tmp):
+                    return tmp
+                like += tmp
+
+        return like
