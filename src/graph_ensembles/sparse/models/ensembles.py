@@ -67,7 +67,7 @@ class GraphEnsemble:
     @jit(nopython=True)  # pragma: no cover
     def prop_dyad(i, j):
         """Define empy dyadic property as it is not always defined."""
-        return None
+        return 1.0
 
 
 class DiGraphEnsemble(GraphEnsemble):

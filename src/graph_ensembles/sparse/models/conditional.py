@@ -7,8 +7,6 @@ import scipy.sparse as sp
 import numpy.random as rng
 from numba import jit
 from math import isinf
-from math import log
-from math import log1p
 from math import expm1
 from math import exp
 import warnings
@@ -221,7 +219,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
         if not hasattr(self, "_exp_num_edges") or recompute:
             self._exp_num_edges = self.exp_edges(
-                self.p_ij,
+                self.cond_p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
@@ -240,7 +238,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
         if not hasattr(self, "_exp_degree") or recompute:
             res = self.exp_degrees(
-                self.p_ij,
+                self.cond_p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
@@ -360,7 +358,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         # Sample edges
         if weights is None:
             rows, cols = self._binary_sample(
-                self.unc_p_ij,
+                self.p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
@@ -370,23 +368,6 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                 self.selfloops,
             )
             vals = np.ones(len(rows), dtype=bool)
-        elif weights == "cremb":
-            if out_strength is None:
-                out_strength = self.prop_out
-            if in_strength is None:
-                in_strength = self.prop_in
-            rows, cols, vals = self._cremb_sample(
-                self.p_ij,
-                self.param,
-                self.prop_out,
-                self.prop_in,
-                self.groups,
-                self.adj.indptr,
-                self.adj.indices,
-                out_strength,
-                in_strength,
-                self.selfloops,
-            )
         else:
             raise ValueError("Weights method not recognised or implemented.")
 
@@ -492,23 +473,48 @@ class ConditionalInvariantModel(ScaleInvariantModel):
     def exp_edges(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
         """Compute the expected number of edges."""
         # Compute aggregate properties
-        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
-        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        M = np.max(groups) + 1
+        agg_p_out = np.zeros(M, np.float64)
+        agg_p_in = np.zeros(M, np.float64)
+        if not selfloops:
+            agg_diag = np.zeros(M, np.float64)
         for i, gr in enumerate(groups):
             agg_p_out[gr] += prop_out[i]
             agg_p_in[gr] += prop_in[i]
+            if not selfloops:
+                agg_diag[gr] += prop_out[i] * prop_in[i]
 
         # Compute expected edges
         exp_e = 0.0
         for i, x_i in enumerate(prop_out):
-            n = adj_i[groups[i]]
-            m = adj_i[groups[i] + 1]
+            a = groups[i]
+            n = adj_i[a]
+            m = adj_i[a + 1]
             gr_list = adj_j[n:m]
             for j, y_j in enumerate(prop_in):
-                if (groups[j] in gr_list) and ((i != j) or selfloops):
-                    exp_e += p_ij(
-                        param, x_i, y_j, agg_p_out[groups[i]], agg_p_in[groups[j]]
-                    )
+                b = groups[j]
+                if (b in gr_list) and ((i != j) or selfloops):
+                    if not selfloops and (a == b):
+                        pij = p_ij(
+                            param,
+                            x_i,
+                            y_j,
+                            1.0,
+                            agg_p_out[a],
+                            agg_p_in[b],
+                            1 - agg_diag[a] / (agg_p_out[a] * agg_p_in[b]),
+                        )
+                    else:
+                        pij = p_ij(
+                            param,
+                            x_i,
+                            y_j,
+                            1.0,
+                            agg_p_out[a],
+                            agg_p_in[b],
+                            1.0,
+                        )
+                    exp_e += pij
 
         return exp_e
 
@@ -517,13 +523,18 @@ class ConditionalInvariantModel(ScaleInvariantModel):
     def exp_degrees(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
         """Compute the expected undirected, in and out degree sequences."""
         # Compute aggregate properties
-        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
-        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        M = np.max(groups) + 1
+        agg_p_out = np.zeros(M, np.float64)
+        agg_p_in = np.zeros(M, np.float64)
+        if not selfloops:
+            agg_diag = np.zeros(M, np.float64)
         for i, gr in enumerate(groups):
             agg_p_out[gr] += prop_out[i]
             agg_p_in[gr] += prop_in[i]
+            if not selfloops:
+                agg_diag[gr] += prop_out[i] * prop_in[i]
 
-        # Compute expected edges
+        # Compute expected degrees
         num_v = len(groups)
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
@@ -531,28 +542,54 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
         for i, p_out_i in enumerate(prop_out):
             p_in_i = prop_in[i]
-            n = adj_i[groups[i]]
-            m = adj_i[groups[i] + 1]
+            a = groups[i]
+            n = adj_i[a]
+            m = adj_i[a + 1]
             gr_list = adj_j[n:m]
             for j in range(i + 1):
-                if groups[j] in gr_list:
+                b = groups[j]
+                if b in gr_list:
                     p_out_j = prop_out[j]
                     p_in_j = prop_in[j]
                     if i != j:
-                        pij = p_ij(
-                            param,
-                            p_out_i,
-                            p_in_j,
-                            agg_p_out[groups[i]],
-                            agg_p_in[groups[j]],
-                        )
-                        pji = p_ij(
-                            param,
-                            p_out_j,
-                            p_in_i,
-                            agg_p_out[groups[j]],
-                            agg_p_in[groups[i]],
-                        )
+                        if not selfloops and (a == b):
+                            pij = p_ij(
+                                param,
+                                p_out_i,
+                                p_in_j,
+                                1.0,
+                                agg_p_out[a],
+                                agg_p_in[b],
+                                1 - agg_diag[a] / (agg_p_out[a] * agg_p_in[b]),
+                            )
+                            pji = p_ij(
+                                param,
+                                p_out_j,
+                                p_in_i,
+                                1.0,
+                                agg_p_out[b],
+                                agg_p_in[a],
+                                1 - agg_diag[a] / (agg_p_out[b] * agg_p_in[a]),
+                            )
+                        else:
+                            pij = p_ij(
+                                param,
+                                p_out_i,
+                                p_in_j,
+                                1.0,
+                                agg_p_out[a],
+                                agg_p_in[b],
+                                1.0,
+                            )
+                            pji = p_ij(
+                                param,
+                                p_out_j,
+                                p_in_i,
+                                1.0,
+                                agg_p_out[b],
+                                agg_p_in[a],
+                                1.0,
+                            )
                         p = pij + pji - pij * pji
                         exp_d[i] += p
                         exp_d[j] += p
@@ -565,8 +602,10 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                             param,
                             p_out_i,
                             p_in_j,
+                            1.0,
                             agg_p_out[groups[i]],
                             agg_p_in[groups[j]],
+                            1.0,
                         )
                         exp_d[i] += pii
                         exp_d_out[i] += pii
@@ -701,46 +740,6 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def _cremb_sample(
-        p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, s_out, s_in, selfloops
-    ):
-        """Sample from the ensemble with weights from the CremB model."""
-        s_tot = np.sum(s_out)
-        msg = "Sum of in/out strengths not the same."
-        assert np.abs(1 - np.sum(s_in) / s_tot) < 1e-6, msg
-        rows = []
-        cols = []
-        vals = []
-
-        # Compute aggregate properties
-        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
-        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
-        for i, gr in enumerate(groups):
-            agg_p_out[gr] += prop_out[i]
-            agg_p_in[gr] += prop_in[i]
-
-        for i, p_out_i in enumerate(prop_out):
-            n = adj_i[groups[i]]
-            m = adj_i[groups[i] + 1]
-            gr_list = adj_j[n:m]
-            for j, p_in_j in enumerate(prop_in):
-                if (groups[j] in gr_list) and ((i != j) | selfloops):
-                    p = p_ij(
-                        param,
-                        p_out_i,
-                        p_in_j,
-                        agg_p_out[groups[i]],
-                        agg_p_in[groups[j]],
-                    )
-                    if rng.random() < p:
-                        rows.append(i)
-                        cols.append(j)
-                        vals.append(rng.exponential(s_out[i] * s_in[j] / (s_tot * p)))
-
-        return rows, cols, vals
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac(
         p_jac_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops
     ):
@@ -748,27 +747,42 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         derivative.
         """
         # Compute aggregate properties
-        agg_p_out = np.zeros(np.max(groups) + 1, np.float64)
-        agg_p_in = np.zeros(np.max(groups) + 1, np.float64)
+        M = np.max(groups) + 1
+        agg_p_out = np.zeros(M, np.float64)
+        agg_p_in = np.zeros(M, np.float64)
+        if not selfloops:
+            agg_diag = np.zeros(M, np.float64)
         for i, gr in enumerate(groups):
             agg_p_out[gr] += prop_out[i]
             agg_p_in[gr] += prop_in[i]
+            if not selfloops:
+                agg_diag[gr] += prop_out[i] * prop_in[i]
 
         f = 0.0
         jac = 0.0
         for i, p_out_i in enumerate(prop_out):
-            n = adj_i[groups[i]]
-            m = adj_i[groups[i] + 1]
+            a = groups[i]
+            n = adj_i[a]
+            m = adj_i[a + 1]
             gr_list = adj_j[n:m]
             for j, p_in_j in enumerate(prop_in):
-                if (groups[j] in gr_list) and ((i != j) | selfloops):
-                    p_tmp, jac_tmp = p_jac_ij(
-                        param,
-                        p_out_i,
-                        p_in_j,
-                        agg_p_out[groups[i]],
-                        agg_p_in[groups[j]],
-                    )
+                b = groups[j]
+                if (b in gr_list) and ((i != j) | selfloops):
+                    if not selfloops and (a == b):
+                        p_tmp, jac_tmp = p_jac_ij(
+                            param,
+                            p_out_i,
+                            p_in_j,
+                            1.0,
+                            agg_p_out[a],
+                            agg_p_in[b],
+                            1 - agg_diag[a] / (agg_p_out[a] * agg_p_in[b]),
+                        )
+                    else:
+                        p_tmp, jac_tmp = p_jac_ij(
+                            param, p_out_i, p_in_j, 1.0, agg_p_out[a], agg_p_in[b], 1.0
+                        )
+
                     f += p_tmp
                     jac += jac_tmp
 
@@ -776,21 +790,31 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def p_jac_ij(d, x_i, y_j, x_I, y_J):
+    def p_jac_ij(d, x_i, y_j, z_ij, x_I, y_J, z_IJ):
         """Compute the probability of connection and the jacobian
         contribution of node i and j.
         """
-        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
+        if (
+            (x_I == 0)
+            or (y_J == 0)
+            or (z_IJ == 0)
+            or (x_i == 0)
+            or (y_j == 0)
+            or (z_ij == 0)
+        ):
             return 0.0, 0.0
 
-        a = x_i * y_j
-        b = x_I * y_J
+        a = x_i * y_j * z_ij
+        b = x_I * y_J * z_IJ
         da = d[0] * a
         db = d[0] * b
         expdbm1 = -expm1(-db)
 
         if expdbm1 < 1e-12:
-            return ((x_i / x_I) * (y_j / y_J), (1 / 2 - (a / (2 * b))) * a)
+            return (
+                (x_i / x_I) * (y_j / y_J) * (z_ij / z_IJ),
+                (1 / 2 - (a / (2 * b))) * a,
+            )
 
         if isinf(da):
             return 1.0, 0.0
@@ -804,72 +828,26 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def unc_p_ij(d, x_i, y_j, z_ij):
-        """Compute the unconditional probability of connection between node i and j."""
-        if (x_i == 0) or (y_j == 0) or (d[0] == 0):
-            return 0.0
-
-        tmp = d[0] * x_i * y_j * z_ij
-        if isinf(tmp):
-            return 1.0
-        else:
-            return -expm1(-tmp)
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def p_ij(d, x_i, y_j, x_I, y_J):
+    def cond_p_ij(d, x_i, y_j, z_ij, x_I, y_J, z_IJ):
         """Compute the probability of connection between node i and j."""
-        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
+        if (
+            (x_I == 0)
+            or (y_J == 0)
+            or (z_IJ == 0)
+            or (x_i == 0)
+            or (y_j == 0)
+            or (z_ij == 0)
+        ):
             return 0.0
 
         if d[0] == 0:
-            return (x_i / x_I) * (y_j / y_J)
+            return (x_i / x_I) * (y_j / y_J) * (z_ij / z_IJ)
 
-        tmp = d[0] * x_i * y_j
-        tmp1 = d[0] * x_I * y_J
+        tmp = d[0] * x_i * y_j * z_ij
+        tmp1 = d[0] * x_I * y_J * z_IJ
         if isinf(tmp):
             return 1.0
         elif isinf(tmp1):
             return -expm1(-tmp)
         else:
             return (-expm1(-tmp)) / (-expm1(-tmp1))
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def logp(d, x_i, y_j, x_I, y_J):
-        """Compute the log probability of connection between node i and j."""
-        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
-            return -np.infty
-
-        if d[0] == 0:
-            return log((x_i / x_I) * (y_j / y_J))
-
-        tmp = d[0] * x_i * y_j
-        tmp1 = d[0] * x_I * y_J
-        if isinf(tmp):
-            return 0.0
-        elif isinf(tmp1):
-            return log(-expm1(-tmp))
-        else:
-            return log((-expm1(-tmp)) / (-expm1(-tmp1)))
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def log1mp(d, x_i, y_j, x_I, y_J):
-        """Compute the log of 1 minus the probability of connection between
-        node i and j.
-        """
-        if (x_I == 0) or (y_J == 0) or (x_i == 0) or (y_j == 0):
-            return 0.0
-
-        if d[0] == 0:
-            return log1p(-(x_i / x_I) * (y_j / y_J))
-
-        tmp = d[0] * x_i * y_j
-        tmp1 = d[0] * x_I * y_J
-        if isinf(tmp):
-            return -np.infty
-        elif isinf(tmp1):
-            return -tmp
-        else:
-            return log1p(expm1(-tmp) / (-expm1(-tmp1)))
