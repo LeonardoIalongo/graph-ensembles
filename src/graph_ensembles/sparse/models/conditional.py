@@ -646,9 +646,13 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         M = np.max(groups) + 1
         agg_p_out = np.zeros(M, np.float64)
         agg_p_in = np.zeros(M, np.float64)
+        if not selfloops:
+            agg_diag = np.zeros(M, np.float64)
         for i, gr in enumerate(groups):
             agg_p_out[gr] += prop_out[i]
             agg_p_in[gr] += prop_in[i]
+            if not selfloops:
+                agg_diag[gr] += prop_out[i] * prop_in[i]
 
         # Iterate over aggregated adj
         for a in range(M):
@@ -666,12 +670,20 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
                 # Iterate in order over pij that compose A_ab
                 atleastone = False
-                pnorm = p_ij(param, agg_p_out[a], agg_p_in[b])
+                pnorm = p_ij(param, agg_p_out[a], agg_p_in[b], 1)
+                if not selfloops and (a == b):
+                    pnorm = p_ij(
+                        param,
+                        agg_p_out[a],
+                        agg_p_in[b],
+                        1 - agg_diag[a] / (agg_p_out[a] * agg_p_in[b]),
+                    )
+
                 for i in i_in_a:
                     p_out_i = prop_out[i]
                     for j in j_in_b:
                         if (i != j) | selfloops:
-                            p = p_ij(param, p_out_i, prop_in[j])
+                            p = p_ij(param, p_out_i, prop_in[j], 1)
 
                             if atleastone:
                                 p_sample = p
@@ -792,12 +804,12 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def unc_p_ij(d, x_i, y_j):
+    def unc_p_ij(d, x_i, y_j, z_ij):
         """Compute the unconditional probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (d[0] == 0):
             return 0.0
 
-        tmp = d[0] * x_i * y_j
+        tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
             return 1.0
         else:
