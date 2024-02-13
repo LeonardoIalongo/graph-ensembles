@@ -2,6 +2,11 @@
 History
 =======
 
+0.3.4 (2023-02-13)
+------------------
+* Corrected sampling with ConditionalInvariantModel 
+* Added new weighted sampling method for aggregate graphs
+
 0.3.3 (2023-12-25)
 ------------------
 * Added the sparse ConditionalInvariantModel 
