@@ -901,7 +901,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
                 # Iterate over the samples of macro link ab
                 for n in range(s_start, len(rows)):
-                    frac = vals[n]/snorm
+                    frac = vals[n] / snorm
                     vals[n] = frac * w_ab
 
         return rows, cols, vals
