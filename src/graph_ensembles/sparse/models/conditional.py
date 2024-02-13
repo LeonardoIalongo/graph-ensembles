@@ -384,6 +384,23 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                 self.selfloops,
             )
             vals = np.ones(len(rows), dtype=bool)
+        elif weights == "cremb":
+            if out_strength is None:
+                out_strength = self.prop_out
+            if in_strength is None:
+                in_strength = self.prop_in
+            rows, cols, vals = self._cremb_sample(
+                self.p_ij,
+                self.param,
+                self.prop_out,
+                self.prop_in,
+                self.groups,
+                self.adj.indptr,
+                self.adj.indices,
+                out_strength,
+                in_strength,
+                self.selfloops,
+            )
         else:
             raise ValueError("Weights method not recognised or implemented.")
 
@@ -692,6 +709,94 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                                 pnorm = 1 - ((1 - pnorm) / (1 - p))
 
         return rows, cols
+
+    @staticmethod
+    @jit(nopython=True)  # pragma: no cover
+    def _cremb_sample(
+        p_ij,
+        param,
+        prop_out,
+        prop_in,
+        groups,
+        adj_i,
+        adj_j,
+        s_out,
+        s_in,
+        selfloops,
+    ):
+        """Sample from the ensemble."""
+        rows = []
+        cols = []
+        vals = []
+
+        # Compute total strength
+        s_tot = np.sum(s_out)
+        msg = "Sum of in/out strengths not the same."
+        assert np.abs(1 - np.sum(s_in) / s_tot) < 1e-6, msg
+
+        # Compute aggregate properties
+        M = np.max(groups) + 1
+        agg_p_out = np.zeros(M, np.float64)
+        agg_p_in = np.zeros(M, np.float64)
+        if not selfloops:
+            agg_diag = np.zeros(M, np.float64)
+        for i, gr in enumerate(groups):
+            agg_p_out[gr] += prop_out[i]
+            agg_p_in[gr] += prop_in[i]
+            if not selfloops:
+                agg_diag[gr] += prop_out[i] * prop_in[i]
+
+        # Iterate over aggregated adj
+        for a in range(M):
+            # Get all node indices in a
+            i_in_a = np.where(groups == a)[0]
+
+            # For each group find connected groups
+            n = adj_i[a]
+            m = adj_i[a + 1]
+            b_list = adj_j[n:m]
+
+            for b in b_list:
+                # Get all node indices in b
+                j_in_b = np.where(groups == b)[0]
+
+                # Iterate in order over pij that compose A_ab
+                atleastone = False
+                p_ab = p_ij(param, agg_p_out[a], agg_p_in[b], 1)
+                if not selfloops and (a == b):
+                    p_ab = p_ij(
+                        param,
+                        agg_p_out[a],
+                        agg_p_in[b],
+                        1 - agg_diag[a] / (agg_p_out[a] * agg_p_in[b]),
+                    )
+                pnorm = p_ab
+
+                for i in i_in_a:
+                    p_out_i = prop_out[i]
+                    for j in j_in_b:
+                        if (i != j) | selfloops:
+                            p = p_ij(param, p_out_i, prop_in[j], 1)
+
+                            if atleastone:
+                                p_sample = p
+                            else:
+                                p_sample = p / pnorm
+
+                            if rng.random() < p_sample:
+                                rows.append(i)
+                                cols.append(j)
+                                vals.append(
+                                    rng.exponential(
+                                        s_out[i] * s_in[j] / (s_tot * (p / p_ab))
+                                    )
+                                )
+
+                                atleastone = True
+                            else:
+                                pnorm = 1 - ((1 - pnorm) / (1 - p))
+
+        return rows, cols, vals
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
