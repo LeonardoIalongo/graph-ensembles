@@ -2,6 +2,10 @@
 History
 =======
 
+0.3.5 (2023-02-14)
+------------------
+* Corrected distribution files for missing models
+
 0.3.4 (2023-02-13)
 ------------------
 * Corrected sampling with ConditionalInvariantModel 
