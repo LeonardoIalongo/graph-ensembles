@@ -309,9 +309,9 @@ class RandomDiGraph(DiGraphEnsemble):
 
         # Compute log likelihood of graph
         if (self.param[0] == 0) and (adj.nnz > 0):
-            return -np.infty
+            return -np.inf
         if (self.param[0] == 1) and (adj.nnz != 0):
-            return -np.infty
+            return -np.inf
 
         like = adj.nnz * log(self.param[0])
         if selfloops:
@@ -322,7 +322,7 @@ class RandomDiGraph(DiGraphEnsemble):
             )
             # Ensure that the matrix has no elements on the diagonal
             if adj.diagonal().sum() > 0:
-                return -np.infty
+                return -np.inf
 
         return like
 

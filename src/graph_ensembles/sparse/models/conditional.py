@@ -1,7 +1,7 @@
 from .invariant import ScaleInvariantModel
 from .. import graphs
 from .ensembles import empty_index
-from ...solver import monotonic_newton_solver
+from .solver import monotonic_newton_solver
 import numpy as np
 import scipy.sparse as sp
 import numpy.random as rng
@@ -300,7 +300,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         Gmat = sp.csr_array((np.ones(N), (self.groups, np.arange(N))), shape=(M, N))
         agg_adj = Gmat.dot(adj).dot(Gmat.T) > 0
         if (agg_adj != (self.adj > 0)).nnz != 0:
-            return -np.infty
+            return -np.inf
 
         # Compute log likelihood of graph
         like = self._likelihood(
@@ -483,7 +483,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                 atol=atol,
                 rtol=rtol,
                 x_l=0.0,
-                x_u=np.infty,
+                x_u=np.inf,
                 max_iter=maxiter,
                 full_return=True,
                 verbose=verbose,

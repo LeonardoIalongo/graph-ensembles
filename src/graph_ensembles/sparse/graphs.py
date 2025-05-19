@@ -8,6 +8,7 @@ sparse arrays and is suitable for large graphs.
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+import os
 from numba import jit
 import warnings
 import networkx as nx
@@ -67,7 +68,7 @@ class Graph:
         Return a Networkx equivalent.
     """
 
-    def __init__(self, v, e, v_id, src, dst, weight=None, v_group=None):
+    def __init__(self, v, e, v_id, src, dst, weight=None, v_group=None, **kwargs):
         """Return a Graph object given vertices and edges.
 
         Parameters
@@ -209,7 +210,40 @@ class Graph:
             for idx in zero_idx:
                 names.append(list(self.id_dict.keys())[idx])
             warnings.warn(str(names) + " vertices have no edges.", UserWarning)
-
+            
+        
+        # update all the variables present in kwargs
+        self.__dict__.update(kwargs)
+        self.kind = 'obs'
+        
+        
+        # create the folder for the full adjacency matrix (ground truth)
+        get_numb = 0 if self.get("perc_ing_nodes") == None else self.get("perc_ing_nodes")
+        assert get_numb <= 1, "The perc_ing_nodes must be <= 1"
+        
+        # set the output directories where to save the files
+        if not self.get("perc_ing_nodes"):
+            self.vars_dir = f"outputs/vars/{self.name}/full/level{int(self.level)}"
+        
+        # if perc_ing_nodes < 1, report the percentage and the seed
+        elif self.get("perc_ing_nodes") < 1:
+            self.vars_dir = f"outputs/vars/{self.name}/perc{self.perc_ing_nodes}/seed{self.seed}/fit_{self.fit_method}/level{int(self.level)}"
+        
+        os.makedirs(self.vars_dir, exist_ok = True)
+        
+    def get(self, var_name):
+        """Return the variable if it exists, otherwise return None.
+        Note that for inner variables one should get the _var_name. That is why we check also _name."""
+        
+        return self.__dict__.get(var_name)
+        
+    def rmv_diag(self, adj = None):
+        """Faster remover of diagonal elements for a csr matrix, e.g. the ing one"""
+        from scipy.sparse import spdiags
+        
+        zl_adj = adj - spdiags(adj.diagonal(), 0, m=adj.shape)
+        return zl_adj
+            
     def adjacency_matrix(self, directed=False, weighted=False):
         """Return the adjacency matrix of the graph."""
         # Ensure matrix is symmetric as this is undirected
@@ -500,7 +534,7 @@ class DiGraph(Graph):
         Return a Networkx equivalent.
     """
 
-    def __init__(self, v, e, v_id, src, dst, weight=None, v_group=None):
+    def __init__(self, v, e, weight=None, v_group=None, **kwargs):
         """Return a DiGraph object given vertices and edges.
 
         Parameters
@@ -525,8 +559,10 @@ class DiGraph(Graph):
         DiGraph
             the graph object
         """
+        v_id = v.columns[0]
+        src, dst, weight = e.columns[:3]
         super().__init__(
-            v, e, v_id=v_id, src=src, dst=dst, weight=weight, v_group=v_group
+            v, e, v_id=v_id, src=src, dst=dst, weight=weight, v_group=v_group, **kwargs
         )
 
     def adjacency_matrix(self, directed=True, weighted=False):

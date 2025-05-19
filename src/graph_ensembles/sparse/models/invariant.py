@@ -1,7 +1,7 @@
 from .fitness import FitnessModel
 from .fitness import MultiFitnessModel
 import numpy as np
-from numba import jit
+from numba import jit, njit
 from math import isinf
 from math import log
 from math import expm1
@@ -45,7 +45,7 @@ class ScaleInvariantModel(FitnessModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
+    @njit()
     def p_jac_ij(d, x_i, y_j, z_ij):
         """Compute the probability of connection and the jacobian
         contribution of node i and j.
@@ -64,7 +64,7 @@ class ScaleInvariantModel(FitnessModel):
             return -expm1(-tmp1), tmp * exp(-tmp1)
 
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
+    @njit()  # pragma: no cover
     def p_ij(d, x_i, y_j, z_ij):
         """Compute the probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
@@ -75,13 +75,15 @@ class ScaleInvariantModel(FitnessModel):
             return 1.0
         else:
             return -expm1(-tmp)
+    
+    
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
@@ -100,7 +102,7 @@ class ScaleInvariantModel(FitnessModel):
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return -tmp
 
@@ -271,7 +273,7 @@ class MultiInvariantModel(MultiFitnessModel):
                 j += 1
 
         if val == 0.0:
-            return -np.infty
+            return -np.inf
         else:
             return log(-expm1(-val))
 
@@ -296,7 +298,7 @@ class MultiInvariantModel(MultiFitnessModel):
                 if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
                     if isinf(tmp):
-                        return -np.infty
+                        return -np.inf
                     else:
                         val += tmp
                 i += 1
@@ -330,7 +332,7 @@ class MultiInvariantModel(MultiFitnessModel):
         layer k.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d * x_i * y_j
         if isinf(tmp):

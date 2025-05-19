@@ -1,12 +1,13 @@
 from .ensembles import DiGraphEnsemble
 from .ensembles import MultiDiGraphEnsemble
 from .ensembles import empty_index
-from ...solver import monotonic_newton_solver
+from .solver import monotonic_newton_solver
 import warnings
 import scipy.sparse as sp
 from . import graphs
 import numpy as np
 from numba import jit
+from numba import njit, prange
 from math import isinf
 from numba.typed import List
 from math import log
@@ -57,6 +58,12 @@ class FitnessModel(DiGraphEnsemble):
                 self.num_edges = g.num_edges()
                 self.prop_out = g.out_strength()
                 self.prop_in = g.in_strength()
+                self.perc_ing_nodes = g.perc_ing_nodes
+                self.seed = g.seed
+                self.level = g.level
+                
+                self.__dict__.update(kwargs)
+                self._set_var_plot_dirs(g)
             else:
                 raise ValueError("First argument passed must be a " "DiGraph.")
 
@@ -72,6 +79,12 @@ class FitnessModel(DiGraphEnsemble):
             "prop_in",
             "param",
             "selfloops",
+            "name",
+            "level",
+            "seed",
+            "perc_ing_nodes",
+            'fit_method'
+            
         ]
         for name in kwargs:
             if name not in allowed_arguments:
@@ -161,6 +174,23 @@ class FitnessModel(DiGraphEnsemble):
 
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
+        
+    def _set_var_plot_dirs(self, g):
+        """
+        Set the model directories in order to save the observed/expected measurements
+        or the plots
+        
+        Parameters
+        ----------
+        
+        """
+        from os import path, makedirs
+        self.vars_dir = g.vars_dir.replace(g.name, self.name)
+        # self.vars_dir = f"outputs/vars/{self.name}/perc{self.perc_ing_nodes}/seed{self.seed}/fit_{self.fit_method}/level{int(self.level)}"
+        self.plots_dir = path.dirname(self.vars_dir.replace("vars","plots"))
+        
+        makedirs(self.vars_dir, exist_ok = True)
+        makedirs(self.plots_dir, exist_ok = True)
 
     def fit(
         self,
@@ -216,7 +246,7 @@ class FitnessModel(DiGraphEnsemble):
                 atol=atol,
                 rtol=rtol,
                 x_l=0.0,
-                x_u=np.infty,
+                x_u=np.inf,
                 max_iter=maxiter,
                 full_return=True,
                 verbose=verbose,
@@ -247,25 +277,52 @@ class FitnessModel(DiGraphEnsemble):
             self.prop_dyad,
             self.selfloops,
         )
-
+        
         return f, jac
-
+    
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, pdyad, selfloops):
+    @njit(parallel=True)
+    def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, prop_dyad, selfloops):
         """Compute the objective function of the density solver and its
         derivative.
         """
-        f = 0.0
-        jac = 0.0
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
-                    p_tmp, jac_tmp = p_jac_ij(param, p_out_i, p_in_j, pdyad(i, j))
-                    f += p_tmp
-                    jac += jac_tmp
+        N = len(prop_out)
 
-        return f, jac
+        # Preallocate result vectors for each outer loop iteration (i)
+        # These arrays store intermediate totals per i, which can be summed later
+        f_vector = np.zeros(N)
+        jac_vector = np.zeros(N)
+
+        # Outer loop is parallelized with prange
+        # This is the correct and efficient use of numba's parallelism
+        for i in prange(N):
+            p_out_i = prop_out[i]
+
+            # Use scalar accumulators for better memory efficiency and cache usage
+            f_i = 0.0
+            jac_i = 0.0
+
+            # Inner loop is serial — this is good because nested prange is not well supported
+            for j in range(N):
+                if (i != j) or selfloops:
+                    p_in_j = prop_in[j]
+
+                    # Call the user-defined function to get value and jacobian for dyad (i, j)
+                    p_val, jac_val = p_jac_ij(param, p_out_i, p_in_j, prop_dyad(i,j))
+
+                    # Accumulate results efficiently in scalars
+                    f_i += p_val
+                    jac_i += jac_val
+
+            # Store per-node results
+            f_vector[i] = f_i
+            jac_vector[i] = jac_i
+
+        # Sum across all nodes to get final result (parallel reduction is fast for large n)
+        f_vector, jac_vector = np.sum(f_vector), np.sum(jac_vector)
+
+        return f_vector, jac_vector
+
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -304,7 +361,7 @@ class FitnessModel(DiGraphEnsemble):
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
@@ -323,7 +380,7 @@ class FitnessModel(DiGraphEnsemble):
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-tmp / (1 + tmp))
 
@@ -661,7 +718,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                         atol=atol,
                         rtol=rtol,
                         x_l=0.0,
-                        x_u=np.infty,
+                        x_u=np.inf,
                         max_iter=maxiter,
                         full_return=True,
                         verbose=verbose,
@@ -686,7 +743,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                     atol=atol,
                     rtol=rtol,
                     x_l=0.0,
-                    x_u=np.infty,
+                    x_u=np.inf,
                     max_iter=maxiter,
                     full_return=True,
                     verbose=verbose,
@@ -920,7 +977,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 j += 1
 
         if val == 1.0:
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-val)
 
@@ -945,7 +1002,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
                     if isinf(tmp):
-                        return -np.infty
+                        return -np.inf
                     else:
                         val /= 1 + tmp
                 i += 1
@@ -982,7 +1039,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         layer k.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d * x_i * y_j
         if isinf(tmp):
@@ -1001,6 +1058,6 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
         tmp = d * x_i * y_j
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-tmp / (1 + tmp))

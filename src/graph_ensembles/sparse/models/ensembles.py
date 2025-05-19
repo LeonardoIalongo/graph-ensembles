@@ -5,7 +5,7 @@ from .. import graphs
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
-from numba import jit
+from numba import jit, njit, prange
 from math import isinf
 from numba import float64
 from numba.experimental import jitclass
@@ -64,11 +64,10 @@ class GraphEnsemble:
     """
 
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
+    @njit()  # pragma: no cover
     def prop_dyad(i, j):
         """Define empy dyadic property as it is not always defined."""
         return 1.0
-
 
 class DiGraphEnsemble(GraphEnsemble):
     """General class for DiGraph ensembles.
@@ -105,7 +104,9 @@ class DiGraphEnsemble(GraphEnsemble):
     def __init__(self, *args, **kwargs):
         self.prop_out = empty_index()
         self.prop_in = empty_index()
-
+        
+        self.kind = 'exp'
+        
     def expected_num_edges(self, recompute=False):
         """Compute the expected number of edges."""
         if not hasattr(self, "param"):
@@ -402,48 +403,137 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return g
 
+    # @staticmethod
+    # @jit(nopython=True)  # pragma: no cover
+    # def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+    #     """Compute the expected number of edges."""
+    #     exp_e = 0.0
+    #     for i, p_out_i in enumerate(prop_out):
+    #         for j, p_in_j in enumerate(prop_in):
+    #             if (i != j) | selfloops:
+    #                 exp_e += p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+
+    #     return exp_e
+    
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
+    @njit(parallel=True)
     def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Compute the expected number of edges."""
-        exp_e = 0.0
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
-                    exp_e += p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+        """Compute the objective function of the density solver and its
+        derivative.
+        """
+        N = len(prop_out)
 
-        return exp_e
+        # Preallocate result vectors for each outer loop iteration (i)
+        # These arrays store intermediate totals per i, which can be summed later
+        f_vector = np.zeros(N)
 
+        # Outer loop is parallelized with prange
+        # This is the correct and efficient use of numba's parallelism
+        for i in prange(N):
+            p_out_i = prop_out[i]
+
+            # Use scalar accumulators for better memory efficiency and cache usage
+            f_i = 0.0
+            jac_i = 0.0
+
+            # Inner loop is serial — this is good because nested prange is not well supported
+            for j in range(N):
+                if (i != j) or selfloops:
+                    p_in_j = prop_in[j]
+
+                    # Call the user-defined function to get value and jacobian for dyad (i, j)
+                    p_val = p_ij(param, p_out_i, p_in_j, prop_dyad(i,j))
+
+                    # Accumulate results efficiently in scalars
+                    f_i += p_val
+
+            # Store per-node results
+            f_vector[i] = f_i
+
+        # Sum across all nodes to get final result (parallel reduction is fast for large n)
+        f_vector = np.sum(f_vector)
+        
+        return f_vector
+
+    # @staticmethod
+    # @njit(parallel=True)  # pragma: no cover
+    # def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, num_v, selfloops):
+    #     """Compute the expected undirected, in and out degree sequences."""
+    #     exp_d = np.zeros(num_v, dtype=np.float64)
+    #     exp_d_out = np.zeros(num_v, dtype=np.float64)
+    #     exp_d_in = np.zeros(num_v, dtype=np.float64)
+        
+    #     for i in prange(num_v):
+    #         p_out_i = prop_out[i] # for new numba compatibility
+    #         p_in_i = prop_in[i]
+    #         for j in range(i + 1):
+    #             p_out_j = prop_out[j]
+    #             p_in_j = prop_in[j]
+    #             if i != j:
+    #                 pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+    #                 pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
+    #                 p = pij + pji - pij * pji
+    #                 exp_d[i] += p
+    #                 exp_d[j] += p
+    #                 exp_d_out[i] += pij
+    #                 exp_d_out[j] += pji
+    #                 exp_d_in[j] += pij
+    #                 exp_d_in[i] += pji
+    #             elif selfloops:
+    #                 pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+    #                 exp_d[i] += pii
+    #                 exp_d_out[i] += pii
+    #                 exp_d_in[j] += pii
+
+    #     return exp_d, exp_d_out, exp_d_in
+    
     @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, num_v, selfloops):
-        """Compute the expected undirected, in and out degree sequences."""
+    @njit(parallel=True)  # pragma: no cover
+    def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+        """Compute the expected total, out-degree and in-degree sequences."""
+        num_v = len(prop_out)
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
         exp_d_in = np.zeros(num_v, dtype=np.float64)
 
-        for i, p_out_i in enumerate(prop_out):
-            p_in_i = prop_in[i]
-            for j in range(i + 1):
-                p_out_j = prop_out[j]
+        for i in prange(num_v):
+            p_out_i = prop_out[i]
+            for j in range(num_v):
                 p_in_j = prop_in[j]
                 if i != j:
                     pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                    pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
-                    p = pij + pji - pij * pji
-                    exp_d[i] += p
-                    exp_d[j] += p
                     exp_d_out[i] += pij
-                    exp_d_out[j] += pji
-                    exp_d_in[j] += pij
-                    exp_d_in[i] += pji
+                    
+                    # undirected degrees
+                    # pji = p_ij(param, prop_out[j], prop_in[i], prop_dyad(i, j))
+                    # qij = pij + pji - pij * pji
+                    # exp_d[i] += qij
+                    # exp_d[j] += qij
+                    
                 elif selfloops:
                     pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                    exp_d[i] += pii
                     exp_d_out[i] += pii
-                    exp_d_in[j] += pii
+        
+        for l in prange(num_v):
+            p_in_l = prop_in[l]
+            for m in range(num_v):
+                p_out_m = prop_out[m]
+                if l != m:
+                    pml = p_ij(param, p_out_m, p_in_l, prop_dyad(m, l))
+                    exp_d_in[l] += pml
+                    
+                    # undirected degrees
+                    # pji = p_ij(param, prop_out[j], prop_in[i], prop_dyad(i, j))
+                    # qij = pij + pji - pij * pji
+                    # exp_d[i] += qij
+                    # exp_d[j] += qij
+                    
+                elif selfloops:
+                    pll = p_ij(param, p_in_l, p_in_l, prop_dyad(l, l))
+                    exp_d_in[l] += pll
+                    
+        return exp_d_out, exp_d_in
 
-        return exp_d, exp_d_out, exp_d_in
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -1069,17 +1159,17 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             if n != m:
                 ind = prop_out[0] == i
                 if not np.any(ind):
-                    return -np.infty
+                    return -np.inf
                 if np.any(prop_out[1][ind] == 0):
-                    return -np.infty
+                    return -np.inf
 
                 j_list = indices[n:m]
                 for j in j_list:
                     ind = prop_in[0] == j
                     if not np.any(ind):
-                        return -np.infty
+                        return -np.inf
                     if np.any(prop_in[1][ind] == 0):
-                        return -np.infty
+                        return -np.inf
 
         # Now compute likelihood due to non-zero values of pijk
         for i, out_i in zip(prop_out[0], prop_out[1]):
