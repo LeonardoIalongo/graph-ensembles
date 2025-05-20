@@ -212,22 +212,20 @@ class Graph:
             warnings.warn(str(names) + " vertices have no edges.", UserWarning)
             
         
-        # update all the variables present in kwargs
-        self.__dict__.update(kwargs)
+        # set some default variables
+        self.full_intra_row = "full"
         self.kind = 'obs'
         
-        
-        # create the folder for the full adjacency matrix (ground truth)
-        get_numb = 0 if self.get("perc_ing_nodes") == None else self.get("perc_ing_nodes")
-        assert get_numb <= 1, "The perc_ing_nodes must be <= 1"
+        # update all the variables present in kwargs
+        self.__dict__.update(kwargs)
         
         # set the output directories where to save the files
-        if not self.get("perc_ing_nodes"):
-            self.vars_dir = f"outputs/vars/{self.name}/full/level{int(self.level)}"
+        base_dir = os.path.expanduser('~') + "/Documents/code_local_files/outputs/datasets/ING-2022-Directed"
         
-        # if perc_ing_nodes < 1, report the percentage and the seed
-        elif self.get("perc_ing_nodes") < 1:
-            self.vars_dir = f"outputs/vars/{self.name}/perc{self.perc_ing_nodes}/seed{self.seed}/fit_{self.fit_method}/level{int(self.level)}"
+        if self.get("full_intra_row") == "full":
+            self.vars_dir = base_dir + f"/vars/{self.name}/full/level{int(self.level)}"
+        else:
+            self.vars_dir = base_dir + f"/vars/{self.name}/perc{self.perc_ing_nodes}/seed{self.seed}/{self.full_intra_row}/level{int(self.level)}"
         
         os.makedirs(self.vars_dir, exist_ok = True)
         

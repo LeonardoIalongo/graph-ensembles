@@ -49,6 +49,7 @@ class FitnessModel(DiGraphEnsemble):
         and out). The model accepts the fitness sequences as numpy arrays.
         """
         super().__init__(*args, **kwargs)
+        self.kind = 'exp'
 
         # If an argument is passed then it must be a graph
         if len(args) > 0:
@@ -58,9 +59,10 @@ class FitnessModel(DiGraphEnsemble):
                 self.num_edges = g.num_edges()
                 self.prop_out = g.out_strength()
                 self.prop_in = g.in_strength()
-                self.perc_ing_nodes = g.perc_ing_nodes
+                self.perc_ing_nodes = g.get("perc_ing_nodes")
                 self.seed = g.seed
                 self.level = g.level
+                self.full_intra_row = g.full_intra_row
                 
                 self.__dict__.update(kwargs)
                 self._set_var_plot_dirs(g)
@@ -83,8 +85,8 @@ class FitnessModel(DiGraphEnsemble):
             "level",
             "seed",
             "perc_ing_nodes",
-            'fit_method'
-            
+            "full_intra_row",
+            "fit_method"
         ]
         for name in kwargs:
             if name not in allowed_arguments:
@@ -178,15 +180,22 @@ class FitnessModel(DiGraphEnsemble):
     def _set_var_plot_dirs(self, g):
         """
         Set the model directories in order to save the observed/expected measurements
-        or the plots
+        or the plotsa
         
         Parameters
         ----------
         
         """
         from os import path, makedirs
-        self.vars_dir = g.vars_dir.replace(g.name, self.name)
-        # self.vars_dir = f"outputs/vars/{self.name}/perc{self.perc_ing_nodes}/seed{self.seed}/fit_{self.fit_method}/level{int(self.level)}"
+        
+        # split the g.vars_dir into a base and changed_path 
+        g_base_dir, change_path = g.vars_dir.split("vars")
+        
+        # modify only the selected part
+        change_path = change_path.replace(g.name, self.name).replace(f"/{g.full_intra_row}", f"/{self.fit_method}/{g.full_intra_row}")
+        
+        # rejoin everything
+        self.vars_dir = path.join(g_base_dir, "vars", change_path.lstrip("/"))
         self.plots_dir = path.dirname(self.vars_dir.replace("vars","plots"))
         
         makedirs(self.vars_dir, exist_ok = True)

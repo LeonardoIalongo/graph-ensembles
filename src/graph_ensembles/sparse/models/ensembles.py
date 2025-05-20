@@ -105,8 +105,6 @@ class DiGraphEnsemble(GraphEnsemble):
         self.prop_out = empty_index()
         self.prop_in = empty_index()
         
-        self.kind = 'exp'
-        
     def expected_num_edges(self, recompute=False):
         """Compute the expected number of edges."""
         if not hasattr(self, "param"):
@@ -136,7 +134,6 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.prop_out,
                 self.prop_in,
                 self.prop_dyad,
-                self.num_vertices,
                 self.selfloops,
             )
             self._exp_degree = res[0]
@@ -505,10 +502,10 @@ class DiGraphEnsemble(GraphEnsemble):
                     exp_d_out[i] += pij
                     
                     # undirected degrees
-                    # pji = p_ij(param, prop_out[j], prop_in[i], prop_dyad(i, j))
-                    # qij = pij + pji - pij * pji
-                    # exp_d[i] += qij
-                    # exp_d[j] += qij
+                    pji = p_ij(param, prop_out[j], prop_in[i], prop_dyad(i, j))
+                    qij = pij + pji - pij * pji
+                    exp_d[i] += qij
+                    exp_d[j] += qij
                     
                 elif selfloops:
                     pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
@@ -532,7 +529,7 @@ class DiGraphEnsemble(GraphEnsemble):
                     pll = p_ij(param, p_in_l, p_in_l, prop_dyad(l, l))
                     exp_d_in[l] += pll
                     
-        return exp_d_out, exp_d_in
+        return exp_d, exp_d_out, exp_d_in
 
 
     @staticmethod
