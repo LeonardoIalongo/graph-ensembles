@@ -1,4 +1,4 @@
-from dependencies import *
+from .dependencies import *
 def n_possible_part(n, n_inner_cl):
 	"""
 	Number of possible partitions if we start coarse-graining at random n nodes (at level 0) into communities of n_inner_cl nodes each

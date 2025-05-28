@@ -1,4 +1,4 @@
-from utils import *
+from .utils import *
 
 def default_4_undirected_paper(dataset_name):
     ''' Default values for the first 2 undirected papers'''

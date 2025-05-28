@@ -1,11 +1,5 @@
 from setuptools import setup
 
-with open("README.rst", encoding="utf-8") as readme_file:
-    readme = readme_file.read()
-
-with open("HISTORY.rst", encoding="utf-8") as history_file:
-    history = history_file.read()
-
 setup(
     name="graph-ensembles",
     author="Leonardo Niccolò Ialongo",
@@ -18,8 +12,6 @@ setup(
         " build fitness based graph ensembles from marginal"
         " information."
     ),
-    long_description=readme + "\n\n" + history,
-    long_description_content_type="text/x-rst",
     license="GNU General Public License v3",
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
@@ -35,7 +27,6 @@ setup(
         "graph_ensembles",
         "graph_ensembles.sparse",
         "graph_ensembles.sparse.models",
-        "graph_ensembles.spark",
     ],
     package_dir={"": "src"},
     install_requires=[
@@ -44,5 +35,6 @@ setup(
         "scipy>=1.9",
         "pandas>=1.1",
         "networkx>=3.0",
+        "matplotlib>=3.10.3"
     ],
 )

@@ -220,7 +220,10 @@ class Graph:
         self.__dict__.update(kwargs)
         
         # set the output directories where to save the files
-        base_dir = os.path.expanduser('~') + "/Documents/code_local_files/outputs/datasets/ING-2022-Directed"
+        if self.get("corpkey"):
+            base_dir = os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-2022-Directed"
+        else:
+            base_dir = os.path.expanduser('~') + "/Documents/code_local_files/outputs/datasets/ING-2022-Directed"
         
         if self.get("full_intra_row") == "full":
             self.vars_dir = base_dir + f"/vars/{self.name}/full/level{int(self.level)}"

@@ -86,7 +86,8 @@ class FitnessModel(DiGraphEnsemble):
             "seed",
             "perc_ing_nodes",
             "full_intra_row",
-            "fit_method"
+            "fit_method",
+            "corpkey",
         ]
         for name in kwargs:
             if name not in allowed_arguments:

@@ -1,5 +1,5 @@
-from dependencies import *
-from utils import load_meas, save_fig
+from graph_ensembles.dependencies import *
+from graph_ensembles.utils import load_meas, save_fig
 
 def plots_exp_degree(g, ref_model, sum_model):
 	"""Plot the degree sequence in, out, and 11 for the observed network and the sum model"""
@@ -16,7 +16,7 @@ def plots_exp_degree(g, ref_model, sum_model):
 		alpha = 0.5
 
 		axs[0].scatter(x0, x0, marker = 'o', color = obs_color, label = 'Observed', alpha = alpha)
-		axs[0].scatter(x0, y0, marker = '+', color = ref_model_color, label = ref_model.name, alpha = alpha)
+		axs[0].scatter(x0, y0, marker = '+', color = ref_model_color, label = ref_model.name.title(), alpha = alpha)
 		# axs[0].scatter(x0, z0, marker = 'x', color = sum_model_color, label = model_label, alpha = alpha)
 		axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Observed', ylabel = 'Expected',)
 		axs[0].set_title("Out")
@@ -24,7 +24,7 @@ def plots_exp_degree(g, ref_model, sum_model):
 		axs[0].grid(True)
 
 		axs[1].scatter(x1, x1, marker = 'o', color = obs_color, label = 'Observed', alpha = alpha)
-		axs[1].scatter(x1, y1, marker = '+', color = ref_model_color, label = ref_model.name, alpha = alpha)
+		axs[1].scatter(x1, y1, marker = '+', color = ref_model_color, label = ref_model.name.title(), alpha = alpha)
 		# axs[1].scatter(x1, z1, marker = 'x', color = sum_model_color, label = model_label, alpha = alpha)
 		axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Observed', ylabel = 'Expected',)
 		axs[1].set_title("In")
@@ -49,12 +49,6 @@ def plots_exp_degree(g, ref_model, sum_model):
 		# axs[2].legend()
 		# axs[2].set_axisbelow(True)
 		# axs[2].grid(True)
-
-		# if sum_model.name.startswith("sum-"):
-		# 	fig.suptitle(f"Degrees of the {sum_model.name} ones @ level {net.level}")
-		# else:
-		# 	stripes_label = f"stripes at {sum_model.get('stripes_level')}" if sum_model.get('stripes_level') != None else ""
-		# 	fig.suptitle(f"Degrees of the {sum_model.name}, {stripes_label}: from {sum_model.top_level} (top level) --> {ref_model.level} (level)", y = .95)
 
 		save_fig(fig, full_path)
 
