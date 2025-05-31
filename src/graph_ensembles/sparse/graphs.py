@@ -221,9 +221,9 @@ class Graph:
         
         # set the output directories where to save the files
         if self.get("corpkey"):
-            base_dir = os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-2022-Directed"
+            base_dir = os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-Directed"
         else:
-            base_dir = os.path.expanduser('~') + "/Documents/code_local_files/outputs/datasets/ING-2022-Directed"
+            base_dir = os.path.expanduser('~') + "/Documents/code_local_files/outputs/datasets/ING-Directed"
         
         if self.get("full_intra_row") == "full":
             self.vars_dir = base_dir + f"/vars/{self.name}/full/level{int(self.level)}"
