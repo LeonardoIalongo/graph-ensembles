@@ -31,6 +31,7 @@ jupyter_core>=5.5.0
 keyring>=24.2.0
 llvmlite>=0.41.1
 markdown-it-py>=3.0.0
+matplotlib
 matplotlib-inline>=0.1.6
 mccabe>=0.7.0
 mdurl>=0.1.2

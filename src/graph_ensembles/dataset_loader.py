@@ -56,7 +56,7 @@ def flip_payer_beneficiary_columns(df):
 def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_code = "naics_code", cg_method = "naics_code", year = 2022, distance_matrix = None, lvl_to_nclust = None, max_n_entries = 0):
 
     # dataset name year and direction (nyd)
-    dataset_nyd = f"{name}-{year}-{dataset_direction}"
+    dataset_nyd = f"{name}-{dataset_direction}"
 
     # if on dap, it will execute the try, otherwise if local the read_csv
     xgrid_time_xtrans_time = "xgrid_20240427_xtrans_20240424" if dataset_direction == "Directed" else "xgrid_20240404_xtrans_20240324"
