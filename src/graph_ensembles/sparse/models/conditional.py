@@ -432,7 +432,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
     def fit(
         self,
         x0=None,
-        method="density",
+        method="num_edges",
         atol=1e-24,
         rtol=1e-9,
         maxiter=100,
@@ -445,9 +445,9 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         ----------
         x0: float
             Optional initial conditions for parameters.
-        method: 'density' or 'mle'
+        method: 'num_edges' or 'mle'
             Selects whether to fit param using maximum likelihood estimation
-            or by ensuring that the expected density matches the given one.
+            or by ensuring that the expected num_edges matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
         rtol : float
@@ -472,13 +472,13 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         if np.any(x0 < 0):
             raise ValueError("x0 must be positive.")
 
-        if method == "density":
+        if method == "num_edges":
             # Ensure that num_edges is set
             if not hasattr(self, "num_edges"):
-                raise ValueError("Number of edges must be set for density solver.")
+                raise ValueError("Number of edges must be set for num_edges solver.")
             sol = monotonic_newton_solver(
                 x0,
-                self.density_fit_fun,
+                self.num_edges_fit_fun,
                 self.num_edges,
                 atol=atol,
                 rtol=rtol,
@@ -502,7 +502,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         if not self.solver_output.converged:
             warnings.warn("Fit did not converge", UserWarning)
 
-    def density_fit_fun(self, delta):
+    def num_edges_fit_fun(self, delta):
         """Return the objective function value and the Jacobian
         for a given value of delta.
         """
@@ -911,7 +911,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
     def exp_edges_f_jac(
         p_jac_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops
     ):
-        """Compute the objective function of the density solver and its
+        """Compute the objective function of the num_edges solver and its
         derivative.
         """
         # Compute aggregate properties

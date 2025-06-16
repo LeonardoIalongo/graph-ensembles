@@ -18,3 +18,4 @@ graph_ensembles.egg-info/
 .tox/
 examples/outputs/
 .DS_Store
+sythetic_network/*

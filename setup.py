@@ -43,5 +43,6 @@ setup(
         "scipy>=1.9",
         "pandas>=1.1",
         "networkx>=3.0",
+        "matplotlib>=3.10",
     ],
 )

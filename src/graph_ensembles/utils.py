@@ -239,3 +239,48 @@ def load_meas(ref_model, level, name, str_dimXBC = None, meas = "pmatrix", ensem
 		return pd.read_pickle(full_path)
 	elif full_path.endswith("txt"):
 		return open(full_path, "r").read()
+
+# multiprocess trial functions
+def worker(args):
+    import multiprocessing
+    start, end, N, p_ij, param, prop_out, prop_in, prop_dyad, selfloops = args
+    rows = []
+    cols = []
+    # logs = []
+    worker_id = multiprocessing.current_process().name
+    # logs.append(f'Worker {worker_id} started: processing indices {start} to {end}')
+    for flat_idx in range(start, end):
+        i = flat_idx // N
+        j = flat_idx % N
+        if not selfloops and i == j:
+            continue
+        p = p_ij(param, prop_out[i], prop_in[j], prop_dyad(i, j))
+        if np.random.random() < p:
+            rows.append(i)
+            cols.append(j)
+    # logs.append(f'Worker {worker_id} finished.')
+    return np.array(rows, dtype=np.int64), np.array(cols, dtype=np.int64)#, logs
+
+def parallel_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, num_procs=3):
+	"""Sample edges in parallel using multiple processes."""
+	from multiprocessing import Pool
+	
+	N = len(prop_out)
+	total_ops = N * N  # or N * (N - 1) if not selfloops
+	num_chunks = total_ops // num_procs
+	tasks = []
+	for t in range(num_procs):
+		start = t * num_chunks
+		end = (t + 1) * num_chunks if t < num_procs - 1 else total_ops
+		tasks.append((start, end, N, p_ij, param, prop_out, prop_in, prop_dyad, selfloops))
+		
+	with Pool(processes=num_procs) as pool:
+		results = pool.map(worker, tasks)
+	rows = [r for r, _ in results]
+	cols = [c for _, c in results]
+	# logs = [log for _, _, log in results]
+	# for log in logs:
+	# 	for line in log:
+	# 		print(line)
+	
+	return np.concatenate(rows), np.concatenate(cols)

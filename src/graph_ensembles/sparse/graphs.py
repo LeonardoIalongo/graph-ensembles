@@ -95,7 +95,7 @@ class Graph:
         """
         assert isinstance(v, pd.DataFrame), "Only dataframe input supported."
         assert isinstance(e, pd.DataFrame), "Only dataframe input supported."
-
+        
         # If column names are passed as lists with one elements extract str
         if isinstance(v_id, list) and len(v_id) == 1:
             v_id = v_id[0]
@@ -219,17 +219,42 @@ class Graph:
         # update all the variables present in kwargs
         self.__dict__.update(kwargs)
         
-        # set the output directories where to save the files
+        self._create_vars_dir()
+        
+    @staticmethod
+    def _create_vars_dir(self):
+        """
+            Set the directory where to save the variables
+        """
+        
         if self.get("corpkey"):
             base_dir = os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-Directed"
         else:
-            base_dir = os.path.expanduser('~') + "/Documents/code_local_files/outputs/datasets/ING-Directed"
+            base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
         
-        if self.get("full_intra_row") == "full":
-            self.vars_dir = base_dir + f"/vars/{self.name}/full/level{int(self.level)}"
-        else:
-            self.vars_dir = base_dir + f"/vars/{self.name}/perc{self.perc_ing_nodes}/seed{self.seed}/{self.full_intra_row}/level{int(self.level)}"
+        # define the percentage directories based on the self.perc_intra_nodes
+        percentage_dirs = f"/perc{self.perc_intra_nodes}/seed{self.seed}" if self.get("perc_intra_nodes") < 1 else ""
+        assert (self.perc_intra_nodes > 0) and (self.perc_intra_nodes <= 1), "Invalid percentage of train and test splitting"
         
+        # define the level dir to be added at the end
+        level_dir = f"/level{int(self.level)}"
+        
+        # 
+        if self.get("kind") == "obs":
+            
+            # force to full_graph if perc_intra_nodes == 1
+            if self.get("perc_intra_nodes") == 1:
+                self.graph_kind = "full"
+            self.vars_dir = base_dir + f"/vars/{self.name}/graph_{self.graph_kind}" + percentage_dirs
+
+        # no graph_kind since already identified in the self.fit_method
+        elif self.get("kind") == "exp":
+            self.vars_dir = base_dir + f"/vars/{self.name}{percentage_dirs}/fit_method_{self.fit_method}"
+            self.test_dir = self.vars_dir + f"/test_graph_{self.test_graph}{level_dir}"
+        
+        self.vars_dir += level_dir
+        
+        # update it for the model directories, since one has to specify also the fitting method
         os.makedirs(self.vars_dir, exist_ok = True)
         
     def get(self, var_name):
@@ -565,7 +590,7 @@ class DiGraph(Graph):
         super().__init__(
             v, e, v_id=v_id, src=src, dst=dst, weight=weight, v_group=v_group, **kwargs
         )
-
+        
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""
         if directed and weighted:

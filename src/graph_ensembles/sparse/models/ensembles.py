@@ -58,7 +58,7 @@ class GraphEnsemble:
     Note that if keyword arguments are passed together with a Graph, then the
     arguments overwrite the graph property. This allows for easier definition
     of the ensemble for example when we want to modify one aspect of the
-    reference graph but not all (e.g. only the density, but keeping strengths
+    reference graph but not all (e.g. only the num_edges, but keeping strengths
     the same).
 
     """
@@ -68,6 +68,12 @@ class GraphEnsemble:
     def prop_dyad(i, j):
         """Define empy dyadic property as it is not always defined."""
         return 1.0
+    
+    def get(self, var_name):
+        """Return the variable if it exists, otherwise return None.
+        Note that for inner variables one should get the _var_name. That is why we check also _name."""
+        
+        return self.__dict__.get(var_name)
 
 class DiGraphEnsemble(GraphEnsemble):
     """General class for DiGraph ensembles.
@@ -401,21 +407,52 @@ class DiGraphEnsemble(GraphEnsemble):
         return g
 
     # @staticmethod
-    # @jit(nopython=True)  # pragma: no cover
-    # def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-    #     """Compute the expected number of edges."""
-    #     exp_e = 0.0
-    #     for i, p_out_i in enumerate(prop_out):
-    #         for j, p_in_j in enumerate(prop_in):
-    #             if (i != j) | selfloops:
-    #                 exp_e += p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+    # @njit(parallel = True)  # pragma: no cover
+    # def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+    #     """Sample from the ensemble."""
+    #     rows = []
+    #     cols = []
+    #     N = len(prop_out)
 
-    #     return exp_e
+    #     for i in prange(N):
+    #         p_out_i = prop_out[i]
+    #         for j in range(N):
+    #             if (i != j):
+    #                 p_in_j = prop_in[j]
+                
+    #                 p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+    #                 if np.random.random() < p:
+    #                     rows.append(i)
+    #                     cols.append(j)
+
+    #     return rows, cols
+
+
+    @staticmethod
+    @njit(parallel=True)  # pragma: no cover
+    def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+        """Sample from the ensemble."""
+        from numba.typed import List
+        rows = List()
+        cols = List()
+        N = len(prop_out)
+
+        for i in prange(N):
+            p_out_i = prop_out[i]
+            for j in range(N):
+                if (i != j):
+                    p_in_j = prop_in[j]
+                    p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
+                    if np.random.random() < p:
+                        rows.append(i)
+                        cols.append(j)
+
+        return rows, cols
     
     @staticmethod
     @njit(parallel=True)
     def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Compute the objective function of the density solver and its
+        """Compute the objective function of the num_edges solver and its
         derivative.
         """
         N = len(prop_out)
@@ -451,38 +488,6 @@ class DiGraphEnsemble(GraphEnsemble):
         f_vector = np.sum(f_vector)
         
         return f_vector
-
-    # @staticmethod
-    # @njit(parallel=True)  # pragma: no cover
-    # def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, num_v, selfloops):
-    #     """Compute the expected undirected, in and out degree sequences."""
-    #     exp_d = np.zeros(num_v, dtype=np.float64)
-    #     exp_d_out = np.zeros(num_v, dtype=np.float64)
-    #     exp_d_in = np.zeros(num_v, dtype=np.float64)
-        
-    #     for i in prange(num_v):
-    #         p_out_i = prop_out[i] # for new numba compatibility
-    #         p_in_i = prop_in[i]
-    #         for j in range(i + 1):
-    #             p_out_j = prop_out[j]
-    #             p_in_j = prop_in[j]
-    #             if i != j:
-    #                 pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-    #                 pji = p_ij(param, p_out_j, p_in_i, prop_dyad(j, i))
-    #                 p = pij + pji - pij * pji
-    #                 exp_d[i] += p
-    #                 exp_d[j] += p
-    #                 exp_d_out[i] += pij
-    #                 exp_d_out[j] += pji
-    #                 exp_d_in[j] += pij
-    #                 exp_d_in[i] += pji
-    #             elif selfloops:
-    #                 pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-    #                 exp_d[i] += pii
-    #                 exp_d_out[i] += pii
-    #                 exp_d_in[j] += pii
-
-    #     return exp_d, exp_d_out, exp_d_in
     
     @staticmethod
     @njit(parallel=True)  # pragma: no cover
@@ -597,22 +602,6 @@ class DiGraphEnsemble(GraphEnsemble):
                     like += tmp
 
         return like
-
-    @staticmethod
-    @jit(nopython=True)  # pragma: no cover
-    def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Sample from the ensemble."""
-        rows = []
-        cols = []
-        for i, p_out_i in enumerate(prop_out):
-            for j, p_in_j in enumerate(prop_in):
-                if (i != j) | selfloops:
-                    p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                    if rng.random() < p:
-                        rows.append(i)
-                        cols.append(j)
-
-        return rows, cols
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
@@ -1043,7 +1032,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         p_ijk, exp_edges_layer, param, prop_out, prop_in, prop_dyad, selfloops
     ):
         """Compute the expected number of edges with one parameter controlling
-        for the density for each label.
+        for the num_edges for each label.
         """
         num_labels = len(prop_out)
         exp_edges = np.zeros(num_labels, dtype=np.float64)
@@ -1059,7 +1048,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
     @jit(nopython=True)  # pragma: no cover
     def exp_edges_layer(p_ijk, param, prop_out, prop_in, prop_dyad, selfloops):
         """Compute the expected number of edges with one parameter controlling
-        for the density for each label.
+        for the num_edges for each label.
         """
         exp_e = 0.0
         for i, p_out_i in zip(prop_out[0], prop_out[1]):

@@ -48,6 +48,7 @@ class FitnessModel(DiGraphEnsemble):
         strengths are used as fitnesses, or directly the fitness sequences (in
         and out). The model accepts the fitness sequences as numpy arrays.
         """
+
         super().__init__(*args, **kwargs)
         self.kind = 'exp'
 
@@ -59,7 +60,7 @@ class FitnessModel(DiGraphEnsemble):
                 self.num_edges = g.num_edges()
                 self.prop_out = g.out_strength()
                 self.prop_in = g.in_strength()
-                self.perc_ing_nodes = g.get("perc_ing_nodes")
+                self.perc_intra_nodes = g.get("perc_intra_nodes")
                 self.seed = g.seed
                 self.level = g.level
                 self.full_intra_row = g.full_intra_row
@@ -72,28 +73,33 @@ class FitnessModel(DiGraphEnsemble):
             if len(args) > 1:
                 msg = "Unnamed arguments other than the Graph have been " "ignored."
                 warnings.warn(msg, UserWarning)
+        
+        elif len(kwargs) > 0:
+            self.__dict__.update(kwargs)
+            
 
         # Get options from keyword arguments
-        allowed_arguments = [
-            "num_vertices",
-            "num_edges",
-            "prop_out",
-            "prop_in",
-            "param",
-            "selfloops",
-            "name",
-            "level",
-            "seed",
-            "perc_ing_nodes",
-            "full_intra_row",
-            "fit_method",
-            "corpkey",
-        ]
-        for name in kwargs:
-            if name not in allowed_arguments:
-                raise ValueError("Illegal argument passed: " + name)
-            else:
-                setattr(self, name, kwargs[name])
+        # allowed_arguments = [
+        #     "num_vertices",
+        #     "num_edges",
+        #     "prop_out",
+        #     "prop_in",
+        #     "param",
+        #     "selfloops",
+        #     "name",
+        #     "level",
+        #     "seed",
+        #     "perc_intra_nodes",
+        #     "full_intra_row",
+        #     "fit_method",
+        #     "corpkey",
+        # ]
+        # for name in kwargs:
+        #     if name not in allowed_arguments:
+        #         raise ValueError("Illegal argument passed: " + name)
+        #     else:
+        #         setattr(self, name, kwargs[name])
+                
 
         # Ensure that all necessary fields have been set
         if not hasattr(self, "num_vertices"):
@@ -178,7 +184,7 @@ class FitnessModel(DiGraphEnsemble):
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
         
-    def _set_var_plot_dirs(self, g):
+    def _set_var_plot_dirs(self, *args):
         """
         Set the model directories in order to save the observed/expected measurements
         or the plotsa
@@ -189,23 +195,28 @@ class FitnessModel(DiGraphEnsemble):
         """
         from os import path, makedirs
         
-        # split the g.vars_dir into a base and changed_path 
-        g_base_dir, change_path = g.vars_dir.split("vars")
+        # If an argument is passed then it must be a graph
+        if len(args) > 0:
+            if isinstance(args[0], graphs.DiGraph):
+                g = args[0]
         
-        # modify only the selected part
-        change_path = change_path.replace(g.name, self.name).replace(f"/{g.full_intra_row}", f"/{self.fit_method}/{g.full_intra_row}")
-        
-        # rejoin everything
-        self.vars_dir = path.join(g_base_dir, "vars", change_path.lstrip("/"))
-        self.plots_dir = path.dirname(self.vars_dir.replace("vars","plots"))
-        
-        makedirs(self.vars_dir, exist_ok = True)
-        makedirs(self.plots_dir, exist_ok = True)
+                # split the g.vars_dir into a base and changed_path 
+                g_base_dir, change_path = g.vars_dir.split("vars")
+                
+                # modify only the selected part
+                change_path = change_path.replace(g.name, self.name).replace(f"/{g.full_intra_row}", f"/{self.fit_method}/{g.full_intra_row}")
+                
+                # rejoin everything
+                self.vars_dir = path.join(g_base_dir, "vars", change_path.lstrip("/"))
+                self.plots_dir = path.dirname(self.vars_dir.replace("vars","plots"))
+                
+                makedirs(self.vars_dir, exist_ok = True)
+                makedirs(self.plots_dir, exist_ok = True)
 
     def fit(
         self,
         x0=None,
-        method="density",
+        method="num_edges",
         atol=1e-24,
         rtol=1e-9,
         maxiter=100,
@@ -218,9 +229,9 @@ class FitnessModel(DiGraphEnsemble):
         ----------
         x0: float
             Optional initial conditions for parameters.
-        method: 'density' or 'mle'
+        method: 'num_edges' or 'mle'
             Selects whether to fit param using maximum likelihood estimation
-            or by ensuring that the expected density matches the given one.
+            or by ensuring that the expected num_edges matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
         rtol : float
@@ -245,13 +256,13 @@ class FitnessModel(DiGraphEnsemble):
         if np.any(x0 < 0):
             raise ValueError("x0 must be positive.")
 
-        if method == "density":
+        if method == "num_edges":
             # Ensure that num_edges is set
             if not hasattr(self, "num_edges"):
-                raise ValueError("Number of edges must be set for density solver.")
+                raise ValueError("Number of edges must be set for num_edges solver.")
             sol = monotonic_newton_solver(
                 x0,
-                self.density_fit_fun,
+                self.num_edges_fit_fun,
                 self.num_edges,
                 atol=atol,
                 rtol=rtol,
@@ -275,7 +286,7 @@ class FitnessModel(DiGraphEnsemble):
         if not self.solver_output.converged:
             warnings.warn("Fit did not converge", UserWarning)
 
-    def density_fit_fun(self, delta):
+    def num_edges_fit_fun(self, delta):
         """Return the objective function value and the Jacobian
         for a given value of delta.
         """
@@ -293,7 +304,7 @@ class FitnessModel(DiGraphEnsemble):
     @staticmethod
     @njit(parallel=True)
     def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Compute the objective function of the density solver and its
+        """Compute the objective function of the num_edges solver and its
         derivative.
         """
         N = len(prop_out)
@@ -645,7 +656,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
     def fit(
         self,
         x0=None,
-        method="density",
+        method="num_edges",
         atol=1e-24,
         rtol=1e-9,
         maxiter=100,
@@ -658,9 +669,9 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         ----------
         x0: float
             Optional initial conditions for parameters.
-        method: 'density' or 'mle'
+        method: 'num_edges' or 'mle'
             Selects whether to fit param using maximum likelihood estimation
-            or by ensuring that the expected density matches the given one.
+            or by ensuring that the expected num_edges matches the given one.
         atol : float
             Absolute tolerance for the exit condition.
         rtol : float
@@ -688,12 +699,12 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         if np.any(x0 < 0):
             raise ValueError("x0 must be positive.")
 
-        if method == "density":
+        if method == "num_edges":
             if self.per_label:
                 # Ensure that num_edges is set
                 if not hasattr(self, "num_edges_label"):
                     raise ValueError(
-                        "Number of edges per label must be set for density "
+                        "Number of edges per label must be set for num_edges "
                         "solver with per_label option."
                     )
 
@@ -723,7 +734,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
                     sol = monotonic_newton_solver(
                         np.array([x0[i]]),
-                        lambda x: self.density_fit_layer(x[0], p_out, p_in),
+                        lambda x: self.num_edges_fit_layer(x[0], p_out, p_in),
                         num_e,
                         atol=atol,
                         rtol=rtol,
@@ -744,11 +755,11 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
             else:
                 # Ensure that num_edges is set
                 if not hasattr(self, "num_edges"):
-                    raise ValueError("Number of edges must be set for density solver.")
+                    raise ValueError("Number of edges must be set for num_edges solver.")
 
                 sol = monotonic_newton_solver(
                     x0[0:1],
-                    self.density_fit_fun,
+                    self.num_edges_fit_fun,
                     self.num_edges,
                     atol=atol,
                     rtol=rtol,
@@ -772,7 +783,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         else:
             raise ValueError("The selected method is not valid.")
 
-    def density_fit_fun(self, delta):
+    def num_edges_fit_fun(self, delta):
         """Return the objective function value and the Jacobian
         for a given value of delta.
         """
@@ -782,7 +793,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
         return f, jac
 
-    def density_fit_layer(self, delta, prop_out, prop_in):
+    def num_edges_fit_layer(self, delta, prop_out, prop_in):
         """Return the objective function value and the Jacobian
         for a given value of delta.
         """
@@ -795,7 +806,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, selfloops):
-        """Compute the objective function of the density solver and its
+        """Compute the objective function of the num_edges solver and its
         derivative.
         """
         f = 0.0
@@ -812,7 +823,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
     def exp_edges_f_jac_layer(p_jac_ijk, param, prop_out, prop_in, selfloops):
-        """Compute the objective function of the density solver and its
+        """Compute the objective function of the num_edges solver and its
         derivative.
         """
         f = np.float64(0.0)
