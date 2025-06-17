@@ -219,7 +219,7 @@ class Graph:
         # update all the variables present in kwargs
         self.__dict__.update(kwargs)
         
-        self._create_vars_dir()
+        self._create_vars_dir(self)
         
     @staticmethod
     def _create_vars_dir(self):
@@ -233,6 +233,7 @@ class Graph:
             base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
         
         # define the percentage directories based on the self.perc_intra_nodes
+        self.perc_intra_nodes = 1 if self.get("perc_intra_nodes") == None else self.get("perc_intra_nodes")
         percentage_dirs = f"/perc{self.perc_intra_nodes}/seed{self.seed}" if self.get("perc_intra_nodes") < 1 else ""
         assert (self.perc_intra_nodes > 0) and (self.perc_intra_nodes <= 1), "Invalid percentage of train and test splitting"
         

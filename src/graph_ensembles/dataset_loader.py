@@ -60,7 +60,7 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
 
     # if on dap, it will execute the try, otherwise if local the read_csv
     xgrid_time_xtrans_time = "xgrid_20240427_xtrans_20240424" if dataset_direction == "Directed" else "xgrid_20240404_xtrans_20240324"
-    dataset_folder = f"{os.path.expanduser('~')}/Documents/code_local_files/datasets/{dataset_nyd}"
+    dataset_folder = f"{os.path.expanduser('~')}/Documents/Datasets/{dataset_nyd}"
 
     if dataset_nyd.startswith("Gleditsch"):
         pdtrans = pd.read_csv(dataset_folder + "/edges_int_pd.csv")
