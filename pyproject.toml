@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graph-ensembles"
+version = "0.3.5"
+description = "The graph ensemble package contains a set of methods to build fitness based graph ensembles from marginal information."
+readme = "README.rst"
+license = {text = "GNU General Public License v3"}
+authors = [
+  { name = "Riccardo Milocco", email = "riccardo.milocco@gmail.com" }
+]
+requires-python = ">=3.0"
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Natural Language :: English",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  "numpy>=1.22",
+  "numba>=0.56",
+  "scipy>=1.9",
+  "pandas>=1.1",
+  "networkx>=3.0",
+  "matplotlib>=3.10",
+  "fast_pagerank",
+  "scipy>=1.11.3"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true  # If you plan to include things like LICENSE, README, etc.
+
+[tool.setuptools.packages.find]
+where = ["src"]

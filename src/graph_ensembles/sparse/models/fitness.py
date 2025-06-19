@@ -12,9 +12,10 @@ from math import isinf
 from numba.typed import List
 from math import log
 from math import log1p
+from ..graphs import common_functions
 
 
-class FitnessModel(DiGraphEnsemble):
+class FitnessModel(DiGraphEnsemble, common_functions):
     """The Fitness model takes the fitnesses of each node in order to
     construct a probability distribution over all possible graphs.
 
@@ -61,12 +62,17 @@ class FitnessModel(DiGraphEnsemble):
                 self.prop_out = g.out_strength()
                 self.prop_in = g.in_strength()
                 self.perc_intra_nodes = g.get("perc_intra_nodes")
-                self.seed = g.seed
+
                 self.level = g.level
-                self.full_intra_row = g.full_intra_row
-                
                 self.__dict__.update(kwargs)
-                self._set_var_plot_dirs(g)
+                
+                # force attributes wrt perc_intra_nodes
+                if self.perc_intra_nodes < 1:
+                    self.seed = g.seed
+                elif self.perc_intra_nodes == 1:
+                    self.fit_method = "num_edges_full"
+
+                self._create_vars_dir()
             else:
                 raise ValueError("First argument passed must be a " "DiGraph.")
 
@@ -183,35 +189,6 @@ class FitnessModel(DiGraphEnsemble):
 
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
-        
-    def _set_var_plot_dirs(self, *args):
-        """
-        Set the model directories in order to save the observed/expected measurements
-        or the plotsa
-        
-        Parameters
-        ----------
-        
-        """
-        from os import path, makedirs
-        
-        # If an argument is passed then it must be a graph
-        if len(args) > 0:
-            if isinstance(args[0], graphs.DiGraph):
-                g = args[0]
-        
-                # split the g.vars_dir into a base and changed_path 
-                g_base_dir, change_path = g.vars_dir.split("vars")
-                
-                # modify only the selected part
-                change_path = change_path.replace(g.name, self.name).replace(f"/{g.full_intra_row}", f"/{self.fit_method}/{g.full_intra_row}")
-                
-                # rejoin everything
-                self.vars_dir = path.join(g_base_dir, "vars", change_path.lstrip("/"))
-                self.plots_dir = path.dirname(self.vars_dir.replace("vars","plots"))
-                
-                makedirs(self.vars_dir, exist_ok = True)
-                makedirs(self.plots_dir, exist_ok = True)
 
     def fit(
         self,

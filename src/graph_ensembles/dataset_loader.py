@@ -83,8 +83,13 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
 
         pdtrans = pd.read_csv(full_path(dataset_folder)).drop(columns=["nrofpayments"])
 
-        if id_code.startswith("grid_id"):
-            pdtrans.drop(["payer_naics_desc", "beneficiary_naics_desc"], axis = 1, inplace = True)
+    if "payer_naics_desc" in pdtrans.columns:
+        pdtrans.drop(["payer_naics_desc", "beneficiary_naics_desc"], axis = 1, inplace = True)
+
+    if sum(pdtrans.iloc[:, 0] == pdtrans.iloc[:, 1]):
+        idx_selfloops = pdtrans.loc[:, f"payer_{id_code}"] == pdtrans.iloc[:, f"beneficiary_{id_code}"]
+        pdtrans = pdtrans[~idx_selfloops].reset_index(drop=True)
+        print('-Removed the SelfLoops',)
         
     # COARSE-GRAINING METHODS   
     if cg_method.startswith(("geo-dist", "rand-dist")):

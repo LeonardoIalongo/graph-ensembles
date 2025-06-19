@@ -28,7 +28,7 @@ class empty_index:
         return 1.0
 
 
-class GraphEnsemble:
+class GraphEnsemble():
     """General class for Graph ensembles.
 
     All ensembles can be defined in three ways:
@@ -133,7 +133,7 @@ class DiGraphEnsemble(GraphEnsemble):
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
 
-        if not hasattr(self, "_exp_degree") or recompute:
+        if not hasattr(self, "_degree") or recompute:
             res = self.exp_degrees(
                 self.p_ij,
                 self.param,
@@ -142,25 +142,25 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.prop_dyad,
                 self.selfloops,
             )
-            self._exp_degree = res[0]
-            self._exp_out_degree = res[1]
-            self._exp_in_degree = res[2]
+            self._degree = res[0]
+            self._out_degree = res[1]
+            self._in_degree = res[2]
 
-        return self._exp_degree
+        return self._degree
 
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
-        if not hasattr(self, "_exp_out_degree") or recompute:
+        if not hasattr(self, "_out_degree") or recompute:
             _ = self.expected_degree(recompute=recompute)
 
-        return self._exp_out_degree
+        return self._out_degree
 
     def expected_in_degree(self, recompute=False):
         """Compute the expected in degree."""
-        if not hasattr(self, "_exp_in_degree") or recompute:
+        if not hasattr(self, "_in_degree") or recompute:
             _ = self.expected_degree(recompute=recompute)
 
-        return self._exp_in_degree
+        return self._in_degree
 
     def expected_av_nn_property(
         self, prop, ndir="out", selfloops=False, deg_recompute=False
@@ -221,12 +221,12 @@ class DiGraphEnsemble(GraphEnsemble):
         # Restore model self-loops properties if they have been modified
         if tmp_self != self.selfloops:
             self.selfloops = tmp_self
-            if hasattr(self, "_exp_out_degree"):
-                del self._exp_out_degree
-            if hasattr(self, "_exp_in_degree"):
-                del self._exp_in_degree
-            if hasattr(self, "_exp_degree"):
-                del self._exp_degree
+            if hasattr(self, "_out_degree"):
+                del self._out_degree
+            if hasattr(self, "_in_degree"):
+                del self._in_degree
+            if hasattr(self, "_degree"):
+                del self._degree
 
         return av_nn
 
@@ -275,12 +275,12 @@ class DiGraphEnsemble(GraphEnsemble):
             # Restore model self-loops properties if they have been modified
             if tmp_self != self.selfloops:
                 self.selfloops = tmp_self
-                if hasattr(self, "_exp_out_degree"):
-                    del self._exp_out_degree
-                if hasattr(self, "_exp_in_degree"):
-                    del self._exp_in_degree
-                if hasattr(self, "_exp_degree"):
-                    del self._exp_degree
+                if hasattr(self, "_out_degree"):
+                    del self._out_degree
+                if hasattr(self, "_in_degree"):
+                    del self._in_degree
+                if hasattr(self, "_degree"):
+                    del self._degree
 
         return getattr(self, name)
 
@@ -714,7 +714,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
 
-        if not hasattr(self, "_exp_degree_label") or recompute:
+        if not hasattr(self, "_degree_label") or recompute:
             # Transform properties to csc format to select labels quickly
             prop_out = sp.csr_array(
                 self.tuple_list_to_csx(self.prop_out),
@@ -742,35 +742,35 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
                 self.num_labels,
                 self.selfloops,
             )
-            self._exp_degree_label = sp.dok_array((self.num_vertices, self.num_labels))
-            self._exp_degree_label._update(res[0])
-            self._exp_degree_label = self._exp_degree_label.tocsr()
-            self._exp_out_degree_label = sp.dok_array(
+            self._degree_label = sp.dok_array((self.num_vertices, self.num_labels))
+            self._degree_label._update(res[0])
+            self._degree_label = self._degree_label.tocsr()
+            self._out_degree_label = sp.dok_array(
                 (self.num_vertices, self.num_labels)
             )
-            self._exp_out_degree_label._update(res[1])
-            self._exp_out_degree_label = self._exp_out_degree_label.tocsr()
-            self._exp_in_degree_label = sp.dok_array(
+            self._out_degree_label._update(res[1])
+            self._out_degree_label = self._out_degree_label.tocsr()
+            self._in_degree_label = sp.dok_array(
                 (self.num_vertices, self.num_labels)
             )
-            self._exp_in_degree_label._update(res[2])
-            self._exp_in_degree_label = self._exp_in_degree_label.tocsr()
+            self._in_degree_label._update(res[2])
+            self._in_degree_label = self._in_degree_label.tocsr()
 
-        return self._exp_degree_label
+        return self._degree_label
 
     def expected_out_degree_by_label(self, recompute=False):
         """Compute the expected out degree."""
-        if not hasattr(self, "_exp_out_degree_label") or recompute:
+        if not hasattr(self, "_out_degree_label") or recompute:
             _ = self.expected_degree_by_label(recompute=recompute)
 
-        return self._exp_out_degree_label
+        return self._out_degree_label
 
     def expected_in_degree_by_label(self, recompute=False):
         """Compute the expected in degree."""
-        if not hasattr(self, "_exp_in_degree_label") or recompute:
+        if not hasattr(self, "_in_degree_label") or recompute:
             _ = self.expected_degree_by_label(recompute=recompute)
 
-        return self._exp_in_degree_label
+        return self._in_degree_label
 
     def log_likelihood(self, g, selfloops=None):
         """Compute the likelihood a graph given the fitted model.

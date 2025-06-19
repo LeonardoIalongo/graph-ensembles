@@ -13,8 +13,92 @@ from numba import jit
 import warnings
 import networkx as nx
 
+class common_functions():
+    """ Class to include some common function both for observed Graphs and GraphEnsemble """
+    
+    def _create_vars_dir(self):
+        """
+            Set the directory where to save the variables
+        """
+        
+        if self.get("corpkey"):
+            base_dir = os.path.dirname(os.getcwd()) + "/outputs" #os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-Directed"
+        else:
+            base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
+        
+        # define the percentage directories based on the self.perc_intra_nodes
+        self.perc_intra_nodes = 1 if self.get("perc_intra_nodes") == None else self.get("perc_intra_nodes")
+        percentage_dirs = f"/perc{self.perc_intra_nodes}/seed{self.seed}" if self.get("perc_intra_nodes") < 1 else ""
+        assert (self.perc_intra_nodes > 0) and (self.perc_intra_nodes <= 1), "Invalid percentage of train and test splitting"
+        
+        # define the level dir to be added at the end
+        level_dir = f"/level{int(self.level)}"
+        
+        # 
+        if self.get("kind") == "obs":
+            
+            # force to full_graph if perc_intra_nodes == 1
+            if self.get("perc_intra_nodes") == 1:
+                self.graph_kind = "full"
+            self.vars_dir = base_dir + f"/vars/{self.name}{percentage_dirs}/graph_{self.graph_kind}"
 
-class Graph:
+        # no graph_kind since already identified in the self.fit_method
+        elif self.get("kind") == "exp":
+            self.vars_dir = base_dir + f"/vars/{self.name}{percentage_dirs}/fit_method_{self.fit_method}"
+            
+            # test_graph_{self.test_graph} is the full graph --> if you need different one, update the directory 
+            self.test_dir = self.vars_dir + level_dir
+        
+        self.vars_dir += level_dir
+        
+        # update it for the model directories, since one has to specify also the fitting method
+        # os.makedirs(self.vars_dir, exist_ok = True)
+
+        # create plots dir
+        if self.corpkey:
+            self.plots_dir = base_dir + "/plots"
+        else:
+            self.plots_dir = os.path.dirname(self.vars_dir.replace("vars","plots"))
+            self.plots_general_dir = base_dir + "/plots"
+
+    
+    def load_or_create_degrees(self):
+        """ 
+        Calculate the degrees or Load them 
+        param: self
+        """
+        from graph_ensembles.utils import load_array
+
+        path_degree = lambda x: self.vars_dir + f"/{x}_degree.csv"
+        if os.path.exists(path_degree("")):
+            # load the degrees
+            print('-Load the degrees',)
+    
+            self._in_degree = load_array(path_degree("_in"))
+            self._out_degree = load_array(path_degree("_out"))
+            self._degree = load_array(path_degree(""))
+        
+        else: 
+            print('-Calculate the degrees',)	
+            
+            if self.kind == "obs":
+                # calculates the undirected degree
+                _ = self.degree()
+                # calculates out and in degree
+                _ = self.out_degree()
+
+                fmt='%d'
+            
+            else:
+                _ = self.expected_degree()
+
+                fmt='%.18e'
+            
+            np.savetxt(path_degree("_in"), self._in_degree, delimiter = ",", fmt = fmt)
+            np.savetxt(path_degree("_out"), self._out_degree, delimiter = ",", fmt = fmt)
+            np.savetxt(path_degree(""), self._degree, delimiter = ",", fmt = fmt)
+
+class Graph(common_functions):
     """General class for undirected graphs.
 
     Note that edges can be weighted or not. If they are not, the strengths
@@ -95,6 +179,9 @@ class Graph:
         """
         assert isinstance(v, pd.DataFrame), "Only dataframe input supported."
         assert isinstance(e, pd.DataFrame), "Only dataframe input supported."
+
+        # copy the DataFrame, otherwise they will be changed
+        v, e = v.copy(), e.copy()
         
         # If column names are passed as lists with one elements extract str
         if isinstance(v_id, list) and len(v_id) == 1:
@@ -113,7 +200,7 @@ class Graph:
         num_bytes = self.get_num_bytes(self.num_vertices)
         self.id_dtype = np.dtype("u" + str(num_bytes))
 
-        # Get dictionary of id to internal id (_id)
+        # Get dictionary of id to internal id (_node)
         # also checks that no id in v is repeated
         try:
             if isinstance(v_id, list):
@@ -219,44 +306,7 @@ class Graph:
         # update all the variables present in kwargs
         self.__dict__.update(kwargs)
         
-        self._create_vars_dir(self)
-        
-    @staticmethod
-    def _create_vars_dir(self):
-        """
-            Set the directory where to save the variables
-        """
-        
-        if self.get("corpkey"):
-            base_dir = os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-Directed"
-        else:
-            base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
-        
-        # define the percentage directories based on the self.perc_intra_nodes
-        self.perc_intra_nodes = 1 if self.get("perc_intra_nodes") == None else self.get("perc_intra_nodes")
-        percentage_dirs = f"/perc{self.perc_intra_nodes}/seed{self.seed}" if self.get("perc_intra_nodes") < 1 else ""
-        assert (self.perc_intra_nodes > 0) and (self.perc_intra_nodes <= 1), "Invalid percentage of train and test splitting"
-        
-        # define the level dir to be added at the end
-        level_dir = f"/level{int(self.level)}"
-        
-        # 
-        if self.get("kind") == "obs":
-            
-            # force to full_graph if perc_intra_nodes == 1
-            if self.get("perc_intra_nodes") == 1:
-                self.graph_kind = "full"
-            self.vars_dir = base_dir + f"/vars/{self.name}/graph_{self.graph_kind}" + percentage_dirs
-
-        # no graph_kind since already identified in the self.fit_method
-        elif self.get("kind") == "exp":
-            self.vars_dir = base_dir + f"/vars/{self.name}{percentage_dirs}/fit_method_{self.fit_method}"
-            self.test_dir = self.vars_dir + f"/test_graph_{self.test_graph}{level_dir}"
-        
-        self.vars_dir += level_dir
-        
-        # update it for the model directories, since one has to specify also the fitting method
-        os.makedirs(self.vars_dir, exist_ok = True)
+        self._create_vars_dir()
         
     def get(self, var_name):
         """Return the variable if it exists, otherwise return None.
@@ -307,7 +357,7 @@ class Graph:
         """Compute the undirected degree sequence."""
         if not hasattr(self, "_degree") or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=False)
-            self._degree = adj.sum(axis=0)
+            self._degree = adj.sum(axis=0).astype(int)
 
         return self._degree
 
@@ -440,7 +490,7 @@ class Graph:
             ids = np.unique(df[id_col])
 
         for i, x in enumerate(ids):
-            id_dict[x] = i
+            id_dict[int(x)] = i
 
         return id_dict
 
@@ -560,7 +610,7 @@ class DiGraph(Graph):
     to_networkx:
         Return a Networkx equivalent.
     """
-
+    
     def __init__(self, v, e, weight=None, v_group=None, **kwargs):
         """Return a DiGraph object given vertices and edges.
 
@@ -634,8 +684,8 @@ class DiGraph(Graph):
         """Compute the out degree sequence."""
         if not hasattr(self, "_out_degree") or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
-            self._out_degree = adj.sum(axis=1)
-            self._in_degree = adj.sum(axis=0)
+            self._out_degree = adj.sum(axis=1).astype(int)
+            self._in_degree = adj.sum(axis=0).astype(int)
 
         return self._out_degree
 
@@ -643,8 +693,8 @@ class DiGraph(Graph):
         """Compute the in degree sequence."""
         if not hasattr(self, "_in_degree") or recompute:
             adj = self.adjacency_matrix(directed=True, weighted=False)
-            self._out_degree = adj.sum(axis=1)
-            self._in_degree = adj.sum(axis=0)
+            self._out_degree = adj.sum(axis=1).astype(int)
+            self._in_degree = adj.sum(axis=0).astype(int)
 
         return self._in_degree
 

@@ -1,14 +1,14 @@
 from graph_ensembles.dependencies import *
 from graph_ensembles.utils import load_meas, save_fig
 
-def plots_exp_degree(g, ref_model, sum_model):
+def plots_degree(g, ref_model, sum_model):
 	"""Plot the degree sequence in, out, and 11 for the observed network and the sum model"""
 	full_path = sum_model.plots_dir + f"/topological_meas/degree/level{g.level}.pdf"
 
 	model_label = "Summed" if sum_model.name.startswith("sum-") else "Fractioned"
 
-	x0, y0, z0 = g._out_degree, ref_model._exp_out_degree, sum_model._exp_out_degree
-	x1, y1, z1 = g._in_degree, ref_model._exp_in_degree, sum_model._exp_in_degree
+	x0, y0, z0 = g._out_degree, ref_model._out_degree, sum_model._out_degree
+	x1, y1, z1 = g._in_degree, ref_model._in_degree, sum_model._in_degree
 
 	if not os.path.exists(full_path):
 		fig, axs = plt.subplots(1, 2, figsize = (20,7))

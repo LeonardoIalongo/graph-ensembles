@@ -236,7 +236,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
 
-        if not hasattr(self, "_exp_degree") or recompute:
+        if not hasattr(self, "_degree") or recompute:
             res = self.exp_degrees(
                 self.cond_p_ij,
                 self.param,
@@ -247,25 +247,25 @@ class ConditionalInvariantModel(ScaleInvariantModel):
                 self.adj.indices,
                 self.selfloops,
             )
-            self._exp_degree = res[0]
-            self._exp_out_degree = res[1]
-            self._exp_in_degree = res[2]
+            self._degree = res[0]
+            self._out_degree = res[1]
+            self._in_degree = res[2]
 
-        return self._exp_degree
+        return self._degree
 
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
-        if not hasattr(self, "_exp_out_degree") or recompute:
+        if not hasattr(self, "_out_degree") or recompute:
             _ = self.expected_degree(recompute=recompute)
 
-        return self._exp_out_degree
+        return self._out_degree
 
     def expected_in_degree(self, recompute=False):
         """Compute the expected in degree."""
-        if not hasattr(self, "_exp_in_degree") or recompute:
+        if not hasattr(self, "_in_degree") or recompute:
             _ = self.expected_degree(recompute=recompute)
 
-        return self._exp_in_degree
+        return self._in_degree
 
     def log_likelihood(self, g):
         """Compute the likelihood a graph given the fitted model.

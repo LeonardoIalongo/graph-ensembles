@@ -44,5 +44,6 @@ setup(
         "pandas>=1.1",
         "networkx>=3.0",
         "matplotlib>=3.10",
+        "fast_pagerank"
     ],
 )
