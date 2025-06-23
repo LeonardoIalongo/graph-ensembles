@@ -7,8 +7,6 @@ import sys
 
 from scipy.optimize import minimize
 import scipy.sparse as sp
-from scipy.special import expit # for LPCA
-
 
 # set plot parameters
 mpl.rc("xtick", direction = "in")

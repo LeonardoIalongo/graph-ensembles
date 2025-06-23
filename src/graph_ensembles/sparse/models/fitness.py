@@ -69,8 +69,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 # force attributes wrt perc_intra_nodes
                 if self.perc_intra_nodes < 1:
                     self.seed = g.seed
-                elif self.perc_intra_nodes == 1:
-                    self.fit_method = "num_edges_full"
+                self.fit_method = f"num_edges_{g.graph_kind}"
 
                 self._create_vars_dir()
             else:
@@ -189,6 +188,40 @@ class FitnessModel(DiGraphEnsemble, common_functions):
 
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
+
+    def load_or_fit(
+        self,
+        x0=None,
+        method="num_edges",
+        atol=1e-24,
+        rtol=1e-9,
+        maxiter=100,
+        verbose=False,):
+        import os
+        
+        # load the invariant model on the gI or fit it
+        path_param = self.vars_dir + "/param.csv"
+        
+        if os.path.exists(path_param):
+            
+            from graph_ensembles.utils import load_array
+            print(f'-Load the parameter enforcing {self.fit_method}',)
+            self.param = np.expand_dims(load_array(path_param), axis = 0) # The code needs np.array([#])
+            
+        else: 
+            print(f'-Fit the parameter with {self.fit_method}',)
+            self.fit(
+                x0=x0,
+                method=method,
+                atol=atol,
+                rtol=rtol,
+                maxiter=maxiter,
+                verbose=verbose,
+                )
+            
+            np.savetxt(path_param, self.param, delimiter = ",")
+        
+
 
     def fit(
         self,

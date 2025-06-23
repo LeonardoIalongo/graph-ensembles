@@ -5,7 +5,7 @@ def n_possible_part(n, n_inner_cl):
 	"""
 
 	from math import modf
-	log_n, log_b = jnp.log(n), jnp.log(n_inner_cl)
+	log_n, log_b = np.log(n), np.log(n_inner_cl)
 	fr_ , int_ = modf(log_n / log_b)
 	lo_clust = clust_labels.size - n_inner_cl**int_
 	return int_, fr_, lo_clust
@@ -76,8 +76,8 @@ def set_name_for_plots(name, ref_model):
 	
 	name = name.replace("sum-", "").replace("fine-", "")
 	if ref_model.objective == 'NetRec': 
-	 	name = name.replace("-1", "")
-	if ref_model.objective == "NodeEmb":
+		name = name.replace("-1", "")
+	elif ref_model.objective == "NodeEmb":
 		name = name.replace("maxl", "")
   
 	return name

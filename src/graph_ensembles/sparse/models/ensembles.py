@@ -5,7 +5,7 @@ from .. import graphs
 import numpy as np
 import numpy.random as rng
 import scipy.sparse as sp
-from numba import jit, njit, prange
+from numba import jit, njit, prange, get_num_threads, get_thread_id
 from math import isinf
 from numba import float64
 from numba.experimental import jitclass
@@ -336,6 +336,8 @@ class DiGraphEnsemble(GraphEnsemble):
         out_strength=None,
         in_strength=None,
         selfloops=None,
+        unsampled_vI=None,
+        added_edges=None
     ):
         """Return a Graph sampled from the ensemble.
 
@@ -379,6 +381,8 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.prop_in,
                 self.prop_dyad,
                 self.selfloops,
+                unsampled_vI,
+                added_edges,
             )
             vals = np.ones(len(rows), dtype=bool)
         elif weights == "cremb":
@@ -406,47 +410,79 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return g
 
-    # @staticmethod
-    # @njit(parallel = True)  # pragma: no cover
-    # def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-    #     """Sample from the ensemble."""
-    #     rows = []
-    #     cols = []
-    #     N = len(prop_out)
-
-    #     for i in prange(N):
-    #         p_out_i = prop_out[i]
-    #         for j in range(N):
-    #             if (i != j):
-    #                 p_in_j = prop_in[j]
-                
-    #                 p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-    #                 if np.random.random() < p:
-    #                     rows.append(i)
-    #                     cols.append(j)
-
-    #     return rows, cols
-
-
-    @staticmethod
-    @njit(parallel=True)  # pragma: no cover
-    def _binary_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Sample from the ensemble."""
-        from numba.typed import List
-        rows = List()
-        cols = List()
+    @njit(parallel=True)
+    def block_parallel_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI):
+        """
+        Samples the internal index (not the nodes - id) according to the probability pij.
+        Avoid all the pairs involving unsampled_vI, since they will be added afterwards
+        """
         N = len(prop_out)
+        total_ops = N * N
+        num_blocks = get_num_threads()
+        block_size = total_ops // num_blocks
 
-        for i in prange(N):
-            p_out_i = prop_out[i]
-            for j in range(N):
-                if (i != j):
-                    p_in_j = prop_in[j]
-                    p = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
-                    if np.random.random() < p:
-                        rows.append(i)
-                        cols.append(j)
+        # Preallocate buffers for each block/thread
+        thread_rows = List()
+        thread_cols = List()
 
+        num_elements_unsampled_vI = np.sum(unsampled_vI)
+
+        for _ in range(num_blocks):
+            thread_rows.append(List.empty_list(np.int64))
+            thread_cols.append(List.empty_list(np.int64))
+
+        np.random.seed(1)
+        for block in prange(num_blocks):
+            start = block * block_size
+            end = (block + 1) * block_size if block < num_blocks - 1 else total_ops
+            thread_id = get_thread_id()
+            for flat_idx in range(start, end):
+                i = flat_idx // N
+                j = flat_idx % N
+
+                # if True, skipping the (i,j) sampling
+                # 1) selfloops; 2) freezed connections
+                if (not selfloops and i == j):
+                    continue
+                if num_elements_unsampled_vI > 0:
+                    if unsampled_vI[i] and unsampled_vI[j]:
+                        continue
+                p = p_ij(param, prop_out[i], prop_in[j], prop_dyad(i, j))
+                if np.random.random() < p:
+                    thread_rows[thread_id].append(i)
+                    thread_cols[thread_id].append(j)
+
+        return thread_rows, thread_cols
+
+    def _binary_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, added_edges):
+        
+        from itertools import chain
+        import pandas as pd
+
+        sampled_rows, sampled_cols = DiGraphEnsemble.block_parallel_sample(
+                                                p_ij, 
+                                                param, 
+                                                prop_out, 
+                                                prop_in,
+                                                prop_dyad, 
+                                                selfloops, 
+                                                unsampled_vI
+                                            )
+
+        # Flatten rows/cols (List[List[int64]]) to 1D numpy arrays
+        rows = np.fromiter(chain.from_iterable(sampled_rows), dtype=np.int64)
+        cols = np.fromiter(chain.from_iterable(sampled_cols), dtype=np.int64)
+
+        assert isinstance(added_edges, (pd.DataFrame, type(None))), "added_edges must be a pandas.DataFrame or None"
+        # add frozen edges into the sampled matrix
+        if isinstance(added_edges, pd.DataFrame):
+            # map nodes ids to internal idx of src_vI, dst_vI
+            src_vI, dst_vI = added_edges.T.values
+
+            # concatenate
+            rows = np.concatenate((rows, src_vI))
+            cols = np.concatenate((cols, dst_vI))
+        
         return rows, cols
     
     @staticmethod

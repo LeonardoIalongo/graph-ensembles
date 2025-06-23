@@ -52,7 +52,7 @@ class common_functions():
         self.vars_dir += level_dir
         
         # update it for the model directories, since one has to specify also the fitting method
-        # os.makedirs(self.vars_dir, exist_ok = True)
+        os.makedirs(self.vars_dir, exist_ok = True)
 
         # create plots dir
         if self.corpkey:
@@ -181,7 +181,8 @@ class Graph(common_functions):
         assert isinstance(e, pd.DataFrame), "Only dataframe input supported."
 
         # copy the DataFrame, otherwise they will be changed
-        v, e = v.copy(), e.copy()
+        v = v.copy()
+        # v, e = v.copy(), e.copy()
         
         # If column names are passed as lists with one elements extract str
         if isinstance(v_id, list) and len(v_id) == 1:
@@ -211,13 +212,14 @@ class Graph(common_functions):
             self.id_dict = self.generate_id_dict(v, "_node", check_unique=True)
 
             # Create index with new id value and sort
+            # In pandas, indexes can be whatever. So, this is a safe way to proceed
             v = v.set_index(v["_node"].map(lambda x: self.id_dict.get(x)).values)
             v = v.sort_index()
 
         except ValueError as err:
             raise err
         except Exception:
-            rep_msg = "There is at least one repeated id in the vertex " "dataframe."
+            rep_msg = "There is at least one repeated id in the vertex dataframe."
             raise Exception(rep_msg)
 
         # If v_group is given then create dict and array
@@ -237,8 +239,7 @@ class Graph(common_functions):
                 .values.astype(self.group_dtype)
             )
 
-        # Check that no vertex id in e is not present in v
-        # and generate optimized edge list
+        # Find internal _src and _dst
         if isinstance(src, list) and isinstance(dst, list):
             e["_src"] = list(zip(*[e[x] for x in src]))
             e["_dst"] = list(zip(*[e[x] for x in dst]))
@@ -247,14 +248,16 @@ class Graph(common_functions):
             e["_dst"] = e[dst]
         else:
             raise ValueError("src and dst can be either both lists or str.")
-
-        msg = "Some vertices in e are not in v."
+        
+        # map orginal id into continuous int (not done for the nodes since they are just in the index)
         e["_src"] = e["_src"].map(lambda x: self.id_dict.get(x))
         e["_dst"] = e["_dst"].map(lambda x: self.id_dict.get(x))
 
-        # Check for nans
+        # Check that no vertex id in e is not present in v (Check for nans)
+        msg = "Some vertices in e are not in v."
         assert not (np.any(np.isnan(e["_src"])) or np.any(np.isnan(e["_dst"]))), msg
 
+        # Generate optimized edge list
         # Extract values
         src_array = e["_src"].values.astype(self.id_dtype)
         dst_array = e["_dst"].values.astype(self.id_dtype)
@@ -286,27 +289,54 @@ class Graph(common_functions):
 
         # Warn if vertices have no edges
         zero_idx = np.nonzero(d == 0)[0]
-        if len(zero_idx) == 1:
-            warnings.warn(
-                str(list(self.id_dict.keys())[zero_idx[0]]) + " vertex has no edges.",
-                UserWarning,
-            )
-
         if len(zero_idx) > 1:
-            names = []
-            for idx in zero_idx:
-                names.append(list(self.id_dict.keys())[idx])
-            warnings.warn(str(names) + " vertices have no edges.", UserWarning)
-            
+            print('-There are some nodes with no edge',)
         
         # set some default variables
-        self.full_intra_row = "full"
         self.kind = 'obs'
         
         # update all the variables present in kwargs
         self.__dict__.update(kwargs)
         
         self._create_vars_dir()
+
+    def split_intra_row(self, v, e, intra_size = 0.7, seed = 0):
+        """
+        Divide the Observed Network into 
+        - an intra (frozen) part, whose connections are set as seen; 
+        - the rest of the world, whose connections have to be reconstructed;
+        """
+        
+        # set the intra_node size
+        num_nodes = v.shape[0]
+        num_intra_nodes = int(intra_size * num_nodes)
+
+        # fixed a seed, extract num_intra_nodes indexes for the vI nodes 
+        np.random.seed(seed)
+        idx_intra_nodes = np.random.choice(num_nodes, size = num_intra_nodes, replace=False)
+        vI = v.iloc[idx_intra_nodes].sort_values(by = "id", ignore_index = True)
+
+        # find idx of edges containing v and filter edges
+        idx_with_both_ = lambda v: e['src'].isin(v['id']) & e['dst'].isin(v['id'])
+        edge_idx = lambda idx: e.loc[idx].reset_index(drop = True)
+
+        # containing vI, vR
+        idx_eI = idx_with_both_(vI)
+
+        # select the edge ING
+        eI = edge_idx(idx_eI)
+
+        # select the rest-of-the-world vertex, but including the ones discarded from vI
+        idx_v_row = np.setdiff1d(np.squeeze(v.values), np.squeeze(vI.values), assume_unique=True)
+        vR = pd.DataFrame(data = idx_v_row, columns = ["id"])
+
+        # select the edge ROW
+        eR = edge_idx(~idx_eI)
+
+        assert vI.shape[0] + vR.shape[0] == num_nodes, "Some nodes are not present either in the ING or ROW nodes"
+        assert eI.shape[0] + eR.shape[0] == e.shape[0], "Some edges are not present either in the ING or ROW nodes"
+
+        return vI, eI, vR, eR
         
     def get(self, var_name):
         """Return the variable if it exists, otherwise return None.
@@ -480,7 +510,7 @@ class Graph(common_functions):
 
     @staticmethod
     def generate_id_dict(df, id_col, check_unique=False):
-        """Return id dictionary for given dataframe columns."""
+        """Return unique id dictionary for given dataframe columns."""
         id_dict = {}
 
         if check_unique:
@@ -489,8 +519,7 @@ class Graph(common_functions):
         else:
             ids = np.unique(df[id_col])
 
-        for i, x in enumerate(ids):
-            id_dict[int(x)] = i
+        id_dict = dict(zip(ids.tolist(), list(range(len(ids)))))
 
         return id_dict
 

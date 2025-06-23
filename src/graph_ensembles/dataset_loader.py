@@ -1,4 +1,5 @@
 from .utils import *
+import numpy as np
 
 def default_4_undirected_paper(dataset_name):
     ''' Default values for the first 2 undirected papers'''
@@ -53,7 +54,7 @@ def flip_payer_beneficiary_columns(df):
 	
 	return df
 
-def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_code = "naics_code", cg_method = "naics_code", year = 2022, distance_matrix = None, lvl_to_nclust = None, max_n_entries = 0):
+def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_code = "naics_code", cg_method = "naics_code", year = 2022, distance_matrix = None, lvl_to_nclust = None, max_num_entries = 0):
 
     # dataset name year and direction (nyd)
     dataset_nyd = f"{name}-{dataset_direction}"
@@ -120,8 +121,10 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
     elif cg_method.startswith("random"):
         total_levels = 1
 
-    if max_n_entries > 0:
-        pdtrans = pdtrans.iloc[:max_n_entries]
+    if not (max_num_entries == None or max_num_entries == False):
+        np.random.seed(0)
+        random_entries = np.random.choice(len(pdtrans), size = max_num_entries, replace = False)
+        pdtrans = pdtrans.iloc[random_entries]
 
     if dataset_direction == "Directed":
         # perform a payer_id_code <-> ben_id_code substitution to retain the supply-chain network
