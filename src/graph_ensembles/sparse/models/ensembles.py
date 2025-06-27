@@ -10,6 +10,7 @@ from math import isinf
 from numba import float64
 from numba.experimental import jitclass
 from numba.typed import List
+from ... import utils
 
 
 # Define a special empty iterator class. This is necessary if the model does
@@ -337,13 +338,17 @@ class DiGraphEnsemble(GraphEnsemble):
         in_strength=None,
         selfloops=None,
         unsampled_vI=None,
-        added_edges=None
+        added_edges=None,
+        graph_idx=0,
     ):
         """Return a Graph sampled from the ensemble.
 
         If a reference graph is passed (ref_g) then the properties of the graph
         will be copied to the new samples.
         """
+        from fast_pagerank import pagerank_power
+        from os import makedirs
+        
         if not hasattr(self, "param"):
             raise Exception("Ensemble has to be fitted before sampling.")
 
@@ -358,6 +363,10 @@ class DiGraphEnsemble(GraphEnsemble):
         num_bytes = g.get_num_bytes(g.num_vertices)
         g.id_dtype = np.dtype("u" + str(num_bytes))
 
+        # define the g vars_dir
+        g.vars_dir = self.vars_dir_ensembles + f"/graph{graph_idx}"
+        makedirs(g.vars_dir, exist_ok = True) 
+        
         # Check if reference graph is available
         if ref_g is not None:
             if hasattr(ref_g, "num_groups"):
@@ -366,7 +375,6 @@ class DiGraphEnsemble(GraphEnsemble):
                 g.group_dtype = ref_g.group_dtype
                 g.groups = ref_g.groups
 
-            g.id_dict = ref_g.id_dict
         else:
             g.id_dict = {}
             for i in range(g.num_vertices):
@@ -374,6 +382,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # Sample edges
         if weights is None:
+            unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_) if unsampled_vI is None else unsampled_vI
             rows, cols = self._binary_sample(
                 self.p_ij,
                 self.param,
@@ -408,6 +417,17 @@ class DiGraphEnsemble(GraphEnsemble):
             (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
         )
 
+        # populate the class
+        g.num_edges()
+        g._page_rank = pagerank_power(g.adj, p=0.85, max_iter=100,
+                                                tol=1e-06, personalize=None, reverse=True)
+        g.out_degree()
+
+        # save the g.__dict__, but without the adjacency matrix
+        lighter_g_dict = dict(g.__dict__)
+        lighter_g_dict.pop("adj", None)
+        utils.save_dict(g.vars_dir + f"/graph{graph_idx}.pkl", lighter_g_dict)
+
         return g
 
     @njit(parallel=True)
@@ -431,7 +451,7 @@ class DiGraphEnsemble(GraphEnsemble):
             thread_rows.append(List.empty_list(np.int64))
             thread_cols.append(List.empty_list(np.int64))
 
-        np.random.seed(1)
+        # np.random.seed(1)
         for block in prange(num_blocks):
             start = block * block_size
             end = (block + 1) * block_size if block < num_blocks - 1 else total_ops

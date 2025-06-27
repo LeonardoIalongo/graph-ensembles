@@ -1,12 +1,5 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
-import os
-import sys
-
-from scipy.optimize import minimize
-import scipy.sparse as sp
 
 # set plot parameters
 mpl.rc("xtick", direction = "in")
@@ -20,13 +13,6 @@ mpl.rcParams['axes.formatter.min_exponent'] = 1
 plt.rcParams['figure.constrained_layout.use'] = False
 plt.rcParams['figure.subplot.hspace'] = 0.25
 plt.rcParams['figure.subplot.wspace'] = 0.25
-
-plt.rcParams.update({
-		"text.usetex": True,
-		"font.family": "serif",
-		"font.serif": "Computer Modern",
-		"font.size" : '23'
-	})
 
 obs_color = "#003049"
 obs_ms = 60

@@ -209,12 +209,12 @@ class Graph(common_functions):
             else:
                 v["_node"] = v[v_id]
 
-            self.id_dict = self.generate_id_dict(v, "_node", check_unique=True)
+            self.id_dict = self.generate_id_dict(v, "_node", assume_unique=True)
 
             # Create index with new id value and sort
             # In pandas, indexes can be whatever. So, this is a safe way to proceed
-            v = v.set_index(v["_node"].map(lambda x: self.id_dict.get(x)).values)
-            v = v.sort_index()
+            v["_node"] = v["_node"].map(lambda x: self.id_dict.get(x))
+            v = v.set_index("_node").sort_index()
 
         except ValueError as err:
             raise err
@@ -300,7 +300,7 @@ class Graph(common_functions):
         
         self._create_vars_dir()
 
-    def split_intra_row(self, v, e, intra_size = 0.7, seed = 0):
+    def split_intra_row(self, v, e, intra_size = 0.7, seed = 0, return_row = False):
         """
         Divide the Observed Network into 
         - an intra (frozen) part, whose connections are set as seen; 
@@ -314,7 +314,7 @@ class Graph(common_functions):
         # fixed a seed, extract num_intra_nodes indexes for the vI nodes 
         np.random.seed(seed)
         idx_intra_nodes = np.random.choice(num_nodes, size = num_intra_nodes, replace=False)
-        vI = v.iloc[idx_intra_nodes].sort_values(by = "id", ignore_index = True)
+        vI = v.iloc[idx_intra_nodes].sort_values(by = "id", ignore_index = False)
 
         # find idx of edges containing v and filter edges
         idx_with_both_ = lambda v: e['src'].isin(v['id']) & e['dst'].isin(v['id'])
@@ -326,17 +326,21 @@ class Graph(common_functions):
         # select the edge ING
         eI = edge_idx(idx_eI)
 
-        # select the rest-of-the-world vertex, but including the ones discarded from vI
-        idx_v_row = np.setdiff1d(np.squeeze(v.values), np.squeeze(vI.values), assume_unique=True)
-        vR = pd.DataFrame(data = idx_v_row, columns = ["id"])
+        if return_row:
+            # select the rest-of-the-world vertex, but including the ones discarded from vI
+            idx_v_row = np.setdiff1d(np.arange(num_nodes), idx_intra_nodes, assume_unique=True)
+            vR = v.iloc[idx_v_row].sort_values(by = "id")
 
-        # select the edge ROW
-        eR = edge_idx(~idx_eI)
+            # select the edge ROW
+            eR = edge_idx(~idx_eI)
 
-        assert vI.shape[0] + vR.shape[0] == num_nodes, "Some nodes are not present either in the ING or ROW nodes"
-        assert eI.shape[0] + eR.shape[0] == e.shape[0], "Some edges are not present either in the ING or ROW nodes"
+            assert vI.shape[0] + vR.shape[0] == v.shape[0], "Some nodes are not present either in the ING or ROW nodes"
+            assert eI.shape[0] + eR.shape[0] == e.shape[0], "Some edges are not present either in the ING or ROW nodes"
 
-        return vI, eI, vR, eR
+            return vI, eI, vR, eR
+        
+        # return these if return_row == False
+        return vI, eI
         
     def get(self, var_name):
         """Return the variable if it exists, otherwise return None.
@@ -509,13 +513,12 @@ class Graph(common_functions):
         return int(max(2 ** np.ceil(np.log2(np.log2(num_items + 1) / 8)), 1))
 
     @staticmethod
-    def generate_id_dict(df, id_col, check_unique=False):
+    def generate_id_dict(df, id_col, assume_unique=False):
         """Return unique id dictionary for given dataframe columns."""
         id_dict = {}
 
-        if check_unique:
-            ids, counts = np.unique(df[id_col], return_counts=check_unique)
-            assert np.all(counts == 1)
+        if assume_unique:
+            ids = df[id_col]
         else:
             ids = np.unique(df[id_col])
 

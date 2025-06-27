@@ -29,7 +29,8 @@ dependencies = [
   "networkx>=3.0",
   "matplotlib>=3.10",
   "fast_pagerank",
-  "scipy>=1.11.3"
+  "scipy>=1.11.3",
+  "tqdm",
 ]
 
 [tool.setuptools]

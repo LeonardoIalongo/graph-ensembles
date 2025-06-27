@@ -1,9 +1,11 @@
 from .dependencies import *
-def n_possible_part(n, n_inner_cl):
+import numpy as np
+import pandas as pd
+
+def n_possible_part(n, n_inner_cl, clust_labels):
 	"""
 	Number of possible partitions if we start coarse-graining at random n nodes (at level 0) into communities of n_inner_cl nodes each
 	"""
-
 	from math import modf
 	log_n, log_b = np.log(n), np.log(n_inner_cl)
 	fr_ , int_ = modf(log_n / log_b)
@@ -13,6 +15,21 @@ def n_possible_part(n, n_inner_cl):
 def uu_fun(arr):
 	# unique values of arr in order of appearance
 	return list(map(int, dict.fromkeys(arr)))
+
+def latex_mpl_params(flag_, fontsize = '23'):
+	"""
+	Set latex if needed and fontsize
+	"""
+
+	plt.rcParams.update({"font.size" : fontsize})
+	if flag_:
+		plt.rcParams.update({
+			"text.usetex": True,
+			"font.family": "serif",
+			"font.serif": "Computer Modern",
+		})
+
+
 
 def sample_from_p(P, sym = True, seed = None, name = None):
 
@@ -162,6 +179,25 @@ def save_fig(fig, full_path = None, save = True):
 		
 		fig.savefig(full_path, dpi = 100, facecolor = "white", bbox_inches = "tight")
 
+def save_dict(full_path, dict_, save = True):
+	"""
+	save dictionary at full_path
+	"""
+	
+	from pickle import dump
+	if save:
+		with open(full_path, 'wb') as f:
+			dump(dict_, f)
+
+def load_dict(full_path):
+	"""
+	save dictionary at full_path
+	"""
+	
+	from pickle import load	
+	
+	return load(open(full_path, 'rb'))
+
 def get_reduced_by(folder_path):
 	"""Find the reduced_by of another model found via full_path_retriever"""
 	import os
@@ -177,36 +213,26 @@ def get_reduced_by(folder_path):
 
 	return reduced_by[0]
 
-
-# Directed Utils
-
-def check_dim_max_auc(kwargs, model_kwargs):
-	from Directed_Graph import Directed_Graph
-	check_kwargs = kwargs.copy()
-	check_kwargs.update(model_kwargs)
-	fake4dir = Directed_Graph(**check_kwargs)
-	
-	from pathlib import Path
-	par_dir = Path(fake4dir.vars_dir).parents[1]
-	dim_pr = par_dir / "dim_max_test_auc_pr.csv"
-	dim_roc = par_dir / "dim_max_test_auc_roc.csv"
-	
-	if dim_pr.exists() or dim_roc.exists():
-		# upload the results
-		dim_pr = np.genfromtxt(dim_pr, delimiter=',')
-		dim_roc = np.genfromtxt(dim_roc, delimiter=',')
-		
-		if dim_pr == dim_roc:
-			return False, dim_pr
-		else:
-			print('-dim_pr \neq dim_roc', dim_pr, dim_roc)
-			return False, dim_pr
-
-def to_tensor(X):
-	""" Convert numpy array to tensor """
-	if not tc.is_tensor(X):
-		return tc.from_numpy(X)
-	return X
+def max_sampled_graph_idx(self):
+    """
+    Find the maximum idx of the already sampled graph.
+    Therefore if the n_sampels < ens_max_idx, no need to sample
+    Exceptions:
+    -If no ensemble folder exists, then return -1
+    -If the folder is empty, then return -1
+    """
+    import os
+    import re
+    if os.path.exists(self.vars_dir_ensembles):
+        filenames = next(os.walk(self.vars_dir_ensembles))[1]
+        if len(filenames) > 0: #path.exists(self.ensemble_dir):
+            ens_max_idx = sorted([int(re.sub(r'\D', '', x)) for x in filenames], reverse=True)[0]
+            return ens_max_idx
+        else:
+            return -1
+    else:
+        # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
+        return -1
 
 def signed_rel_err(x, y):
 	""" Relative error among each element of x and y. It returns an array
