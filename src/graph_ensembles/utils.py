@@ -213,26 +213,36 @@ def get_reduced_by(folder_path):
 
 	return reduced_by[0]
 
-def max_sampled_graph_idx(self):
-    """
-    Find the maximum idx of the already sampled graph.
-    Therefore if the n_sampels < ens_max_idx, no need to sample
-    Exceptions:
-    -If no ensemble folder exists, then return -1
-    -If the folder is empty, then return -1
-    """
-    import os
-    import re
-    if os.path.exists(self.vars_dir_ensembles):
-        filenames = next(os.walk(self.vars_dir_ensembles))[1]
-        if len(filenames) > 0: #path.exists(self.ensemble_dir):
-            ens_max_idx = sorted([int(re.sub(r'\D', '', x)) for x in filenames], reverse=True)[0]
-            return ens_max_idx
-        else:
-            return -1
-    else:
-        # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
-        return -1
+def max_sampled_graph_idx(dir_):
+	"""
+	Find the maximum idx of the already sampled graph.
+	Therefore if the n_sampels < ens_max_idx, no need to sample
+	Return:
+		- -1: no ensemble folder exists,
+    	- -1: the folder is empty,
+    	- ens_max_idx-1: the folder with the maximum index contains no files.
+	"""
+	import os
+	import re
+	if os.path.exists(dir_):
+		filenames = next(os.walk(dir_))[1]
+		if len(filenames) > 0:
+			# substitute every non digit (\D) with '' (nothing)
+			indices = [int(re.sub(pattern = r'\D', repl = '', string = x)) for x in filenames]
+			argmax_idx = np.argmax(indices)
+			ens_max_idx = indices[argmax_idx]
+			# Find the folder name corresponding to the max index
+			max_idx_folder = filenames[argmax_idx] #[f for f in filenames if int(re.sub(r'\D', '', f)) == ens_max_idx][0]
+			max_idx_folder_path = os.path.join(dir_, max_idx_folder)
+			# Check if the folder with the maximum index contains any files
+			if os.path.exists(max_idx_folder_path) and len(os.listdir(max_idx_folder_path)) > 0:
+				return ens_max_idx
+			return ens_max_idx-1
+		else:
+			return -1
+	else:
+		# this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
+		return -1
 
 def signed_rel_err(x, y):
 	""" Relative error among each element of x and y. It returns an array
@@ -268,24 +278,24 @@ def load_meas(ref_model, level, name, str_dimXBC = None, meas = "pmatrix", ensem
 
 # multiprocess trial functions
 def worker(args):
-    import multiprocessing
-    start, end, N, p_ij, param, prop_out, prop_in, prop_dyad, selfloops = args
-    rows = []
-    cols = []
-    # logs = []
-    worker_id = multiprocessing.current_process().name
-    # logs.append(f'Worker {worker_id} started: processing indices {start} to {end}')
-    for flat_idx in range(start, end):
-        i = flat_idx // N
-        j = flat_idx % N
-        if not selfloops and i == j:
-            continue
-        p = p_ij(param, prop_out[i], prop_in[j], prop_dyad(i, j))
-        if np.random.random() < p:
-            rows.append(i)
-            cols.append(j)
-    # logs.append(f'Worker {worker_id} finished.')
-    return np.array(rows, dtype=np.int64), np.array(cols, dtype=np.int64)#, logs
+	import multiprocessing
+	start, end, N, p_ij, param, prop_out, prop_in, prop_dyad, selfloops = args
+	rows = []
+	cols = []
+	# logs = []
+	worker_id = multiprocessing.current_process().name
+	# logs.append(f'Worker {worker_id} started: processing indices {start} to {end}')
+	for flat_idx in range(start, end):
+		i = flat_idx // N
+		j = flat_idx % N
+		if not selfloops and i == j:
+			continue
+		p = p_ij(param, prop_out[i], prop_in[j], prop_dyad(i, j))
+		if np.random.random() < p:
+			rows.append(i)
+			cols.append(j)
+	# logs.append(f'Worker {worker_id} finished.')
+	return np.array(rows, dtype=np.int64), np.array(cols, dtype=np.int64)#, logs
 
 def parallel_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, num_procs=3):
 	"""Sample edges in parallel using multiple processes."""

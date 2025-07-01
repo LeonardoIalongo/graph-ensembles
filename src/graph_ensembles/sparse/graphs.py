@@ -329,7 +329,7 @@ class Graph(common_functions):
         if return_row:
             # select the rest-of-the-world vertex, but including the ones discarded from vI
             idx_v_row = np.setdiff1d(np.arange(num_nodes), idx_intra_nodes, assume_unique=True)
-            vR = v.iloc[idx_v_row].sort_values(by = "id")
+            vR = v.iloc[idx_v_row].sort_values(by = "id", ignore_index = False)
 
             # select the edge ROW
             eR = edge_idx(~idx_eI)
