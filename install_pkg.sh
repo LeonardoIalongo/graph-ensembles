@@ -3,29 +3,28 @@
 set -e  # Exit immediately if a command exits with a non-zero status
 set -u  # Treat unset variables as an error
 
-# Define variables
-BUCKET_NAME="dap"
-FOLDER_NAME="corealgos/rmilocco/repo"
-FILE_NAME="graph-ensembles"
-ZIP_FILE="$FILE_NAME.zip"
-TARGET_DIR="$HOME/inghero/$FILE_NAME"
+echo "➡️ Changing directory to /home/inghero/riccardo/"
+cd /home/inghero/riccardo/
 
-echo "📦 Unzipping $ZIP_FILE directly in the ./$FILE_NAME"
-unzip -o "${ZIP_FILE}" "./${FILE_NAME}"
+echo "➡️ Moving graph-ensembles.zip from /home/inghero/data/corealgos/ to current directory"
+mv /home/inghero/data/corealgos/graph-ensembles.zip .
 
-echo "📁 Changing directory to ${TARGET_DIR}"
-# cd "${TARGET_DIR}"
+echo "📁 Unzipping graph-ensembles.zip"
+if unzip -o graph-ensembles.zip; then
+    echo "📁 Unzipped graph-ensembles.zip successfully."
+else
+    echo "❌ Unzip failed. Remove old graph-ensembles directory with mc"
+    echo "❌ Please run: mc rm -rf graph-ensembles"
+    exit 1
+fi
 
-# 2. Unzip the project
-echo "📦 Unzipping $ZIP_FILE"
-# unzip -o "${ZIP_FILE}"
+echo "➡️ Changing directory to graph-ensembles"
+cd graph-ensembles
 
-# 3. Change directory to target project folder
-echo "📁 Changing directory to ${FILE_NAME}"
-# cd "./${FILE_NAME}"
+echo "🛑 Deactivating virtual environment"
+deactivate
 
-# 4. Install in editable mode using modern pip config
 echo "⚙️ Installing package in editable mode (PEP 660)"
-# pip install --editable . --config-settings editable_mode=compat
+pip install --editable . --config-settings editable_mode=compat
 
 echo "✅ Installation complete!"

@@ -112,7 +112,7 @@ class DiGraphEnsemble(GraphEnsemble):
         self.prop_out = empty_index()
         self.prop_in = empty_index()
         
-    def expected_num_edges(self, recompute=False):
+    def expected_num_edges(self, recompute=False, unsampled_vI = None):
         """Compute the expected number of edges."""
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
@@ -125,6 +125,7 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.prop_in,
                 self.prop_dyad,
                 self.selfloops,
+                unsampled_vI
             )
 
         return self._exp_num_edges
@@ -365,7 +366,6 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # define the g vars_dir
         g.vars_dir = self.vars_dir_ensembles + f"/graph{graph_idx}"
-        makedirs(g.vars_dir, exist_ok = True) 
         
         # Check if reference graph is available
         if ref_g is not None:
@@ -411,6 +411,8 @@ class DiGraphEnsemble(GraphEnsemble):
             )
         else:
             raise ValueError("Weights method not recognised or implemented.")
+
+        makedirs(g.vars_dir, exist_ok = True) 
 
         # Convert to adjacency matrix
         g.adj = sp.csr_array(
@@ -507,7 +509,7 @@ class DiGraphEnsemble(GraphEnsemble):
     
     @staticmethod
     @njit(parallel=True)
-    def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+    def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI):
         """Compute the objective function of the num_edges solver and its
         derivative.
         """
@@ -524,10 +526,13 @@ class DiGraphEnsemble(GraphEnsemble):
 
             # Use scalar accumulators for better memory efficiency and cache usage
             f_i = 0.0
-            jac_i = 0.0
-
+            
             # Inner loop is serial — this is good because nested prange is not well supported
             for j in range(N):
+
+                if unsampled_vI[i] and unsampled_vI[j]:
+                    continue
+                
                 if (i != j) or selfloops:
                     p_in_j = prop_in[j]
 
