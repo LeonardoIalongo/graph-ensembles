@@ -1,7 +1,12 @@
 from graph_ensembles.dependencies import *
+from .. import dependencies as dep
 from graph_ensembles.utils import load_meas, save_fig
+from graph_ensembles import sparse as sp
+import numpy as np
+from .. import utils
 
-def plots_degree(g, ref_model, sum_model):
+
+def degree(g, ref_model, sum_model):
 	"""Plot the degree sequence in, out, and 11 for the observed network and the sum model"""
 	full_path = sum_model.plots_dir + f"/topological_meas/degree/level{g.level}.pdf"
 
@@ -66,7 +71,7 @@ def set_xylabels(ax, obs_meas, exp_meas, sum_meas, axis_scale = 'log'):
 		ax.xaxis.set_minor_locator(ticker.NullLocator())
 		ax.yaxis.set_minor_locator(ticker.NullLocator())
 
-def plots_annd_IO(net, ref_model, sum_model):
+def annd_IO(net, ref_model, sum_model):
 	"""Plot the annd in-in, out-out, in-out, out-in"""
 	full_path = sum_model.plots_dir + f"/bin_meas_vs_deg/level{net.level}/annd.pdf"
 
@@ -211,3 +216,153 @@ def plots_rel_err_n_edges_across_levels(sum_model, model_names, total_levels, ma
 			save_fig(fig, full_path)
 
 			plt.close()
+
+def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
+	"""
+	Plot the Page-Rank for a fixed number of splits (num_splits): 
+	.) x-axis, there would be the full page rank of the intra nodes.
+	.) y-axis, the page-rank determined on internal connections
+	num_splits: integer number of splits which are equal to the number of seeds used to select the vI
+	"""
+	
+	import math
+	from matplotlib import colormaps as cmaps
+	from matplotlib.colors import to_hex
+	from tqdm import trange
+	import os
+	from fast_pagerank import pagerank_power
+
+	intra_size = [intra_size] if isinstance(intra_size, float) else intra_size
+	net_meas = "_page_rank"
+	
+	for intra_size in intra_size:
+
+		# check if the folder already exists
+		full_path = g.plots_base_dir + f"/PageRanks_on_Intra/intra_size{intra_size}/PR_grid_{num_splits}.pdf"
+		if not os.path.exists(full_path):
+
+			# update the parameters for page rank        
+			# p, max_iter, tol, personalize, reverse = kwargs_pr.values()
+
+			# define personlized colors
+			colors = cmaps["viridis"](np.linspace(0,1,num_splits))
+
+			# Compute grid size (rows, cols) as close to square as possible
+			n_cols = math.ceil(math.sqrt(num_splits))
+			n_rows = math.ceil(num_splits / n_cols)
+
+			# define the fig where to store the page-ranks
+			fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 5*n_rows), squeeze=False, sharex=True, sharey=True)
+
+			for idx, split in enumerate(trange(num_splits, desc="Splitting and Computing the PageRank")):
+				row, col = divmod(idx, n_cols) # returns idx // n_cols, idx % n_cols
+				ax = axes[row, col]
+
+				# # split nodes, edges in interal
+				# vI, eI = g.split_intra_row(v, e, intra_size=intra_size, split=split)
+				
+				# # update the graph name
+				# kwargs_graph.update({'graph_kind': "intra"})
+				# gI = sp.graphs.DiGraph(vI, eI, **kwargs_graph)
+				
+				# # compute the page-rank only in the internal part
+				# pr_gI = pagerank_power(gI.adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
+				gI_path = gI.vars_dir.replace(f"intra_size{gI.intra_size}", f"intra_size{intra_size}").replace(f"vert_split{gI.vert_split}", f"vert_split{split}")
+				
+				gI_dict = utils.load_dict(gI_path + "/graph.pkl")
+				pr_gI = gI_dict[net_meas]
+
+				# select the internal node
+				idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI_dict["id_dict"]))
+				pr_g_on_I = g.get(net_meas)[idx_IntraNode2Full]
+
+				# plot the page rank only on the interal nodes
+				_ = ax.plot([pr_g_on_I.min(), pr_g_on_I.max()],
+							[pr_g_on_I.min(), pr_g_on_I.max()],
+							'r--')
+				
+				ms, alpha = 30, 0.5
+				_ = ax.scatter(pr_g_on_I, pr_gI, alpha=alpha, label=f"Split {split}", c=to_hex(colors[split]), s=ms)
+				_ = ax.set(
+					xlabel='Full-PR on Intra',
+					ylabel='Intra PR',
+					title=f'split {split}'.title(),
+					xscale='log',
+					yscale='log'
+				)
+				
+				# don't plot the grid and legend
+				_ = ax.grid(False)
+				leg = ax.legend(fontsize=20)
+				for lh in leg.legend_handles:
+					lh.set_alpha(1)
+					lh.set_sizes([60])
+
+			# Hide unused subplots
+			for idx in range(num_splits, n_rows * n_cols):
+				row, col = divmod(idx, n_cols)
+				fig.delaxes(axes[row, col])
+
+			fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
+			utils.save_fig(fig, full_path=full_path)
+			plt.close()
+
+
+def internal_net_meas_obs_vs_reconstr(model, intra_size, split, g, gI, ens_mean_net_meas, num_sampled_graphs):
+	"""
+	Plot the Page-Rank for a fixed number of splits (num_splits): 
+	.) x-axis, there would be the full page rank of the intra nodes.
+	.) y-axis, the page-rank determined on internal connections
+	num_splits: integer number of splits which are equal to the number of seeds used to select the vI
+	"""
+	
+	from matplotlib import colormaps as cmaps
+	from matplotlib.colors import to_hex
+	import os
+
+	net_meas = "_page_rank"
+	
+	# check if the folder already exists
+	full_path = g.plots_base_dir + f"/PageRanks_on_Intra/intra_size{intra_size}/Reconstructed/{model.fit_method}/split{split}_{num_sampled_graphs}.pdf"
+	if not os.path.exists(full_path):
+		
+		# prepare the net_meas over g and gI
+		g_net_meas = g.get(net_meas)
+		gI_net_meas = gI.get(net_meas)
+		
+		idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
+		g_net_meas_on_I = g_net_meas[idx_IntraNode2Full]
+		ens_mean_net_meas_on_I = ens_mean_net_meas[idx_IntraNode2Full]
+
+		# define the fig where to store the page-ranks
+		fig, axs = plt.subplots(1,2, figsize = (12, 6), sharex=True, sharey=True)
+
+		ms, alpha = 30, .5
+
+		# plot the observed gI_net_meas
+		_ = axs[0].scatter(g_net_meas_on_I, gI_net_meas, alpha=alpha, c=dep.obs_color, s=ms, zorder = 1)
+		axs[0].set_title("Observed")
+		_ = axs[1].scatter(g_net_meas_on_I, ens_mean_net_meas_on_I, alpha=alpha, c=dep.ref_model_color, s=ms, zorder = 1)
+		axs[1].set_title("Reconstructed")
+		
+		# plot the identity line, no grid, customize the legend, set the lables and scale
+		for ax in axs:
+			_ = ax.plot([g_net_meas_on_I.min(), g_net_meas_on_I.max()],
+						[g_net_meas_on_I.min(), g_net_meas_on_I.max()],
+						'r--', zorder = 0
+						)
+
+			_ = ax.grid(False)
+
+			_ = ax.set(
+						xlabel='Full-PR on Intra',
+						ylabel='Intra PR',
+						xscale='log',
+						yscale='log'
+					)
+
+		fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
+		utils.save_fig(fig, full_path=full_path)
+		plt.close()

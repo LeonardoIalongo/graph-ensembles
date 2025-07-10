@@ -61,14 +61,14 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 self.num_edges = g.num_edges()
                 self.prop_out = g.out_strength()
                 self.prop_in = g.in_strength()
-                self.perc_intra_nodes = g.get("perc_intra_nodes")
+                self.intra_size = g.get("intra_size")
 
                 self.level = g.level
                 self.__dict__.update(kwargs)
                 
-                # force attributes wrt perc_intra_nodes
-                if self.perc_intra_nodes < 1:
-                    self.seed = g.seed
+                # force attributes wrt intra_size
+                if self.intra_size < 1:
+                    self.vert_split = g.vert_split
                 self.fit_method = f"num_edges_{g.graph_kind}"
 
                 self._create_vars_dir()
@@ -93,8 +93,8 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         #     "selfloops",
         #     "name",
         #     "level",
-        #     "seed",
-        #     "perc_intra_nodes",
+        #     "split",
+        #     "intra_size",
         #     "full_intra_row",
         #     "fit_method",
         #     "corpkey",
@@ -205,8 +205,8 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         if os.path.exists(path_param):
             
             from graph_ensembles.utils import load_array
-            print(f'-Load the parameter enforcing {self.fit_method}',)
             self.param = np.expand_dims(load_array(path_param), axis = 0) # The code needs np.array([#])
+            print(f'-Load the parameter enforcing {self.fit_method} -> param: {self.param}',)
             
         else: 
             print(f'-Fit the parameter with {self.fit_method}',)

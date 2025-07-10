@@ -347,7 +347,6 @@ class DiGraphEnsemble(GraphEnsemble):
         If a reference graph is passed (ref_g) then the properties of the graph
         will be copied to the new samples.
         """
-        from fast_pagerank import pagerank_power
         from os import makedirs
         
         if not hasattr(self, "param"):
@@ -365,7 +364,7 @@ class DiGraphEnsemble(GraphEnsemble):
         g.id_dtype = np.dtype("u" + str(num_bytes))
 
         # define the g vars_dir
-        g.vars_dir = self.vars_dir_ensembles + f"/graph{graph_idx}"
+        g.vars_dir = self.vars_dir_ensembles + f"/samples/graph{graph_idx}"
         
         # Check if reference graph is available
         if ref_g is not None:
@@ -381,6 +380,7 @@ class DiGraphEnsemble(GraphEnsemble):
                 g.id_dict[i] = i
 
         # Sample edges
+        g.weighted = None
         if weights is None:
             unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_) if unsampled_vI is None else unsampled_vI
             rows, cols = self._binary_sample(
@@ -395,6 +395,7 @@ class DiGraphEnsemble(GraphEnsemble):
             )
             vals = np.ones(len(rows), dtype=bool)
         elif weights == "cremb":
+            g.weighted = True
             if out_strength is None:
                 out_strength = self.prop_out
             if in_strength is None:
@@ -421,14 +422,10 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # populate the class
         g.num_edges()
-        g._page_rank = pagerank_power(g.adj, p=0.85, max_iter=100,
-                                                tol=1e-06, personalize=None, reverse=True)
+        g._page_rank = g.pagerank_power(**ref_g._kwargs_pr)
         g.out_degree()
 
-        # save the g.__dict__, but without the adjacency matrix
-        lighter_g_dict = dict(g.__dict__)
-        lighter_g_dict.pop("adj", None)
-        utils.save_dict(g.vars_dir + f"/graph{graph_idx}.pkl", lighter_g_dict)
+        g.save_vars(name = f"graph{graph_idx}")
 
         return g
 

@@ -26,10 +26,10 @@ class common_functions():
         else:
             base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
         
-        # define the percentage directories based on the self.perc_intra_nodes
-        self.perc_intra_nodes = 1 if self.get("perc_intra_nodes") == None else self.get("perc_intra_nodes")
-        percentage_dirs = f"/perc{self.perc_intra_nodes}/seed{self.seed}" if self.get("perc_intra_nodes") < 1 else ""
-        assert (self.perc_intra_nodes > 0) and (self.perc_intra_nodes <= 1), "Invalid percentage of train and test splitting"
+        # define the percentage directories based on the self.intra_size
+        self.intra_size = 1 if self.get("intra_size") == None else self.get("intra_size")
+        size_split_dir = f"/intra_size{self.intra_size}/vert_split{self.vert_split}" if self.get("intra_size") < 1 else f"/intra_size{self.intra_size}"
+        assert (self.intra_size > 0) and (self.intra_size <= 1), "Invalid percentage of train and test splitting"
         
         # define the level dir to be added at the end
         level_dir = f"/level{int(self.level)}"
@@ -37,14 +37,14 @@ class common_functions():
         # 
         if self.get("kind") == "obs":
             
-            # force to full_graph if perc_intra_nodes == 1
-            if self.get("perc_intra_nodes") == 1:
+            # force to full_graph if intra_size == 1
+            if self.get("intra_size") == 1:
                 self.graph_kind = "full"
-            self.vars_dir = base_dir + f"/vars/{self.name}{percentage_dirs}/graph_{self.graph_kind}"
+            self.vars_dir = base_dir + f"/vars/{self.name}{size_split_dir}"
 
         # no graph_kind since already identified in the self.fit_method
         elif self.get("kind") == "exp":
-            self.vars_dir = base_dir + f"/vars/{self.name}{percentage_dirs}/fit_method_{self.fit_method}"
+            self.vars_dir = base_dir + f"/vars/{self.name}{size_split_dir}"
             
             # test_graph_{self.test_graph} is the full graph --> if you need different one, update the directory 
             self.test_dir = self.vars_dir + level_dir
@@ -59,13 +59,12 @@ class common_functions():
             self.plots_dir = base_dir + "/plots"
         else:
             self.plots_dir = os.path.dirname(self.vars_dir.replace("vars","plots"))
-            self.plots_general_dir = base_dir + "/plots"
+            self.plots_base_dir = base_dir + "/plots"
 
     
     def load_or_create_degrees(self):
         """ 
         Calculate the degrees or Load them 
-        param: self
         """
         from graph_ensembles.utils import load_array
 
@@ -97,6 +96,14 @@ class common_functions():
             np.savetxt(path_degree("_in"), self._in_degree, delimiter = ",", fmt = fmt)
             np.savetxt(path_degree("_out"), self._out_degree, delimiter = ",", fmt = fmt)
             np.savetxt(path_degree(""), self._degree, delimiter = ",", fmt = fmt)
+
+    def save_vars(self, name = "graph"):
+        from ..utils import save_dict
+        
+        # save the g.__dict__, but without the adjacency matrix
+        lighter_g_dict = dict(self.__dict__)
+        lighter_g_dict.pop("adj", None)
+        save_dict(self.vars_dir + f"/{name}.pkl", lighter_g_dict)
 
 class Graph(common_functions):
     """General class for undirected graphs.
@@ -281,16 +288,16 @@ class Graph(common_functions):
                 (np.ones(src_array.shape[0], bool), (src_array, dst_array)),
                 shape=(self.num_vertices, self.num_vertices),
             ).tocsr()
-
+        
         # Compute undirected degree
-        adj = self.adj != 0
-        adj = adj + adj.T
-        d = adj.sum(axis=1)
+        # adj = self.adj != 0
+        # adj = adj + adj.T
+        # d = adj.sum(axis=1)
 
         # Warn if vertices have no edges
-        zero_idx = np.nonzero(d == 0)[0]
-        if len(zero_idx) > 1:
-            print('-There are some nodes with no edge',)
+        # zero_idx = np.nonzero(d == 0)[0]
+        # if len(zero_idx) > 1:
+        #     print('-There are some nodes with no edge',)
         
         # set some default variables
         self.kind = 'obs'
@@ -300,7 +307,25 @@ class Graph(common_functions):
         
         self._create_vars_dir()
 
-    def split_intra_row(self, v, e, intra_size = 0.7, seed = 0, return_row = False):
+    def pagerank_power(self, **kwargs):
+        """Fast Page-Rank for Sparse Matrices Enabling kwargs insertion"""
+
+        import fast_pagerank
+        
+        # binarize the matrix, to compute the unweighted page-rank
+        adj = self.adj
+        if self.weighted:
+            adj = self.adjacency_matrix(directed=True, weighted=False)
+
+        # Set defaults
+        p = kwargs.get('p', 0.85)
+        max_iter = kwargs.get('max_iter', 100)
+        tol = kwargs.get('tol', 1e-6)
+        personalize = kwargs.get('personalize', None)
+        reverse = kwargs.get('reverse', False)
+        return fast_pagerank.pagerank_power(adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
+
+    def split_intra_row(self, v, e, intra_size = 0.7, split = 0, return_row = False):
         """
         Divide the Observed Network into 
         - an intra (frozen) part, whose connections are set as seen; 
@@ -312,7 +337,7 @@ class Graph(common_functions):
         num_intra_nodes = int(intra_size * num_nodes)
 
         # fixed a seed, extract num_intra_nodes indexes for the vI nodes 
-        np.random.seed(seed)
+        np.random.seed(split)
         idx_intra_nodes = np.random.choice(num_nodes, size = num_intra_nodes, replace=False)
         vI = v.iloc[idx_intra_nodes].sort_values(by = "id", ignore_index = False)
 
@@ -349,7 +374,7 @@ class Graph(common_functions):
         return self.__dict__.get(var_name)
         
     def rmv_diag(self, adj = None):
-        """Faster remover of diagonal elements for a csr matrix, e.g. the ing one"""
+        """Faster remover of diagonal elements for a csr matrix"""
         from scipy.sparse import spdiags
         
         zl_adj = adj - spdiags(adj.diagonal(), 0, m=adj.shape)
@@ -368,7 +393,7 @@ class Graph(common_functions):
         else:
             adj = self.adj != 0
             adj = adj + adj.T
-
+        
         return adj.tocsr()
 
     def num_edges(self, recompute=False):
@@ -693,7 +718,7 @@ class DiGraph(Graph):
         else:
             adj = self.adj != 0
             adj = adj + adj.T
-
+        
         return adj.tocsr()
 
     def num_edges(self, recompute=False):

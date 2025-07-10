@@ -31,15 +31,15 @@ def latex_mpl_params(flag_, fontsize = '23'):
 
 
 
-def sample_from_p(P, sym = True, seed = None, name = None):
+def sample_from_p(P, sym = True, split = None, name = None):
 
 	if not isinstance(P, np.ndarray):
 		raise ValueError("Matrix must be an np.ndarray")
 	if sym:
 		#clever sampling
 		P = np.tril(P)
-		if seed is not None:
-			np.random.seed(seed)
+		if split is not None:
+			np.random.seed(split)
 		R = np.random.random_sample(P.shape)
 		A = (R < P)
 		adj_bin = np.ones(P.shape)
@@ -175,9 +175,8 @@ def save_fig(fig, full_path = None, save = True):
 		import os
 		dir_ = os.path.dirname(full_path)
 		os.makedirs(dir_, exist_ok = True)
-		#print(f'-dir: {dir}',)
 		
-		fig.savefig(full_path, dpi = 100, facecolor = "white", bbox_inches = "tight")
+		fig.savefig(full_path, bbox_inches="tight")
 
 def save_dict(full_path, dict_, save = True):
 	"""
@@ -245,7 +244,9 @@ def max_sampled_graph_idx(dir_):
 		return -1
 
 def signed_rel_err(x, y):
-	""" Relative error among each element of x and y. It returns an array
+	""" 
+	Relative error among each element of x and y, with modules. 
+	Returns: (x-y) / y
 	"""
 	return (x-y) / y
 
