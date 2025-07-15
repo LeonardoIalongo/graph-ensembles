@@ -1,13 +1,10 @@
 #!/bin/bash
 
 set -e  # Exit immediately if a command exits with a non-zero status
-set -u  # Treat unset variables as an error
+set -u  # Treat unset variables as an error 
 
 echo "➡️ Changing directory to /home/inghero/riccardo/"
 cd /home/inghero/riccardo/
-
-echo "➡️ Moving graph-ensembles.zip from /home/inghero/data/corealgos/ to current directory"
-mv /home/inghero/data/corealgos/graph-ensembles.zip .
 
 echo "📁 Unzipping graph-ensembles.zip"
 if unzip -o graph-ensembles.zip; then

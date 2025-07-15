@@ -217,12 +217,12 @@ def plots_rel_err_n_edges_across_levels(sum_model, model_names, total_levels, ma
 
 			plt.close()
 
-def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
+def pagerank_on_internal_nodes(g, gI_dirfunc, intra_size, num_vsplits):
 	"""
-	Plot the Page-Rank for a fixed number of splits (num_splits): 
+	Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
 	.) x-axis, there would be the full page rank of the intra nodes.
 	.) y-axis, the page-rank determined on internal connections
-	num_splits: integer number of splits which are equal to the number of seeds used to select the vI
+	num_vsplits: integer number of vsplits which are equal to the number of seeds used to select the vI
 	"""
 	
 	import math
@@ -238,28 +238,28 @@ def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
 	for intra_size in intra_size:
 
 		# check if the folder already exists
-		full_path = g.plots_base_dir + f"/PageRanks_on_Intra/intra_size{intra_size}/PR_grid_{num_splits}.pdf"
+		full_path = g.plots_base_dir + f"/PageRank_on_Intra/intra_size{intra_size}/PR_grid_{num_vsplits}.pdf"
 		if not os.path.exists(full_path):
 
 			# update the parameters for page rank        
 			# p, max_iter, tol, personalize, reverse = kwargs_pr.values()
 
 			# define personlized colors
-			colors = cmaps["viridis"](np.linspace(0,1,num_splits))
+			colors = cmaps["viridis"](np.linspace(0,1,num_vsplits))
 
 			# Compute grid size (rows, cols) as close to square as possible
-			n_cols = math.ceil(math.sqrt(num_splits))
-			n_rows = math.ceil(num_splits / n_cols)
+			n_cols = math.ceil(math.sqrt(num_vsplits))
+			n_rows = math.ceil(num_vsplits / n_cols)
 
 			# define the fig where to store the page-ranks
 			fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 5*n_rows), squeeze=False, sharex=True, sharey=True)
 
-			for idx, split in enumerate(trange(num_splits, desc="Splitting and Computing the PageRank")):
+			for idx, vsplit in enumerate(trange(num_vsplits, desc="Splitting and Computing the PageRank")):
 				row, col = divmod(idx, n_cols) # returns idx // n_cols, idx % n_cols
 				ax = axes[row, col]
 
-				# # split nodes, edges in interal
-				# vI, eI = g.split_intra_row(v, e, intra_size=intra_size, split=split)
+				# # vsplit nodes, edges in interal
+				# vI, eI = g.vsplit_intra_row(v, e, intra_size=intra_size, vsplit=vsplit)
 				
 				# # update the graph name
 				# kwargs_graph.update({'graph_kind': "intra"})
@@ -267,8 +267,8 @@ def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
 				
 				# # compute the page-rank only in the internal part
 				# pr_gI = pagerank_power(gI.adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
-				gI_path = gI.vars_dir.replace(f"intra_size{gI.intra_size}", f"intra_size{intra_size}").replace(f"vert_split{gI.vert_split}", f"vert_split{split}")
-				
+				# gI_path = gI.vars_dir.replace(f"intra_size{gI.intra_size}", f"intra_size{intra_size}").replace(f"vsplit{gI.vsplit}", f"vsplit{vsplit}")
+				gI_path = gI_dirfunc(intra_size, vsplit)				
 				gI_dict = utils.load_dict(gI_path + "/graph.pkl")
 				pr_gI = gI_dict[net_meas]
 
@@ -282,11 +282,11 @@ def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
 							'r--')
 				
 				ms, alpha = 30, 0.5
-				_ = ax.scatter(pr_g_on_I, pr_gI, alpha=alpha, label=f"Split {split}", c=to_hex(colors[split]), s=ms)
+				_ = ax.scatter(pr_g_on_I, pr_gI, alpha=alpha, label=f"vsplit {vsplit}", c=to_hex(colors[vsplit]), s=ms)
 				_ = ax.set(
 					xlabel='Full-PR on Intra',
 					ylabel='Intra PR',
-					title=f'split {split}'.title(),
+					title=f'vsplit {vsplit}'.title(),
 					xscale='log',
 					yscale='log'
 				)
@@ -299,7 +299,7 @@ def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
 					lh.set_sizes([60])
 
 			# Hide unused subplots
-			for idx in range(num_splits, n_rows * n_cols):
+			for idx in range(num_vsplits, n_rows * n_cols):
 				row, col = divmod(idx, n_cols)
 				fig.delaxes(axes[row, col])
 
@@ -309,12 +309,12 @@ def pagerank_on_internal_nodes(g, gI, intra_size, num_splits):
 			plt.close()
 
 
-def internal_net_meas_obs_vs_reconstr(model, intra_size, split, g, gI, ens_mean_net_meas, num_sampled_graphs):
+def internal_net_meas_obs_vs_reconstr(full_path, g, gI, ens_mean_net_meas):
 	"""
-	Plot the Page-Rank for a fixed number of splits (num_splits): 
+	Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
 	.) x-axis, there would be the full page rank of the intra nodes.
 	.) y-axis, the page-rank determined on internal connections
-	num_splits: integer number of splits which are equal to the number of seeds used to select the vI
+	num_vsplits: integer number of vsplits which are equal to the number of seeds used to select the vI
 	"""
 	
 	from matplotlib import colormaps as cmaps
@@ -322,9 +322,6 @@ def internal_net_meas_obs_vs_reconstr(model, intra_size, split, g, gI, ens_mean_
 	import os
 
 	net_meas = "_page_rank"
-	
-	# check if the folder already exists
-	full_path = g.plots_base_dir + f"/PageRanks_on_Intra/intra_size{intra_size}/Reconstructed/{model.fit_method}/split{split}_{num_sampled_graphs}.pdf"
 	if not os.path.exists(full_path):
 		
 		# prepare the net_meas over g and gI

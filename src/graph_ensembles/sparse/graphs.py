@@ -28,7 +28,7 @@ class common_functions():
         
         # define the percentage directories based on the self.intra_size
         self.intra_size = 1 if self.get("intra_size") == None else self.get("intra_size")
-        size_split_dir = f"/intra_size{self.intra_size}/vert_split{self.vert_split}" if self.get("intra_size") < 1 else f"/intra_size{self.intra_size}"
+        size_vsplit_dir = f"/intra_size{self.intra_size}/vsplit{self.vsplit}" if self.get("intra_size") < 1 else f"/intra_size{self.intra_size}"
         assert (self.intra_size > 0) and (self.intra_size <= 1), "Invalid percentage of train and test splitting"
         
         # define the level dir to be added at the end
@@ -40,11 +40,11 @@ class common_functions():
             # force to full_graph if intra_size == 1
             if self.get("intra_size") == 1:
                 self.graph_kind = "full"
-            self.vars_dir = base_dir + f"/vars/{self.name}{size_split_dir}"
+            self.vars_dir = base_dir + f"/vars/{self.name}{size_vsplit_dir}"
 
         # no graph_kind since already identified in the self.fit_method
         elif self.get("kind") == "exp":
-            self.vars_dir = base_dir + f"/vars/{self.name}{size_split_dir}"
+            self.vars_dir = base_dir + f"/vars/{self.name}{size_vsplit_dir}"
             
             # test_graph_{self.test_graph} is the full graph --> if you need different one, update the directory 
             self.test_dir = self.vars_dir + level_dir
@@ -55,10 +55,11 @@ class common_functions():
         os.makedirs(self.vars_dir, exist_ok = True)
 
         # create plots dir
+        self.plots_dir = os.path.dirname(self.vars_dir.replace("vars","plots"))
         if self.corpkey:
             self.plots_dir = base_dir + "/plots"
+
         else:
-            self.plots_dir = os.path.dirname(self.vars_dir.replace("vars","plots"))
             self.plots_base_dir = base_dir + "/plots"
 
     
@@ -325,7 +326,7 @@ class Graph(common_functions):
         reverse = kwargs.get('reverse', False)
         return fast_pagerank.pagerank_power(adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
 
-    def split_intra_row(self, v, e, intra_size = 0.7, split = 0, return_row = False):
+    def vsplit_intra_row(self, v, e, intra_size = 0.7, vsplit = 0, return_row = False):
         """
         Divide the Observed Network into 
         - an intra (frozen) part, whose connections are set as seen; 
@@ -337,7 +338,7 @@ class Graph(common_functions):
         num_intra_nodes = int(intra_size * num_nodes)
 
         # fixed a seed, extract num_intra_nodes indexes for the vI nodes 
-        np.random.seed(split)
+        np.random.seed(vsplit)
         idx_intra_nodes = np.random.choice(num_nodes, size = num_intra_nodes, replace=False)
         vI = v.iloc[idx_intra_nodes].sort_values(by = "id", ignore_index = False)
 

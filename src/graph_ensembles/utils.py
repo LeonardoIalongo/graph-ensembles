@@ -16,30 +16,30 @@ def uu_fun(arr):
 	# unique values of arr in order of appearance
 	return list(map(int, dict.fromkeys(arr)))
 
-def latex_mpl_params(flag_, fontsize = '23'):
+def deactivate_latex_mpl_params(bool_, fontsize = '23'):
 	"""
 	Set latex if needed and fontsize
 	"""
-
-	plt.rcParams.update({"font.size" : fontsize})
-	if flag_:
+	
+	if bool_:
+		mpl.style.use('classic')
+	else: 
 		plt.rcParams.update({
 			"text.usetex": True,
 			"font.family": "serif",
 			"font.serif": "Computer Modern",
 		})
+	plt.rcParams.update({"font.size" : fontsize})
 
-
-
-def sample_from_p(P, sym = True, split = None, name = None):
+def sample_from_p(P, sym = True, vsplit = None, name = None):
 
 	if not isinstance(P, np.ndarray):
 		raise ValueError("Matrix must be an np.ndarray")
 	if sym:
 		#clever sampling
 		P = np.tril(P)
-		if split is not None:
-			np.random.seed(split)
+		if vsplit is not None:
+			np.random.seed(vsplit)
 		R = np.random.random_sample(P.shape)
 		A = (R < P)
 		adj_bin = np.ones(P.shape)
@@ -212,7 +212,7 @@ def get_reduced_by(folder_path):
 
 	return reduced_by[0]
 
-def max_sampled_graph_idx(dir_):
+def max_sampled_graph_idx(dir_, num_samples = None):
 	"""
 	Find the maximum idx of the already sampled graph.
 	Therefore if the n_sampels < ens_max_idx, no need to sample
@@ -223,6 +223,9 @@ def max_sampled_graph_idx(dir_):
 	"""
 	import os
 	import re
+	# If you want less than already sampled, just take the min
+	min_wrt_num_samples = lambda x: np.min([x, num_samples - 1])
+
 	if os.path.exists(dir_):
 		filenames = next(os.walk(dir_))[1]
 		if len(filenames) > 0:
@@ -233,10 +236,13 @@ def max_sampled_graph_idx(dir_):
 			# Find the folder name corresponding to the max index
 			max_idx_folder = filenames[argmax_idx] #[f for f in filenames if int(re.sub(r'\D', '', f)) == ens_max_idx][0]
 			max_idx_folder_path = os.path.join(dir_, max_idx_folder)
+			
 			# Check if the folder with the maximum index contains any files
 			if os.path.exists(max_idx_folder_path) and len(os.listdir(max_idx_folder_path)) > 0:
-				return ens_max_idx
-			return ens_max_idx-1
+				return min_wrt_num_samples(ens_max_idx)
+			
+			# otherwise return the previous (-1)
+			return min_wrt_num_samples(ens_max_idx)-1
 		else:
 			return -1
 	else:
@@ -321,3 +327,56 @@ def parallel_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, num_pr
 	# 		print(line)
 	
 	return np.concatenate(rows), np.concatenate(cols)
+
+def check_cpu_gpu():
+	from numba import cuda
+	import os
+
+	print("\n-Logical CPUs:", os.cpu_count())
+	
+	# GPU CODE
+	print('-GPUs in use:',)
+	if cuda.is_available():
+		
+		# list to convert COMPUTE_CAPABILITY to cores per streaming multiprocessor
+		cc_cores_per_SM_dict = [
+			[30, 192],
+			[32, 192],
+			[35, 192],
+			[37, 192],
+			[50, 128],
+			[52, 128],
+			[53, 128],
+			[60,  64],
+			[61, 128],
+			[62, 128],
+			[70,  64],
+			[72,  64],
+			[75,  64],
+			[80,  64],
+			[86, 128],
+			[87, 128],
+			[89, 128],
+			[90, 128],
+			[-1, -1]
+		]
+		cc_cores_per_SM_dict = {k: v for k, v in cc_cores_per_SM_dict}
+
+		# ask the device it's attributes
+		device = cuda.get_current_device()
+		dev_mp_cout = device.MULTIPROCESSOR_COUNT
+		majmin_cc = "".join((str(device.COMPUTE_CAPABILITY_MAJOR), str(device.COMPUTE_CAPABILITY_MINOR)))
+		cores_per_sm = cc_cores_per_SM_dict.get(int(majmin_cc))
+		total_cores = cores_per_sm*dev_mp_cout
+		
+		print(device)
+		print("-Name:", device.name)
+		print("-GPU total number of Sreaming Multiprocessors: " , dev_mp_cout)
+		print("-Max threads per block:", device.MAX_THREADS_PER_BLOCK)
+		print(f'-majmin_cc: {majmin_cc}',)
+		print("-GPU compute capability: " , majmin_cc)
+		print(f'-cores_per_sm: {cores_per_sm}',)
+		print("-total cores: " , total_cores)
+	
+	else:
+		print('-None',)

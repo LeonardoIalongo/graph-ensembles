@@ -68,7 +68,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 
                 # force attributes wrt intra_size
                 if self.intra_size < 1:
-                    self.vert_split = g.vert_split
+                    self.vsplit = g.vsplit
                 self.fit_method = f"num_edges_{g.graph_kind}"
 
                 self._create_vars_dir()
@@ -93,7 +93,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         #     "selfloops",
         #     "name",
         #     "level",
-        #     "split",
+        #     "vsplit",
         #     "intra_size",
         #     "full_intra_row",
         #     "fit_method",
