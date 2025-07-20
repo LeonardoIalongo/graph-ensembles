@@ -118,6 +118,9 @@ class DiGraphEnsemble(GraphEnsemble):
             raise Exception("Model must be fitted beforehand.")
 
         if not hasattr(self, "_exp_num_edges") or recompute:
+
+            unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_) if unsampled_vI is None else unsampled_vI
+
             self._exp_num_edges = self.exp_edges(
                 self.p_ij,
                 self.param,
@@ -422,10 +425,12 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # populate the class
         g.num_edges()
-        g._page_rank = g.pagerank_power(**ref_g._kwargs_pr)
+
+        if ref_g != None:
+            g._page_rank = g.pagerank_power(**ref_g._kwargs_pr)
         g.out_degree()
 
-        g.save_vars(name = f"graph{graph_idx}")
+        # g.save_vars(name = f"graph{graph_idx}")
 
         return g
 
@@ -473,12 +478,105 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return thread_rows, thread_cols
 
+    def tc_p_ij(self, d, x_i, y_j, z_ij):
+        """Compute the probability of connection between node i and j."""
+        N = len(x_i)
+        # x_i = x_i.reshape(N, -1)
+        # y_j = y_j.reshape(-1, N)
+
+        tmp = d * x_i * y_j
+        import torch as tc
+        return -tc.expm1(-tmp)
+
+    def tc_prop_dyad(self, i, j):
+        return 1  # dummy dyad
+    
+    def block_parallel_sample_tc(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, chunk_row_size=100, seed = 0):
+        """
+        Efficiently sample edges in chunks to avoid GPU memory overflow.
+        """
+        import torch as tc
+
+        device = "cuda"
+        param = tc.from_numpy(param).to(device)
+        prop_out = tc.from_numpy(prop_out).to(device)
+        prop_in = tc.from_numpy(prop_in).to(device)
+        unsampled_vI = tc.from_numpy(prop_in).to(device)
+
+        N = prop_out.shape[0]
+        device = prop_out.device
+
+        # Seed once at the beginning
+        if device.type == 'cuda':
+            tc.cuda.manual_seed(seed)
+        else:
+            tc.manual_seed(seed)
+
+        # Prepare output lists to collect tensors directly on GPU
+        all_rows_gpu = []
+        all_cols_gpu = []
+
+        # Process in chunks to avoid memory issues
+        for start in range(0, N, chunk_row_size):
+            end = min(start + chunk_row_size, N)
+            idx_i = tc.arange(start, end, device=device)
+            idx_j = tc.arange(N, device=device)
+
+
+            # get the flat list of all the pairs
+            grid_i, grid_j = tc.meshgrid(idx_i, idx_j, indexing='ij')
+            grid_i = grid_i.flatten()
+            grid_j = grid_j.flatten()
+
+            # Mask some pairs
+            mask = tc.ones_like(grid_i, dtype=tc.bool)
+
+            # if False, when grid_i == grid_j --> mask = False
+            if not selfloops:
+                mask &= (grid_i != grid_j)
+            # Set mask = False when both unsampled_vI are True
+            if unsampled_vI.any():
+                mask &= ~(unsampled_vI[grid_i] & unsampled_vI[grid_j])
+
+            # Retain the pairs to sample
+            grid_i = grid_i[mask]
+            grid_j = grid_j[mask]
+
+            # Compute probabilities over the unmasked pairs
+            x_i, y_j = prop_out[grid_i], prop_in[grid_j]
+            p = p_ij(param, x_i, y_j, prop_dyad(grid_i, grid_j))
+
+            # Sample edges
+            rand = tc.rand_like(p)
+            selected_idx = tc.where(rand < p)
+            grid_i = grid_i[selected_idx]
+            grid_j = grid_j[selected_idx]
+
+            # Append tensors directly on the GPU
+            all_rows_gpu.append(grid_i)
+            all_cols_gpu.append(grid_j)
+
+        # Concatenate all results on the GPU, then transfer to CPU once
+        if all_rows_gpu: # Check if list is not empty
+            rows_gpu = tc.cat(all_rows_gpu)
+            cols_gpu = tc.cat(all_cols_gpu)
+
+            rows = rows_gpu.cpu().numpy()
+            cols = cols_gpu.cpu().numpy()
+        else:
+            # No edges sampled, return empty arrays
+            rows = tc.empty(0, dtype=tc.int64).numpy()
+            cols = tc.empty(0, dtype=tc.int64).numpy()
+
+
+        return rows, cols
+
     def _binary_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, added_edges):
         
         from itertools import chain
         import pandas as pd
 
-        sampled_rows, sampled_cols = DiGraphEnsemble.block_parallel_sample(
+        sampled_rows, sampled_cols = DiGraphEnsemble.block_parallel_sample_tc(
                                                 p_ij, 
                                                 param, 
                                                 prop_out, 

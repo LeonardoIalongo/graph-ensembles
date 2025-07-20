@@ -31,6 +31,9 @@ dependencies = [
   "fast_pagerank",
   "scipy>=1.11.3",
   "tqdm",
+  "torch",
+  "torchvision",
+  "torchaudio"
 ]
 
 [tool.setuptools]
