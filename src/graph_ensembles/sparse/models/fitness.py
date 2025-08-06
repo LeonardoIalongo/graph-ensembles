@@ -67,7 +67,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 self.__dict__.update(kwargs)
                 
                 # force attributes wrt intra_size
-                if self.intra_size < 1:
+                if g.intra_size < 1:
                     self.vsplit = g.vsplit
                 self.fit_method = f"num_edges_{g.graph_kind}"
 

@@ -122,9 +122,10 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
 
     elif cg_method.startswith("random"):
         total_levels = 1
-
+    
     if not (max_num_entries == None or max_num_entries == False):
         np.random.seed(0)
+        max_num_entries = int(max_num_entries)
         random_entries = np.random.choice(len(pdtrans), size = max_num_entries, replace = False)
         pdtrans = pdtrans.iloc[random_entries]
 

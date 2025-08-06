@@ -322,7 +322,7 @@ def internal_net_meas_obs_vs_reconstr(full_path, g, gI, ens_mean_net_meas):
 	import os
 
 	net_meas = "_page_rank"
-	if not os.path.exists(full_path):
+	if True: #not os.path.exists(full_path):
 		
 		# prepare the net_meas over g and gI
 		g_net_meas = g.get(net_meas)

@@ -10,6 +10,7 @@ from math import isinf
 from numba import float64
 from numba.experimental import jitclass
 from numba.typed import List
+import torch as tc
 from ... import utils
 
 
@@ -344,6 +345,7 @@ class DiGraphEnsemble(GraphEnsemble):
         unsampled_vI=None,
         added_edges=None,
         graph_idx=0,
+        chunk_row_size=1000,
     ):
         """Return a Graph sampled from the ensemble.
 
@@ -387,14 +389,16 @@ class DiGraphEnsemble(GraphEnsemble):
         if weights is None:
             unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_) if unsampled_vI is None else unsampled_vI
             rows, cols = self._binary_sample(
-                self.p_ij,
+                self.tc_p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
-                self.prop_dyad,
+                self.tc_prop_dyad,
                 self.selfloops,
                 unsampled_vI,
                 added_edges,
+                chunk_row_size,
+                seed=graph_idx,
             )
             vals = np.ones(len(rows), dtype=bool)
         elif weights == "cremb":
@@ -423,14 +427,14 @@ class DiGraphEnsemble(GraphEnsemble):
             (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
         )
 
-        # populate the class
-        g.num_edges()
+        # calculate num_edges and degrees
+        # g.num_edges()
+        # g.out_degree()
 
         if ref_g != None:
             g._page_rank = g.pagerank_power(**ref_g._kwargs_pr)
-        g.out_degree()
 
-        # g.save_vars(name = f"graph{graph_idx}")
+        g.save_vars(name = f"graph{graph_idx}")
 
         return g
 
@@ -478,30 +482,115 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return thread_rows, thread_cols
 
-    def tc_p_ij(self, d, x_i, y_j, z_ij):
+    def tc_p_ij(self, d, x_i, y_j, z_ij = 1):
         """Compute the probability of connection between node i and j."""
-        N = len(x_i)
-        # x_i = x_i.reshape(N, -1)
-        # y_j = y_j.reshape(-1, N)
-
         tmp = d * x_i * y_j
-        import torch as tc
         return -tc.expm1(-tmp)
 
     def tc_prop_dyad(self, i, j):
         return 1  # dummy dyad
+
+    def tc_block_parallel_sample_improved(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, chunk_row_size=1000, seed=0):
+        """
+        Efficiently sample edges in chunks using broadcasting to avoid memory overflow.
+        """
+        N = prop_out.shape[0]
+        device = prop_out.device
+
+        all_rows = []
+        all_cols = []
+
+        # Seed once at the beginning
+        if device.type == 'cuda':
+            tc.cuda.manual_seed(seed)
+        else:
+            tc.manual_seed(seed)
+
+        # Process in chunks to avoid memory issues
+        for start in range(0, N, chunk_row_size):
+            end = min(start + chunk_row_size, N)
+            # Slicing is cheap and doesn't copy data immediately
+            x_i_chunk = prop_out[start:end]
+            current_chunk_size = x_i_chunk.shape[0]
+
+            # 1. Use broadcasting to compute probabilities for the entire block
+            # x_i_chunk.view(-1, 1) has shape [current_chunk_size, 1]
+            # prop_in.view(1, -1) has shape [1, N]
+            # The result `p_matrix` will have shape [current_chunk_size, N]
+            
+            # Note: prop_dyad needs to be handled. Since it's a dummy 1, it's easy.
+            # If it were complex, it would need to operate on broadcasted inputs.
+            z_ij = prop_dyad(None, None) # Dummy call, gets 1
+
+            # Calculate probability matrix directly
+            p_matrix = p_ij(
+                param,
+                x_i_chunk.view(-1, 1), # Shape: [chunk_size, 1]
+                prop_in.view(1, -1),   # Shape: [1, N]
+                # z_ij
+            )
+            
+            # 2. Apply masks directly to the probability matrix
+            
+            # Mask for self-loops
+            if not selfloops:
+                # Create indices for the diagonal within this chunk
+                # The columns to zero-out are from `start` to `end-1`
+                diag_rows = tc.arange(current_chunk_size, device=device)
+                diag_cols = tc.arange(start, end, device=device)
+                p_matrix[diag_rows, diag_cols] = 0.0
+
+            # Mask for unsampled vertices
+            if unsampled_vI.any():
+                # Get the unsampled status for the current chunk of rows
+                u_i_chunk = unsampled_vI[start:end] # Shape: [chunk_size]
+                
+                # Find rows in the chunk that are "unsampled"
+                unsampled_rows_mask = u_i_chunk.view(-1, 1) # Shape: [chunk_size, 1]
+                # Find columns in the full graph that are "unsampled"
+                unsampled_cols_mask = unsampled_vI.view(1, -1) # Shape: [1, N]
+                
+                # Create a boolean matrix where True means both i and j are unsampled
+                # This uses broadcasting again
+                full_mask = unsampled_rows_mask & unsampled_cols_mask
+                
+                # Set probability to 0 where the mask is True
+                p_matrix[full_mask] = 0.0
+            
+            # 3. Sample from the probability matrix
+            # Generate random numbers for the whole matrix at once
+            rand_matrix = tc.rand_like(p_matrix)
+            
+            # Find where sampling was successful
+            # `tc.where` returns a tuple of tensors (rows, cols)
+            sampled_rows_in_chunk, sampled_cols = tc.where(rand_matrix < p_matrix)
+            
+            # If any edges were sampled in this chunk
+            if sampled_rows_in_chunk.shape[0] > 0:
+                # Convert row indices from chunk-local (0 to chunk_size-1) to global
+                sampled_rows_global = sampled_rows_in_chunk + start
+                
+                # Append tensors directly on the GPU
+                all_rows.append(sampled_rows_global)
+                all_cols.append(sampled_cols)
+
+        # 4. Concatenate all results on the GPU, then transfer to CPU once
+        if all_rows:
+            rows_gpu = tc.cat(all_rows)
+            cols_gpu = tc.cat(all_cols)
+            rows = rows_gpu.cpu().numpy()
+            cols = cols_gpu.cpu().numpy()
+        else:
+            rows = np.empty(0, dtype=np.int64)
+            cols = np.empty(0, dtype=np.int64)
+            
+        return rows, cols
     
-    def block_parallel_sample_tc(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, chunk_row_size=100, seed = 0):
+    def tc_block_parallel_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, chunk_row_size=100, seed = 0):
         """
         Efficiently sample edges in chunks to avoid GPU memory overflow.
         """
         import torch as tc
-
-        device = "cuda"
-        param = tc.from_numpy(param).to(device)
-        prop_out = tc.from_numpy(prop_out).to(device)
-        prop_in = tc.from_numpy(prop_in).to(device)
-        unsampled_vI = tc.from_numpy(prop_in).to(device)
 
         N = prop_out.shape[0]
         device = prop_out.device
@@ -571,24 +660,26 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return rows, cols
 
-    def _binary_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, added_edges):
+    def _binary_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, added_edges, chunk_row_size, seed):
         
         from itertools import chain
         import pandas as pd
 
-        sampled_rows, sampled_cols = DiGraphEnsemble.block_parallel_sample_tc(
+        rows, cols = self.tc_block_parallel_sample_improved(
                                                 p_ij, 
                                                 param, 
                                                 prop_out, 
                                                 prop_in,
                                                 prop_dyad, 
                                                 selfloops, 
-                                                unsampled_vI
+                                                unsampled_vI,
+                                                chunk_row_size,
+                                                seed
                                             )
 
         # Flatten rows/cols (List[List[int64]]) to 1D numpy arrays
-        rows = np.fromiter(chain.from_iterable(sampled_rows), dtype=np.int64)
-        cols = np.fromiter(chain.from_iterable(sampled_cols), dtype=np.int64)
+        # rows = np.fromiter(chain.from_iterable(sampled_rows), dtype=np.int64)
+        # cols = np.fromiter(chain.from_iterable(sampled_cols), dtype=np.int64)
 
         assert isinstance(added_edges, (pd.DataFrame, type(None))), "added_edges must be a pandas.DataFrame or None"
         # add frozen edges into the sampled matrix

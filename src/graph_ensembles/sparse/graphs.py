@@ -26,36 +26,35 @@ class common_functions():
         else:
             base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
         
-        # define the percentage directories based on the self.intra_size
-        self.intra_size = 1 if self.get("intra_size") == None else self.get("intra_size")
-        size_vsplit_dir = f"/intra_size{self.intra_size}/vsplit{self.vsplit}" if self.get("intra_size") < 1 else f"/intra_size{self.intra_size}"
-        assert (self.intra_size > 0) and (self.intra_size <= 1), "Invalid percentage of train and test splitting"
-        
-        # define the level dir to be added at the end
-        level_dir = f"/level{int(self.level)}"
-        
-        # 
-        if self.get("kind") == "obs":
+        if self.get("vars_dir") == None:
+            # define the percentage directories based on the self.intra_size
+            self.intra_size = 1 if self.get("intra_size") == None else self.get("intra_size")
+            size_vsplit_dir = f"/intra_size{self.intra_size}/vsplit{self.vsplit}" if self.get("intra_size") < 1 else f"/intra_size{self.intra_size}"
+            assert (self.intra_size > 0) and (self.intra_size <= 1), "Invalid percentage of train and test splitting"
             
-            # force to full_graph if intra_size == 1
-            if self.get("intra_size") == 1:
-                self.graph_kind = "full"
+            # define the level dir to be added at the end
+            level_dir = f"/level{int(self.level)}"
+            
+            # 
             self.vars_dir = base_dir + f"/vars/{self.name}{size_vsplit_dir}"
+            if self.get("kind") == "obs":
+                
+                # force to full_graph if intra_size == 1
+                if self.get("intra_size") == 1:
+                    self.graph_kind = "full"
+                self.vars_dir += f"/{self.graph_kind}"
 
-        # no graph_kind since already identified in the self.fit_method
-        elif self.get("kind") == "exp":
-            self.vars_dir = base_dir + f"/vars/{self.name}{size_vsplit_dir}"
+            # no graph_kind since already identified in the self.fit_method
+            elif self.get("kind") == "exp":
+                self.vars_dir += f"/fit_method_{self.fit_method}"
             
-            # test_graph_{self.test_graph} is the full graph --> if you need different one, update the directory 
-            self.test_dir = self.vars_dir + level_dir
-        
-        self.vars_dir += level_dir
+            self.vars_dir += level_dir
         
         # update it for the model directories, since one has to specify also the fitting method
         os.makedirs(self.vars_dir, exist_ok = True)
 
         # create plots dir
-        self.plots_dir = os.path.dirname(self.vars_dir.replace("vars","plots"))
+        self.plots_dir = os.path.dirname(self.vars_dir.replace(f"vars/{self.name}","plots"))
         if self.corpkey:
             self.plots_dir = base_dir + "/plots"
 
