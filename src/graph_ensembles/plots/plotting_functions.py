@@ -363,3 +363,25 @@ def internal_net_meas_obs_vs_reconstr(full_path, g, gI, ens_mean_net_meas):
 
 		utils.save_fig(fig, full_path=full_path)
 		plt.close()
+
+
+def norm_diffs_per_iteration(plots_dir, diff_norms):
+	"""
+	Plot the norm diff against the numb of iteration to inspect convergence properties
+	"""
+	from matplotlib.ticker import MaxNLocator # Import the locator
+
+	fig, ax = plt.subplots(figsize = (12,7))
+	axis_scale = 'log'
+	msize = 30
+	ax.scatter(np.arange(1, len(diff_norms)+1),diff_norms, marker = 'o', color = 'b', s = msize,)
+	ax.set(yscale = axis_scale, xlabel = 'Iteration', ylabel = 'Norm Diff')
+	# ax.set_xticks(range(len(diff_norms)))
+	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+	ax.set_ylim(np.min(diff_norms) * 0.6, None)
+	ax.set_axisbelow(True)
+	ax.grid(False)
+
+	full_path = plots_dir + "/diff_norms.pdf"
+	utils.save_fig(fig, full_path)
+	plt.close()

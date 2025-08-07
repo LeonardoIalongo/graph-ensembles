@@ -343,7 +343,7 @@ class DiGraphEnsemble(GraphEnsemble):
         in_strength=None,
         selfloops=None,
         unsampled_vI=None,
-        added_edges=None,
+        frozen_edges=None,
         graph_idx=0,
         chunk_row_size=1000,
     ):
@@ -396,7 +396,7 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.tc_prop_dyad,
                 self.selfloops,
                 unsampled_vI,
-                added_edges,
+                frozen_edges,
                 chunk_row_size,
                 seed=graph_idx,
             )
@@ -660,7 +660,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return rows, cols
 
-    def _binary_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, added_edges, chunk_row_size, seed):
+    def _binary_sample(self, p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI, frozen_edges, chunk_row_size, seed):
         
         from itertools import chain
         import pandas as pd
@@ -681,11 +681,11 @@ class DiGraphEnsemble(GraphEnsemble):
         # rows = np.fromiter(chain.from_iterable(sampled_rows), dtype=np.int64)
         # cols = np.fromiter(chain.from_iterable(sampled_cols), dtype=np.int64)
 
-        assert isinstance(added_edges, (pd.DataFrame, type(None))), "added_edges must be a pandas.DataFrame or None"
+        assert isinstance(frozen_edges, (pd.DataFrame, type(None))), "frozen_edges must be a pandas.DataFrame or None"
         # add frozen edges into the sampled matrix
-        if isinstance(added_edges, pd.DataFrame):
+        if isinstance(frozen_edges, pd.DataFrame):
             # map nodes ids to internal idx of src_vI, dst_vI
-            src_vI, dst_vI = added_edges.T.values
+            src_vI, dst_vI = frozen_edges.T.values
 
             # concatenate
             rows = np.concatenate((rows, src_vI))
