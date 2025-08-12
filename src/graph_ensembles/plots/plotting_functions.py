@@ -308,6 +308,33 @@ def pagerank_on_internal_nodes(g, gI_dirfunc, intra_size, num_vsplits):
 			utils.save_fig(fig, full_path=full_path)
 			plt.close()
 
+def _compute_hist2d(x, y, bins = 30):
+	# obtain the 2D density of the pmatrix
+	H, xedges, yedges = np.histogram2d(x, y, bins)
+
+	# Histogram does not follow Cartesian convention (see numpy docs), transpose H for visualization purposes.
+	H = H.T / x.size
+
+	return H, xedges, yedges
+
+def _plot_hist2d(fig, ax, x, y, bins, axis_scale = "log"):
+	H, xedges, yedges = _compute_hist2d(x, y, bins = bins)
+	im = ax.imshow(H, cmap = dep.cmap, norm = axis_scale, aspect = "auto", 
+						origin='lower', extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
+						zorder = 1)
+
+	fig.colorbar(im)
+
+	# plot also the pearson and spearman correlation coefficients
+	from scipy import stats	
+	pears_corr = stats.pearsonr(x, y)[0]
+	spear_corr = stats.spearmanr(x, y)[0]
+	stats = (f'Pears CC = {pears_corr:.3f}\n'
+			f'Spear CC = {spear_corr:.3f}')
+	bbox = dict(boxstyle='round', fc='whitesmoke', ec='lightgrey', alpha=1)
+	ax.text(0.48, 0.87, stats, fontsize=15, bbox=bbox,
+			transform=ax.transAxes, horizontalalignment='right')
+	return im
 
 def internal_net_meas_obs_vs_reconstr(full_path, g, gI, ens_mean_net_meas):
 	"""
@@ -317,46 +344,42 @@ def internal_net_meas_obs_vs_reconstr(full_path, g, gI, ens_mean_net_meas):
 	num_vsplits: integer number of vsplits which are equal to the number of seeds used to select the vI
 	"""
 	
-	from matplotlib import colormaps as cmaps
-	from matplotlib.colors import to_hex
-	import os
-
 	net_meas = "_page_rank"
 	if True: #not os.path.exists(full_path):
 		
 		# prepare the net_meas over g and gI
 		g_net_meas = g.get(net_meas)
 		gI_net_meas = gI.get(net_meas)
-		
+
 		idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
 		g_net_meas_on_I = g_net_meas[idx_IntraNode2Full]
 		ens_mean_net_meas_on_I = ens_mean_net_meas[idx_IntraNode2Full]
 
-		# define the fig where to store the page-ranks
 		fig, axs = plt.subplots(1,2, figsize = (12, 6), sharex=True, sharey=True)
+		bins = 40
+		x = g_net_meas_on_I
+		_plot_hist2d(fig, axs[0], x, gI_net_meas, bins = bins)
+		_plot_hist2d(fig, axs[1], x, ens_mean_net_meas_on_I, bins = bins)
 
-		ms, alpha = 30, .5
-
-		# plot the observed gI_net_meas
-		_ = axs[0].scatter(g_net_meas_on_I, gI_net_meas, alpha=alpha, c=dep.obs_color, s=ms, zorder = 1)
-		axs[0].set_title("Observed")
-		_ = axs[1].scatter(g_net_meas_on_I, ens_mean_net_meas_on_I, alpha=alpha, c=dep.ref_model_color, s=ms, zorder = 1)
-		axs[1].set_title("Reconstructed")
-		
 		# plot the identity line, no grid, customize the legend, set the lables and scale
-		for ax in axs:
+		for i, ax in enumerate(axs):
+			
+			# plot the reference identity line
 			_ = ax.plot([g_net_meas_on_I.min(), g_net_meas_on_I.max()],
 						[g_net_meas_on_I.min(), g_net_meas_on_I.max()],
-						'r--', zorder = 0
+						'r--', zorder = 1,
 						)
 
+			# set title
+			title = "Observed" if i == 0 else "Reconstructed"
 			_ = ax.grid(False)
 
 			_ = ax.set(
 						xlabel='Full-PR on Intra',
 						ylabel='Intra PR',
 						xscale='log',
-						yscale='log'
+						yscale='log',
+						title = title
 					)
 
 		fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
