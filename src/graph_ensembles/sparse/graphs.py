@@ -8,6 +8,7 @@ sparse arrays and is suitable for large graphs.
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
+import graph_ensembles.sparse as gesp
 import os
 from numba import jit
 import warnings
@@ -55,11 +56,11 @@ class common_functions():
 
         # create plots dir
         self.plots_dir = os.path.dirname(self.vars_dir.replace(f"vars/{self.name}","plots"))
-        if self.corpkey:
-            self.plots_dir = base_dir + "/plots"
+        # if self.corpkey:
+        #     self.plots_dir = base_dir + "/plots"
 
-        else:
-            self.plots_base_dir = base_dir + "/plots"
+        # else:
+        #     self.plots_base_dir = base_dir + "/plots"
 
     
     def load_or_create_degrees(self):
@@ -366,6 +367,39 @@ class Graph(common_functions):
         
         # return these if return_row == False
         return vI, eI
+
+    def _set_frozen_edges_gI(self, intra_size, vsplit, vI, eI, kwargs_graph, ):
+        """
+        Set the 
+        1) unsampled nodes, s.t. every pair involving BOTH of them will be discarded from sampling + frozen_edges (copied edges for every sample);
+        2) frozen edges: select the integer indexes for every node in eI to be consistent with vI;
+        3) Create gI: the graph of internal clients;
+        """
+        unsampled_vI, frozen_edges = None, None
+        if intra_size < 1:
+            # convert the id nodes into index 
+            # use the g.id_dict since the objective is to sample the full network. So, nodes must have the full-indexes 
+            idx_vI = list(map(self.id_dict.get, vI.id.values))
+
+            # use mask since in parallel numba there is no operation such as "v in vI"
+            # note that the unsampled_vI \geq unique_nodes_from(eI) since there may be some dead nodes
+            unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_)
+            unsampled_vI[idx_vI] = True
+
+            # frozen_edges
+            # Note: _src are contig integers whereas for the v is the (non contiguous) index coming from pdtrans
+            frozen_edges = eI.loc[:, ["_src", "_dst"]]
+
+            # add the graph attributes
+            kwargs_graph.update({'graph_kind': "intra", "intra_size" : intra_size, "vsplit" : vsplit})
+            gI = gesp.graphs.DiGraph(vI, eI, **kwargs_graph)
+
+            # compute the page-rank only in the internal part
+            gI._page_rank = gI.pagerank_power(**self._kwargs_pr)
+
+            del vI, eI
+
+        return unsampled_vI, frozen_edges, gI
         
     def get(self, var_name):
         """Return the variable if it exists, otherwise return None.

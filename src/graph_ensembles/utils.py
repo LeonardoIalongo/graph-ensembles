@@ -16,45 +16,16 @@ def uu_fun(arr):
     # unique values of arr in order of appearance
     return list(map(int, dict.fromkeys(arr)))
 
-def deactivate_latex_mpl_params(bool_, fontsize = '23'):
+def _set_mpl_params(font = "Times New Roman", fontsize = '23'):
     """
     Set latex if needed and fontsize
     """
-    
-    if bool_:
-        mpl.style.use('classic')
-    else: 
-        plt.rcParams.update({
-            "text.usetex": True,
-            "font.family": "serif",
-            "font.serif": "Computer Modern",
+    family = "serif" if font in ["Times New Roman"] else "sans-serif"
+    plt.rcParams.update({
+            "font.family" : family,
+            "font.serif": font,
+            "font.size" : fontsize
         })
-    plt.rcParams.update({"font.size" : fontsize})
-
-def sample_from_p(P, sym = True, vsplit = None, name = None):
-
-    if not isinstance(P, np.ndarray):
-        raise ValueError("Matrix must be an np.ndarray")
-    if sym:
-        #clever sampling
-        P = np.tril(P)
-        if vsplit is not None:
-            np.random.seed(vsplit)
-        R = np.random.random_sample(P.shape)
-        A = (R < P)
-        adj_bin = np.ones(P.shape)
-        adj_bin[~A] = 0
-        adj_bin = np.tril(adj_bin) + np.triu(adj_bin.T, 1)
-
-        #print(f'-check_symmetric(adj_bin): {check_symmetric(adj_bin)}',)
-
-    #total_links = np.sum(adj_bin) / 2
-    #deg = np.sum(adj_bin, axis = 1)
-
-    if name.endswith("Gleditsch"):
-        np.fill_diagonal(adj_bin, 1)
-    
-    return adj_bin#, deg, total_links
 
 def nodes_from(pdf, id_code = None, level = 0):
     """
@@ -152,7 +123,7 @@ def full_path_retriever(ref_model, level = None, name = None, str_dimXBC = None,
     ens_dir = ""
     if ensemble_avg:
         ens_dir = "/ensemble"
-        meas = "ens_avg_lbci_ubci_" + meas
+        meas = "ens_mean_lbci_ubci_" + meas
     
     # now replace the model dir parts and add ens_dir
     replace_path = string_replace(vars_dir,replace_dict) + ens_dir
@@ -164,9 +135,7 @@ def full_path_retriever(ref_model, level = None, name = None, str_dimXBC = None,
             replace_path += f"/{meas}.csv"
         else:
             replace_path += f"/{meas}"
-
-    
-    
+            
     return replace_path
 
 # Plot Binary Measures
@@ -256,7 +225,6 @@ def signed_rel_err(x, y):
     """
     return (x-y) / y
 
-
 def rel_err(x, y):
     """ Relative error between x and y. It returns a scalar """
     return np.linalg.norm(x - y) / np.linalg.norm(y)
@@ -282,105 +250,6 @@ def load_meas(ref_model, level, name, str_dimXBC = None, meas = "pmatrix", ensem
         return pd.read_pickle(full_path)
     elif full_path.endswith("txt"):
         return open(full_path, "r").read()
-
-# multiprocess trial functions
-def worker(args):
-    import multiprocessing
-    start, end, N, p_ij, param, prop_out, prop_in, prop_dyad, selfloops = args
-    rows = []
-    cols = []
-    # logs = []
-    worker_id = multiprocessing.current_process().name
-    # logs.append(f'Worker {worker_id} started: processing indices {start} to {end}')
-    for flat_idx in range(start, end):
-        i = flat_idx // N
-        j = flat_idx % N
-        if not selfloops and i == j:
-            continue
-        p = p_ij(param, prop_out[i], prop_in[j], prop_dyad(i, j))
-        if np.random.random() < p:
-            rows.append(i)
-            cols.append(j)
-    # logs.append(f'Worker {worker_id} finished.')
-    return np.array(rows, dtype=np.int64), np.array(cols, dtype=np.int64)#, logs
-
-def parallel_sample(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, num_procs=3):
-    """Sample edges in parallel using multiple processes."""
-    from multiprocessing import Pool
-    
-    N = len(prop_out)
-    total_ops = N * N  # or N * (N - 1) if not selfloops
-    num_chunks = total_ops // num_procs
-    tasks = []
-    for t in range(num_procs):
-        start = t * num_chunks
-        end = (t + 1) * num_chunks if t < num_procs - 1 else total_ops
-        tasks.append((start, end, N, p_ij, param, prop_out, prop_in, prop_dyad, selfloops))
-        
-    with Pool(processes=num_procs) as pool:
-        results = pool.map(worker, tasks)
-    rows = [r for r, _ in results]
-    cols = [c for _, c in results]
-    # logs = [log for _, _, log in results]
-    # for log in logs:
-    # 	for line in log:
-    # 		print(line)
-    
-    return np.concatenate(rows), np.concatenate(cols)
-
-def check_cpu_gpu():
-    # from numba import cuda
-    from numba import cuda
-    import os
-
-    print("\n-Logical CPUs:", os.cpu_count())
-    
-    # GPU CODE
-    print('-GPUs in use:',)
-    if cuda.is_available():
-        
-        # list to convert COMPUTE_CAPABILITY to cores per streaming multiprocessor
-        cc_cores_per_SM_dict = [
-            [30, 192],
-            [32, 192],
-            [35, 192],
-            [37, 192],
-            [50, 128],
-            [52, 128],
-            [53, 128],
-            [60,  64],
-            [61, 128],
-            [62, 128],
-            [70,  64],
-            [72,  64],
-            [75,  64],
-            [80,  64],
-            [86, 128],
-            [87, 128],
-            [89, 128],
-            [90, 128],
-            [-1, -1]
-        ]
-        cc_cores_per_SM_dict = {k: v for k, v in cc_cores_per_SM_dict}
-
-        # ask the device it's attributes
-        device = cuda.get_current_device()
-        dev_mp_cout = device.MULTIPROCESSOR_COUNT
-        majmin_cc = "".join((str(device.COMPUTE_CAPABILITY_MAJOR), str(device.COMPUTE_CAPABILITY_MINOR)))
-        cores_per_sm = cc_cores_per_SM_dict.get(int(majmin_cc))
-        total_cores = cores_per_sm*dev_mp_cout
-        
-        print(device)
-        print("-Name:", device.name)
-        print("-GPU total number of Sreaming Multiprocessors: " , dev_mp_cout)
-        print("-Max threads per block:", device.MAX_THREADS_PER_BLOCK)
-        print(f'-majmin_cc: {majmin_cc}',)
-        print("-GPU compute capability: " , majmin_cc)
-        print(f'-cores_per_sm: {cores_per_sm}',)
-        print("-total cores: " , total_cores)
-    
-    else:
-        print('-None',)
 
 def check_cpu_gpu_with_torch():
     import os
