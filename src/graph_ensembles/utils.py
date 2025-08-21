@@ -218,28 +218,42 @@ def max_sampled_graph_idx(dir_, num_samples = None):
         # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
         return -1
 
-def set_ivec_on_I(g, gI, model):
+def set_ivec_on_I(g, gI):
     """ 
     Set the ivec (e.g. page-rank) on the internal nodes.
     Fills: 
-    1) g.ivec_on_I, gI.ivec, model.ivec_on_I, model.ivec_std_on_I
-    2) g.rank_on_I, gI.rank, model.rank_on_I
+    1) g.ivec_on_I, gI.ivec
+    2) g.rank_on_I, gI.rank
     """
     
     # prepare the meas over g and gI
-    g_ivec = g.get(g.ivec_name)
-    gI.ivec = gI.get(gI.ivec_name)
-
     g.idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
-    g.ivec_on_I = g_ivec[g.idx_IntraNode2Full]
-    model.ivec_on_I = model.ivec[g.idx_IntraNode2Full]
-    model.ivec_std_on_I = model.ivec_std[g.idx_IntraNode2Full]
+    g.ivec_on_I = g.ivec[g.idx_IntraNode2Full]
 
     # obtain the idx of ranked (descending) meas
     inv_argsort = lambda x: np.argsort(x)[::-1]
     g.rank_on_I = inv_argsort(g.ivec_on_I)
     gI.rank = inv_argsort(gI.ivec)
-    model.rank_on_I = inv_argsort(model.ivec_on_I)
+
+    # obtain the descending ivec on I 
+    g.ivec_desc_on_I = g.ivec_on_I[g.rank_on_I]
+    gI.ivec_desc = gI.ivec[gI.rank]
+
+def set_model_ivec_on_I(self, g):
+    """ 
+    Set the ivec (e.g. page-rank) on the internal nodes.
+    Fills: 
+    1) model.ivec_on_I, model.ivec_std_on_I
+    2) model.rank_on_I
+    """
+
+    self.ivec_on_I = self.ivec[g.idx_IntraNode2Full]
+    self.ivec_std_on_I = self.ivec_std[g.idx_IntraNode2Full]
+
+    # obtain the idx of ranked (descending) meas
+    inv_argsort = lambda x: np.argsort(x)[::-1]
+    self.rank_on_I = inv_argsort(self.ivec_on_I)
+    self.ivec_desc_on_I = self.ivec_on_I[self.rank_on_I]
 
 def signed_rel_err(x, y):
     """ 

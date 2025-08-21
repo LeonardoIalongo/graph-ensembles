@@ -232,7 +232,7 @@ def pagerank_on_internal_nodes(g, gI_dirfunc, intra_size, num_vsplits):
     import os
 
     intra_size = [intra_size] if isinstance(intra_size, float) else intra_size
-    ivec = "_page_rank"
+    ivec_name = g.ivec_name
     
     for intra_size in intra_size:
 
@@ -269,11 +269,11 @@ def pagerank_on_internal_nodes(g, gI_dirfunc, intra_size, num_vsplits):
                 # gI_path = gI.vars_dir.replace(f"intra_size{gI.intra_size}", f"intra_size{intra_size}").replace(f"vsplit{gI.vsplit}", f"vsplit{vsplit}")
                 gI_path = gI_dirfunc(intra_size, vsplit)				
                 gI_dict = utils.load_dict(gI_path + "/graph.pkl")
-                pr_gI = gI_dict[meas]
+                pr_gI = gI_dict[ivec_name]
 
                 # select the internal node
                 idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI_dict["id_dict"]))
-                pr_g_on_I = g.get(ivec)[idx_IntraNode2Full]
+                pr_g_on_I = g.get(ivec_name)[idx_IntraNode2Full]
 
                 # plot the page rank only on the interal nodes
                 _ = ax.plot([pr_g_on_I.min(), pr_g_on_I.max()],
@@ -341,7 +341,7 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log"):
             transform=ax.transAxes, horizontalalignment='right')
     # return im
 
-def ivec_on_internal_nodes(base_dir, g, gI, ivec, num_bins = 100, num_sampled_graphs = 0, ivec_name = "_page_rank"):
+def ivec_on_internal_nodes(model, g, gI, num_bins = 100, num_sampled_graphs = 0):
     """
     Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
     .) x-axis, there would be the full page rank of the intra nodes.
@@ -350,31 +350,23 @@ def ivec_on_internal_nodes(base_dir, g, gI, ivec, num_bins = 100, num_sampled_gr
     """
     import os
 
-    full_path = base_dir + f"/{ivec_name.replace('_', '')}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
+    full_path = model.plots_dir + f"/{g.ivec_name.replace('_', '')}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
 
     if True: #not os.path.exists(full_path):
         axis_scale = "log"
         
-        # prepare the meas over g and gI
-        g_ivec = g.get(ivec_name)
-        gI_ivec = gI.get(ivec_name)
-
-        idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
-        g_ivec_on_I = g_ivec[idx_IntraNode2Full]
-        ivec_on_I = ivec[idx_IntraNode2Full]
-
         fig, axs = plt.subplots(1,2, figsize = (12, 6), sharex=True, sharey=True)
 
-        x = g_ivec_on_I
-        _plot_hist2d(fig, axs[0], x, gI_ivec, num_bins = num_bins, axis_scale = axis_scale)
-        _plot_hist2d(fig, axs[1], x, ivec_on_I, num_bins = num_bins, axis_scale = axis_scale)
+        x = g.ivec_on_I
+        _plot_hist2d(fig, axs[0], x, gI.ivec, num_bins = num_bins, axis_scale = axis_scale)
+        _plot_hist2d(fig, axs[1], x, model.ivec_on_I, num_bins = num_bins, axis_scale = axis_scale)
 
         # plot the identity line, no grid, customize the legend, set the lables and scale
         for i, ax in enumerate(axs):
             
             # plot the reference identity line
-            _ = ax.plot([g_ivec_on_I.min(), g_ivec_on_I.max()],
-                        [g_ivec_on_I.min(), g_ivec_on_I.max()],
+            _ = ax.plot([x.min(), x.max()],
+                        [x.min(), x.max()],
                         'r--', zorder = 1,
                         )
 
@@ -416,13 +408,13 @@ def norm_diffs_per_iteration(plots_dir, diff_norms):
     utils.save_fig(fig, full_path)
     plt.close()
 
-def inset_ivec_vs_rank(ax, x, true_rank, axis_scale = "log", size = 15):
+def inset_ivec_vs_rank(ax, x, true_rank, axis_scale = "log", size = 15, zorder = 1):
     # in the inset, plot the meas based on the g_ivec_on_I ranking
     inax_w = 0.3
     pos_xy = [0.03, 0.03]
     kwargs_inaxs = {"xscale" : axis_scale, "yscale" : axis_scale}
     inaxs = ax.inset_axes([pos_xy[0], pos_xy[1], inax_w, inax_w], **kwargs_inaxs)
-    inaxs.scatter(x, true_rank, marker = 'o', color = dep.obs_color, s = size,)
+    inaxs.scatter(x, true_rank, marker = 'o', color = dep.obs_color, s = size,zorder = zorder)
     inaxs.grid(False)
     inaxs.set(xscale = axis_scale, yscale = axis_scale,)
     
@@ -468,7 +460,7 @@ def _set_alpha(bars, caps, alpha = 0.5):
     [bar.set_alpha(alpha) for bar in bars]
     [cap.set_alpha(alpha) for cap in caps]
 
-def ivec_on_internal_nodes_vs_rank(base_dir, g, gI, ivec, ivec_std, ivec_name, num_sampled_graphs, num_sigmas = 1):
+def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas = 1):
     """
     Create 2 plots sharing the same x-axis, which is the ranking position (range(1, N))
     Left) meas computed on the sub-internal graph VS ranking;
@@ -476,71 +468,54 @@ def ivec_on_internal_nodes_vs_rank(base_dir, g, gI, ivec, ivec_std, ivec_name, n
 
     Insets:
     """
-    full_path = base_dir + f"/ranked_{ivec_name.replace('_', '')}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
-
-    # get the network measures
-    g_ivec = g.get(ivec_name)
-    gI_ivec = gI.get(ivec_name)
-
-    # select only the intra nodes
-    idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
-    g_ivec_on_I = g_ivec[idx_IntraNode2Full]
-    ivec_on_I = ivec[idx_IntraNode2Full]
-
-    # obtain the idx of ranked (descending) meas
-    inv_argsort = lambda x: np.argsort(x)[::-1]
-    idx_g_ivec_on_I = inv_argsort(g_ivec_on_I)
-    idx_gI = inv_argsort(gI_ivec)
-    idx_ens_ivec_on_I = inv_argsort(ivec_on_I)
+    full_path = model.plots_dir + f"/ranked_{g.ivec_name}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
 
     # plot them
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
     axis_scale, msize = 'log', 15
-    title_ivec = ivec_name.lstrip("_").title()
+    inset_alpha = 0.3
+    inset_zorder_exp = 0
+    title_ivec = g.ivec_name.title()
     
     # x-axis will be just increasing values, i.e. ranking position
-    x = range(1, len(gI_ivec)+1)
+    x = range(1, len(gI.ivec)+1)
 
     # scores to assign the ranking
-    ranked_g_ivec_on_I = g_ivec_on_I[idx_g_ivec_on_I]
+    g_ivec_desc_on_I = g.ivec_desc_on_I
+    g_rank_on_I = g.rank_on_I
+    value, std = model.ivec_on_I[g_rank_on_I], model.ivec_std_on_I[g_rank_on_I]
 
     # === focus on meas obtained by considering only a portion of the network ===
     # plot the measurements as a function of their rankings in a descending order
-    axs[0].scatter(x, ranked_g_ivec_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
-    axs[0].scatter(x, gI_ivec[idx_gI], marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
+    axs[0].scatter(x, gI.ivec, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
+    axs[0].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
     axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_ivec} Values',)
     
     # plot inset measurements as a function of the idx_g_ivec_on_I (here selected nodes are the same)
-    inaxs = inset_ivec_vs_rank(axs[0], x, true_rank = ranked_g_ivec_on_I, axis_scale=axis_scale, size = msize)
-    inaxs.scatter(x, gI_ivec[idx_g_ivec_on_I], marker = 'x', color = dep.ref_model_color, s = msize)
+    inaxs = inset_ivec_vs_rank(axs[0], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
+    inaxs.scatter(x, gI.ivec[g_rank_on_I], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
     # plot the measurements as a function of their rankings in a descending order
-    axs[1].scatter(x, ranked_g_ivec_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
     
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-    axs[1].scatter(x, y = ivec_on_I[idx_ens_ivec_on_I], marker = "x", 
+    axs[1].scatter(x, y = model.ivec_desc_on_I, marker = "x", 
                     color = dep.sum_model_color, label = 'Int. + Reconstr.',)
-    axs[1].fill_between(x, y1 = ivec_on_I[idx_ens_ivec_on_I] + num_sigmas * ivec_std[idx_ens_ivec_on_I],
-                        y2 = ivec_on_I[idx_ens_ivec_on_I] - num_sigmas * ivec_std[idx_ens_ivec_on_I], 
-                        color = dep.sum_model_color, capstyle = "butt", label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
-                        alpha = 0.3)
-    # _, bars, caps = axs[1].errorbar(x, ivec_on_I[idx_ens_ivec_on_I], yerr = ivec_std[idx_ens_ivec_on_I], 
-                    # fmt = 'x', color = dep.sum_model_color, capsize = 5, elinewidth = 1, label = 'Int. + Reconstr.')
-    # _set_alpha(bars, caps)
+    axs[1].fill_between(x, y1 = model.ivec_desc_on_I + num_sigmas * model.ivec_std_on_I,
+                        y2 = model.ivec_desc_on_I - num_sigmas * model.ivec_std_on_I, 
+                        color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
+                        alpha = inset_alpha)
+    axs[1].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
     axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_ivec} Values',)
     
 
     # in the inset, plot the meas based on the g_ivec_on_I ranking
-    inaxs = inset_ivec_vs_rank(axs[1], x, true_rank = ranked_g_ivec_on_I, axis_scale=axis_scale, size = msize)
-    # _, bars, caps = inaxs.errorbar(x, ivec_on_I[idx_g_ivec_on_I], yerr = ivec_std[idx_g_ivec_on_I], 
-    #                 fmt = 'x', color = dep.sum_model_color, capsize = 5, elinewidth = 1,)
-    # _set_alpha(bars, caps)
-    
-    inaxs.scatter(x, y = ivec_on_I[idx_g_ivec_on_I], marker = "x", color = dep.sum_model_color)
-    inaxs.fill_between(x, y1 = ivec_on_I[idx_g_ivec_on_I] + num_sigmas * ivec_std[idx_g_ivec_on_I],
-                        y2 = ivec_on_I[idx_g_ivec_on_I] - num_sigmas * ivec_std[idx_g_ivec_on_I], 
-                        color = dep.sum_model_color, capstyle = "butt", alpha = 0.3)
+    inaxs = inset_ivec_vs_rank(axs[1], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
+
+    # create value, std arrays and plot scatter + fill between curves
+    inaxs.scatter(x, y = value, marker = "x", color = dep.sum_model_color, zorder = inset_zorder_exp)
+    inaxs.fill_between(x, y1 = value + num_sigmas * std, y2 = value - num_sigmas * std, 
+                        color = dep.sum_model_color, alpha = inset_alpha, zorder = inset_zorder_exp)
 
     for ax in axs:
         ax.legend(markerscale=2)
@@ -552,6 +527,60 @@ def ivec_on_internal_nodes_vs_rank(base_dir, g, gI, ivec, ivec_std, ivec_name, n
     
     utils.save_fig(fig, full_path=full_path)
     plt.close()
+
+def topN_overlap_rel_err(g, gI, model, num_sampled_graphs, N = 50):
+    """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
+    
+    full_path = model.plots_dir + f"/topN_{g.ivec_name}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
+
+    if True:
+        step_top_N = 5
+        intervals = [1] + list(range(step_top_N, N + 1, step_top_N)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
+        topN_arr = lambda v: [v[:i] for i in intervals]
+
+        # observed
+        g_topN_rank = topN_arr(g.rank_on_I)
+
+        # expected
+        model_topN_rank = topN_arr(model.rank_on_I)
+        gI_topN_rank = topN_arr(gI.rank)
+
+        # 1. Calculate overlap between g_topN_rank and model_topN_rank
+        overlap_perc = lambda r: [np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g_topN_rank, r)]
+        g_model_overlap = overlap_perc(model_topN_rank)
+        g_gI_overlap = overlap_perc(gI_topN_rank)
+
+        # 2. Calculate the total page-rank error
+        g_topN_ivec = topN_arr(g.ivec_on_I)
+        model_topN_ivec = topN_arr(model.ivec_on_I)
+        gI_topN_ivec = topN_arr(gI.ivec)
+
+        topN_rel_err = lambda r: [utils.rel_err_norm(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g_topN_ivec, r)]
+
+        g_model_rel_err = topN_rel_err(model_topN_ivec)
+        g_gI_rel_err = topN_rel_err(gI_topN_ivec)
+
+        fig, axs = plt.subplots(1, 2, figsize = (20,7))
+        axis_scale = 'linear'
+        obs_s, exp_s = 60, 60
+        axs[0].scatter(intervals, g_gI_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+        axs[0].scatter(intervals, g_model_overlap, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'{model.name}')
+        axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
+
+        axs[1].scatter(intervals, g_gI_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+        axs[1].scatter(intervals, g_model_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'{model.name}')
+        axs[1].set(xscale = axis_scale, yscale = "log", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
+
+        x_ticks = intervals[::3]
+        for ax in axs:
+            ax.set_xticks(x_ticks)
+            ax.legend()
+            ax.grid(False)
+
+        fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
+        utils.save_fig(fig, full_path=full_path)
+        plt.close()
 
 def plot_local_fonts(corpkey):
     import matplotlib.pyplot as plt

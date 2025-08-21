@@ -204,7 +204,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
 
         # create the meas and save it
         if num_sampled_graphs == 0:
-            if ivec_name == "_page_rank":
+            if ivec_name == "page_rank":
                 ivec, ivec_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
         else:
             test_ivec = load_dict(self.vars_dir_ensembles + f"/samples/graph0/graph0.pkl")[ivec_name]
@@ -268,7 +268,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
             
         return new_mean, new_sem
 
-    def set_ensemble_variables(self, ivec = "_page_rank", num_samples = 1):
+    def set_ensemble_variables(self, ivec_name = "page_rank", num_samples = 1):
         
         from os import makedirs
         from ...utils import max_sampled_graph_idx
@@ -277,14 +277,14 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         self.vars_dir_ensembles = self.vars_dir.replace("vars", "vars/ensembles")
         
         # save norm of differences among two ensemble mean
-        self.ens_ivec_base_dir = self.vars_dir_ensembles + f"/{ivec}"
+        self.ens_ivec_base_dir = self.vars_dir_ensembles + f"/{ivec_name}"
         makedirs(self.ens_ivec_base_dir, exist_ok = True)
 
         # find the max graph idx in the model.vars_dir and sample the rest
         num_sampled_graphs = max_sampled_graph_idx(self.vars_dir_ensembles + "/samples", num_samples) + 1
         
         # compute the already mean of meas over the already sampled graphs
-        prev_mean, prev_std = self.mean_std_sampled_graphs(ivec, num_sampled_graphs)
+        prev_mean, prev_std = self.mean_std_sampled_graphs(ivec_name, num_sampled_graphs)
         
 
         return num_sampled_graphs, prev_mean, prev_std

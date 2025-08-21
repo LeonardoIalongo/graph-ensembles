@@ -395,7 +395,7 @@ class Graph(common_functions):
             gI = gesp.graphs.DiGraph(vI, eI, **kwargs_graph)
 
             # compute the page-rank only in the internal part
-            gI._page_rank = gI.pagerank_power(**self._kwargs_pr)
+            gI.ivec = gI.pagerank_power(**self._kwargs_pr)
 
             del vI, eI
 

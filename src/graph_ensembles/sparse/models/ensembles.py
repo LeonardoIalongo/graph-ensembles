@@ -441,7 +441,7 @@ class DiGraphEnsemble(GraphEnsemble):
         # g.out_degree()
 
         if ref_g != None:
-            g._page_rank = g.pagerank_power(**ref_g._kwargs_pr)
+            g.ivec = g.pagerank_power(**ref_g._kwargs_pr)
 
         g.save_vars(name = f"graph{graph_idx}")
 
