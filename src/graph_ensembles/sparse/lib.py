@@ -4,7 +4,6 @@
 import numpy as np
 from numba import jit
 
-
 @jit(nopython=True)  # pragma: no cover
 def normalise_rows(rows, clms, weights):
     new_w = np.zeros(len(weights), dtype=weights.dtype)
@@ -23,7 +22,7 @@ def normalise_rows(rows, clms, weights):
 
 @jit(nopython=True)  # pragma: no cover
 def propagate_measure(indptr, indices, weights, meas, absorb=False):
-    N = len(meas)
+    N = len(ivec)
     update = np.zeros(N, dtype=np.float64)
 
     for i in range(len(indptr) - 1):

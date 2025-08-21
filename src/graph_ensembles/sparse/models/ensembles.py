@@ -335,6 +335,15 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return like
 
+    def send_variables_to_gpu(self, arr):
+        """Send the arrays to one GPU for efficient calculations"""
+        dtype, device = tc.float32, "cuda:0"
+        self.param = tc.from_numpy(self.param).to(device, dtype = dtype)
+        self.prop_out = tc.from_numpy(self.prop_out).to(device, dtype = dtype)
+        self.prop_in = tc.from_numpy(self.prop_in).to(device, dtype = dtype)
+        self.selfloops = tc.tensor(self.selfloops).to(device)
+        return tc.from_numpy(arr).to(device)
+
     def sample(
         self,
         ref_g=None,

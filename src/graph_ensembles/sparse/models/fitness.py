@@ -189,7 +189,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
 
-    def mean_std_sampled_graphs(self, meas, num_sampled_graphs):
+    def mean_std_sampled_graphs(self, ivec_name, num_sampled_graphs):
         """
         Compute entry-wise running mean for a given meas over sampled graphs.
         Returns the mean array.
@@ -198,30 +198,30 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         from os import path
         
         # load it
-        full_path = self.ens_meas_base_dir + f"/num_samples_{num_sampled_graphs}.csv"
+        full_path = self.ens_ivec_base_dir + f"/num_samples_{num_sampled_graphs}.csv"
         if path.exists(full_path):
             return np.genfromtxt(full_path) 
 
         # create the meas and save it
         if num_sampled_graphs == 0:
-            if meas == "_page_rank":
-                ens_mean, ens_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
+            if ivec_name == "_page_rank":
+                ivec, ivec_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
         else:
-            test_meas = load_dict(self.vars_dir_ensembles + f"/samples/graph0/graph0.pkl")[meas]
+            test_ivec = load_dict(self.vars_dir_ensembles + f"/samples/graph0/graph0.pkl")[ivec_name]
             
-            # create ens_mean and ens_std as array
-            ens_mean = np.zeros_like(np.atleast_1d(test_meas), dtype = float)
-            ens_std = ens_mean.copy()
+            # create ivec and ivec_std as array
+            ivec = np.zeros_like(np.atleast_1d(test_ivec), dtype = float)
+            ivec_std = ivec.copy()
 
             # recursive mean and std
             for i in range(num_sampled_graphs):
-                gi_val = load_dict(self.vars_dir_ensembles + f"/samples/graph{i}/graph{i}.pkl")[meas]
-                ens_mean, ens_std = self.recursive_mean_std(i, ens_mean, ens_std, gi_val)
+                gi_val = load_dict(self.vars_dir_ensembles + f"/samples/graph{i}/graph{i}.pkl")[ivec_name]
+                ivec, ivec_std = self.recursive_mean_std(i, ivec, ivec_std, gi_val)
 
             # save the mean and std as [[mean],[std]]
-            np.savetxt(full_path, X = np.vstack((ens_mean, ens_std)))
+            np.savetxt(full_path, X = np.vstack((ivec, ivec_std)))
             
-        return ens_mean, ens_std
+        return ivec, ivec_std
 
     def recursive_mean_std(self, i, ens_mean=None, ens_std=None, new_meas=None):
         """
@@ -246,16 +246,6 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         # if i = 0, ens_mean = [0, 0, ...] updates while the std stays zero
         delta = new_meas - ens_mean
         new_mean = ens_mean + delta / N  # using += that is in-place and changes also the outer ens_mean
-        
-        # if N > 1:
-        #     # Update (unbiased) standard deviation
-        #     new_delta = new_meas - ens_mean # updated mean in new_delta
-        #     ens_std = ((ens_std**2 * (N - 2)) + delta * new_delta) / (N-1)
-        #     ens_std = np.sqrt(ens_std) # this is not an in-place computation, meaning outside ens_std stays constant
-        # else:
-        #     ens_std.fill(0)  # Standard deviation is zero for a single
-
-        # return ens_mean, ens_std
 
         # --- Update Standard Error of the Mean (SEM) ---
         # Just s^2_N <--> N * sem^2_N, in the formulas above
@@ -278,7 +268,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
             
         return new_mean, new_sem
 
-    def _set_ensemble_variables(self, meas = "_page_rank", num_samples = 1):
+    def set_ensemble_variables(self, ivec = "_page_rank", num_samples = 1):
         
         from os import makedirs
         from ...utils import max_sampled_graph_idx
@@ -287,14 +277,14 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         self.vars_dir_ensembles = self.vars_dir.replace("vars", "vars/ensembles")
         
         # save norm of differences among two ensemble mean
-        self.ens_meas_base_dir = self.vars_dir_ensembles + f"/{meas}"
-        makedirs(self.ens_meas_base_dir, exist_ok = True)
+        self.ens_ivec_base_dir = self.vars_dir_ensembles + f"/{ivec}"
+        makedirs(self.ens_ivec_base_dir, exist_ok = True)
 
         # find the max graph idx in the model.vars_dir and sample the rest
         num_sampled_graphs = max_sampled_graph_idx(self.vars_dir_ensembles + "/samples", num_samples) + 1
         
         # compute the already mean of meas over the already sampled graphs
-        prev_mean, prev_std = self.mean_std_sampled_graphs(meas, num_sampled_graphs)
+        prev_mean, prev_std = self.mean_std_sampled_graphs(ivec, num_sampled_graphs)
         
 
         return num_sampled_graphs, prev_mean, prev_std

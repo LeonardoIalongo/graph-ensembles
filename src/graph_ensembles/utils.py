@@ -218,6 +218,29 @@ def max_sampled_graph_idx(dir_, num_samples = None):
         # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
         return -1
 
+def set_ivec_on_I(g, gI, model):
+    """ 
+    Set the ivec (e.g. page-rank) on the internal nodes.
+    Fills: 
+    1) g.ivec_on_I, gI.ivec, model.ivec_on_I, model.ivec_std_on_I
+    2) g.rank_on_I, gI.rank, model.rank_on_I
+    """
+    
+    # prepare the meas over g and gI
+    g_ivec = g.get(g.ivec_name)
+    gI.ivec = gI.get(gI.ivec_name)
+
+    g.idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
+    g.ivec_on_I = g_ivec[g.idx_IntraNode2Full]
+    model.ivec_on_I = model.ivec[g.idx_IntraNode2Full]
+    model.ivec_std_on_I = model.ivec_std[g.idx_IntraNode2Full]
+
+    # obtain the idx of ranked (descending) meas
+    inv_argsort = lambda x: np.argsort(x)[::-1]
+    g.rank_on_I = inv_argsort(g.ivec_on_I)
+    gI.rank = inv_argsort(gI.ivec)
+    model.rank_on_I = inv_argsort(model.ivec_on_I)
+
 def signed_rel_err(x, y):
     """ 
     Relative error among each element of x and y, with modules. 
@@ -225,9 +248,9 @@ def signed_rel_err(x, y):
     """
     return (x-y) / y
 
-def rel_err(x, y):
+def rel_err_norm(x, y, ord = 1):
     """ Relative error between x and y. It returns a scalar """
-    return np.linalg.norm(x - y) / np.linalg.norm(y)
+    return np.linalg.norm(x - y, ord = ord) / np.linalg.norm(y, ord = ord)
 
 def fc_title(ref_model):
     return "Summed" if ref_model.fc_direction.startswith("fc") else "Fractioned"
