@@ -1,6 +1,7 @@
 from .dependencies import *
 import numpy as np
 import pandas as pd
+import graph_ensembles as ge
 
 def n_possible_part(n, n_inner_cl, clust_labels):
     """
@@ -227,8 +228,8 @@ def set_ivec_on_I(g, gI):
     """
     
     # prepare the meas over g and gI
-    g.idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
-    g.ivec_on_I = g.ivec[g.idx_IntraNode2Full]
+    gI.idx_intnode_on_full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
+    g.ivec_on_I = g.ivec[gI.idx_intnode_on_full]
 
     # obtain the idx of ranked (descending) meas
     inv_argsort = lambda x: np.argsort(x)[::-1]
@@ -239,7 +240,10 @@ def set_ivec_on_I(g, gI):
     g.ivec_desc_on_I = g.ivec_on_I[g.rank_on_I]
     gI.ivec_desc = gI.ivec[gI.rank]
 
-def set_model_ivec_on_I(self, g):
+    # save the variables on gI
+    gI.save_vars(name = "graph")
+
+def set_model_ivec_on_I(self, gI):
     """ 
     Set the ivec (e.g. page-rank) on the internal nodes.
     Fills: 
@@ -247,13 +251,14 @@ def set_model_ivec_on_I(self, g):
     2) model.rank_on_I
     """
 
-    self.ivec_on_I = self.ivec[g.idx_IntraNode2Full]
-    self.ivec_std_on_I = self.ivec_std[g.idx_IntraNode2Full]
+    self.ivec_on_I = self.ivec[gI.idx_intnode_on_full]
+    self.ivec_std_on_I = self.ivec_std[gI.idx_intnode_on_full]
 
     # obtain the idx of ranked (descending) meas
     inv_argsort = lambda x: np.argsort(x)[::-1]
     self.rank_on_I = inv_argsort(self.ivec_on_I)
     self.ivec_desc_on_I = self.ivec_on_I[self.rank_on_I]
+    self.ivec_std_desc_on_I = self.ivec_std_on_I[self.rank_on_I]
 
 def signed_rel_err(x, y):
     """ 

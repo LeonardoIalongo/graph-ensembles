@@ -350,7 +350,7 @@ def ivec_on_internal_nodes(model, g, gI, num_bins = 100, num_sampled_graphs = 0)
     """
     import os
 
-    full_path = model.plots_dir + f"/{g.ivec_name.replace('_', '')}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
+    full_path = model.plots_dir + f"/{g.ivec_name}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
 
     if True: #not os.path.exists(full_path):
         axis_scale = "log"
@@ -483,26 +483,25 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas 
     # scores to assign the ranking
     g_ivec_desc_on_I = g.ivec_desc_on_I
     g_rank_on_I = g.rank_on_I
-    value, std = model.ivec_on_I[g_rank_on_I], model.ivec_std_on_I[g_rank_on_I]
-
+    
     # === focus on meas obtained by considering only a portion of the network ===
     # plot the measurements as a function of their rankings in a descending order
-    axs[0].scatter(x, gI.ivec, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
+    axs[0].scatter(x, gI.ivec_desc, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
     axs[0].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
     axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_ivec} Values',)
     
-    # plot inset measurements as a function of the idx_g_ivec_on_I (here selected nodes are the same)
+    # plot the reorder gI.ivec with respect to the full-network ranking, i.e. idx_g_ivec_on_I
     inaxs = inset_ivec_vs_rank(axs[0], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
     inaxs.scatter(x, gI.ivec[g_rank_on_I], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
-    # plot the measurements as a function of their rankings in a descending order
-    
+    # plot the reorder model.ivec with respect to the full-network ranking, i.e. idx_g_ivec_on_I
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-    axs[1].scatter(x, y = model.ivec_desc_on_I, marker = "x", 
+    mu, sigma = model.ivec_desc_on_I, model.ivec_std_desc_on_I
+    axs[1].scatter(x, y = mu, marker = "x", 
                     color = dep.sum_model_color, label = 'Int. + Reconstr.',)
-    axs[1].fill_between(x, y1 = model.ivec_desc_on_I + num_sigmas * model.ivec_std_on_I,
-                        y2 = model.ivec_desc_on_I - num_sigmas * model.ivec_std_on_I, 
+    axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
+                        y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
                         alpha = inset_alpha)
     axs[1].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
@@ -512,9 +511,10 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas 
     # in the inset, plot the meas based on the g_ivec_on_I ranking
     inaxs = inset_ivec_vs_rank(axs[1], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
 
-    # create value, std arrays and plot scatter + fill between curves
-    inaxs.scatter(x, y = value, marker = "x", color = dep.sum_model_color, zorder = inset_zorder_exp)
-    inaxs.fill_between(x, y1 = value + num_sigmas * std, y2 = value - num_sigmas * std, 
+    # create mu, std arrays and plot scatter + fill between curves
+    mu, sigma = model.ivec_on_I[g_rank_on_I], model.ivec_std_on_I[g_rank_on_I]
+    inaxs.scatter(x, y = mu, marker = "x", color = dep.sum_model_color, zorder = inset_zorder_exp)
+    inaxs.fill_between(x, y1 = mu + num_sigmas * sigma, y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, alpha = inset_alpha, zorder = inset_zorder_exp)
 
     for ax in axs:
