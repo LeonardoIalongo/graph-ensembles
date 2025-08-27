@@ -228,6 +228,9 @@ def set_ivec_on_I(g, gI):
     """
     
     # prepare the meas over g and gI
+
+    # find the (integer) index of a gI-node, e.g. 1263, with respect to the set of g-nodes classification, e.g. 4
+    # note: idx_intnode_on_full[0] is g-idx of the gI-idx node = 0
     gI.idx_intnode_on_full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
     g.ivec_on_I = g.ivec[gI.idx_intnode_on_full]
 

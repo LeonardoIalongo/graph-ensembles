@@ -447,10 +447,14 @@ class Graph(common_functions):
         return self._total_weight
 
     def degree(self, recompute=False):
-        """Compute the undirected degree sequence."""
+        """Compute the undirected and directed degree sequence, as for expected_degree"""
         if not hasattr(self, "_degree") or recompute:
             adj = self.adjacency_matrix(directed=False, weighted=False)
             self._degree = adj.sum(axis=0).astype(int)
+
+            adj = self.adjacency_matrix(directed=True, weighted=False)
+            self._out_degree = adj.sum(axis=1).astype(int)
+            self._in_degree = adj.sum(axis=0).astype(int)
 
         return self._degree
 

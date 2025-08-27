@@ -113,7 +113,7 @@ class DiGraphEnsemble(GraphEnsemble):
         self.prop_out = empty_index()
         self.prop_in = empty_index()
         
-    def expected_num_edges(self, recompute=False, unsampled_vI = None):
+    def expected_num_edges(self, recompute=False, unsampled_vI = None, num_frozen_edges = 0):
         """Compute the expected number of edges."""
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
@@ -132,25 +132,60 @@ class DiGraphEnsemble(GraphEnsemble):
                 unsampled_vI
             )
 
+            self._exp_num_edges += num_frozen_edges
+
         return self._exp_num_edges
 
-    def expected_degree(self, recompute=False):
+    def add_frozen_degrees(self, gI, out_or_in = "und"):
+        """ Add the out- and in- degrees, to the model degrees computed by hiding the frozen edges """
+        
+        if out_or_in == "out":
+            deg = gI.out_degree()
+            model_deg = self._out_degree.copy()
+        elif out_or_in == "in":
+            deg = gI.in_degree()
+            model_deg = self._in_degree.copy()
+        else:
+            deg = gI.degree()
+            model_deg = self._degree.copy()
+
+        non_zero_deg = np.nonzero(deg)[0]
+        
+        # add internal degrees to the right g-idx node
+        for idx_gI in non_zero_deg:
+            idx_g = gI.idx_intnode_on_full[idx_gI]
+            model_deg[idx_g] += deg[idx_gI]
+
+        return model_deg
+
+    def expected_degree(self, unsampled_vI = None, gI = None, recompute=False,):
         """Compute the expected undirected degree."""
         if not hasattr(self, "param"):
             raise Exception("Model must be fitted beforehand.")
 
         if not hasattr(self, "_degree") or recompute:
-            res = self.exp_degrees(
+            
+            unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_) if unsampled_vI is None else unsampled_vI 
+            
+            res = self.exp_degree(
                 self.p_ij,
                 self.param,
                 self.prop_out,
                 self.prop_in,
                 self.prop_dyad,
                 self.selfloops,
+                unsampled_vI
             )
+
             self._degree = res[0]
             self._out_degree = res[1]
             self._in_degree = res[2]
+            
+            if unsampled_vI is not None:
+                self.add_frozen_degrees(gI, "und")
+                self.add_frozen_degrees(gI, "out")
+                self.add_frozen_degrees(gI, "in")
+
 
         return self._degree
 
@@ -335,14 +370,27 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return like
 
-    def send_variables_to_gpu(self, arr):
+    def send_variables_to_gpu(self, arr, device = "cuda:0"):
         """Send the arrays to one GPU for efficient calculations"""
-        dtype, device = tc.float32, "cuda:0"
-        self.param = tc.from_numpy(self.param).to(device, dtype = dtype)
-        self.prop_out = tc.from_numpy(self.prop_out).to(device, dtype = dtype)
-        self.prop_in = tc.from_numpy(self.prop_in).to(device, dtype = dtype)
-        self.selfloops = tc.tensor(self.selfloops).to(device)
-        return tc.from_numpy(arr).to(device)
+        dtype = tc.float32
+        from_numpy_to_dev = lambda arr: tc.from_numpy(arr).to(device, dtype = dtype) 
+        self.param = from_numpy_to_dev(self.param)
+        self.prop_out = from_numpy_to_dev(self.prop_out)
+        self.prop_in = from_numpy_to_dev(self.prop_in)
+        self.selfloops = tc.tensor(self.selfloops).to(device, dtype = tc.bool)
+        return tc.from_numpy(arr).to(device, dtype = tc.bool)
+
+    def send_variables_to_cpu(self, arr):
+        """Send the arrays to one CPUS for efficient calculations"""
+        dtype, device = tc.float32, "cpu"
+
+        if not (arr.device == device):
+            to_numpy = lambda arr: arr.to(device, dtype = dtype).numpy()
+            self.param = to_numpy(self.param)
+            self.prop_out = to_numpy(self.prop_out)
+            self.prop_in = to_numpy(self.prop_in)
+            self.selfloops = to_numpy(self.selfloops)
+            return to_numpy(arr)
 
     def sample(
         self,
@@ -747,18 +795,26 @@ class DiGraphEnsemble(GraphEnsemble):
     
     @staticmethod
     @njit(parallel=True)  # pragma: no cover
-    def exp_degrees(p_ij, param, prop_out, prop_in, prop_dyad, selfloops):
+    def exp_degree(p_ij, param, prop_out, prop_in, prop_dyad, selfloops,unsampled_vI):
         """Compute the expected total, out-degree and in-degree sequences."""
         num_v = len(prop_out)
         exp_d = np.zeros(num_v, dtype=np.float64)
         exp_d_out = np.zeros(num_v, dtype=np.float64)
         exp_d_in = np.zeros(num_v, dtype=np.float64)
-
+        
+        # out degree + undirected degree
         for i in prange(num_v):
             p_out_i = prop_out[i]
+
+            # col-wise sampling
             for j in range(num_v):
                 p_in_j = prop_in[j]
+
+                if unsampled_vI[i] and unsampled_vI[j]:
+                    continue
+
                 if i != j:
+                    # directed out degree
                     pij = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
                     exp_d_out[i] += pij
                     
@@ -772,11 +828,16 @@ class DiGraphEnsemble(GraphEnsemble):
                     pii = p_ij(param, p_out_i, p_in_j, prop_dyad(i, j))
                     exp_d_out[i] += pii
         
+        # in degree
         for l in prange(num_v):
             p_in_l = prop_in[l]
             for m in range(num_v):
-                p_out_m = prop_out[m]
+                if unsampled_vI[l] and unsampled_vI[m]:
+                    continue
+                
                 if l != m:
+                    p_out_m = prop_out[m]
+                    
                     pml = p_ij(param, p_out_m, p_in_l, prop_dyad(m, l))
                     exp_d_in[l] += pml
                     
@@ -988,7 +1049,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             )
 
             # Compute measure
-            res = self.exp_degrees_label(
+            res = self.exp_degree_label(
                 self.p_ijk,
                 self.param,
                 prop_out,
@@ -1316,7 +1377,7 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_degrees_label(
+    def exp_degree_label(
         p_ijk, param, prop_out, prop_in, prop_dyad, num_v, num_l, selfloops
     ):
         """Compute the expected undirected, in and out degree sequences."""

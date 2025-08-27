@@ -237,7 +237,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
             raise Exception("Model must be fitted beforehand.")
 
         if not hasattr(self, "_degree") or recompute:
-            res = self.exp_degrees(
+            res = self.exp_degree(
                 self.cond_p_ij,
                 self.param,
                 self.prop_out,
@@ -571,7 +571,7 @@ class ConditionalInvariantModel(ScaleInvariantModel):
 
     @staticmethod
     @jit(nopython=True)  # pragma: no cover
-    def exp_degrees(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
+    def exp_degree(p_ij, param, prop_out, prop_in, groups, adj_i, adj_j, selfloops):
         """Compute the expected undirected, in and out degree sequences."""
         # Compute aggregate properties
         M = np.max(groups) + 1

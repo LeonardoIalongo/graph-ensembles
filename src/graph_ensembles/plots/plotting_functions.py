@@ -6,58 +6,72 @@ import numpy as np
 from .. import utils
 
 
-def degree(g, ref_model, sum_model):
-    """Plot the degree sequence in, out, and 11 for the observed network and the sum model"""
-    full_path = sum_model.plots_dir + f"/topological_meas/degree/level{g.level}.pdf"
+def ccdf_deg_out_in(g, gI, model):
+    full_path = model.plots_dir + "/deg_annd_cc/ccdf_deg_out_in.pdf"
 
-    model_label = "Summed" if sum_model.name.startswith("sum-") else "Fractioned"
+    def _ccdf_vs_deg(deg):
+        def normalized_ccdf(arr):
+            ccdf = np.cumsum(arr)[::-1]
+            # Problems with ccdf/ccdf[0]. Therefore, use np.divide
+            ccdf = np.divide(ccdf, ccdf[0])
+            return ccdf
 
-    x0, y0, z0 = g._out_degree, ref_model._out_degree, sum_model._out_degree
-    x1, y1, z1 = g._in_degree, ref_model._in_degree, sum_model._in_degree
+        return np.sort(deg), normalized_ccdf(deg)
 
-    if not os.path.exists(full_path):
-        fig, axs = plt.subplots(1, 2, figsize = (20,7))
-        axis_scale = 'log'
-        alpha = 0.5
+    def plot_ccdf(axs, deg_out, deg_in, color, lw = 5, label = "ciao"):
+        x, y = _ccdf_vs_deg(deg_out)
+        axs[0].step(x, y, color = color, lw = lw, label = label)
+        x, y = _ccdf_vs_deg(deg_in)
+        axs[1].step(x, y, color = color, lw = lw, label = label)
 
-        axs[0].scatter(x0, x0, marker = 'o', color = obs_color, label = 'Observed', alpha = alpha)
-        axs[0].scatter(x0, y0, marker = '+', color = ref_model_color, label = ref_model.name.title(), alpha = alpha)
-        # axs[0].scatter(x0, z0, marker = 'x', color = sum_model_color, label = model_label, alpha = alpha)
-        axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Observed', ylabel = 'Expected',)
-        axs[0].set_title("Out")
-        axs[0].set_axisbelow(True)
-        axs[0].grid(True)
+    fig, axs = plt.subplots(1, 2, figsize = (20,7))
 
-        axs[1].scatter(x1, x1, marker = 'o', color = obs_color, label = 'Observed', alpha = alpha)
-        axs[1].scatter(x1, y1, marker = '+', color = ref_model_color, label = ref_model.name.title(), alpha = alpha)
-        # axs[1].scatter(x1, z1, marker = 'x', color = sum_model_color, label = model_label, alpha = alpha)
-        axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Observed', ylabel = 'Expected',)
-        axs[1].set_title("In")
-        axs[1].set_axisbelow(True)
-        axs[1].grid(True)
+    plot_ccdf(axs, g.out_degree(), g.in_degree(), color = dep.obs_color, label = "Full Network")
+    plot_ccdf(axs, gI.out_degree(), gI.in_degree(), color = dep.ref_model_color, label = "Internal")
+    plot_ccdf(axs, model.expected_out_degree(), model.expected_in_degree(), color = dep.sum_model_color, label = "Int. + Reconstructed")
 
-        # set legends
-        leg = axs[0].legend(loc = 'lower right', markerscale=2.,)
-        for lh in leg.legend_handles:
-            lh.set_alpha(1)
+    for i, ax in enumerate(axs):
+        out_in_label = "Out" if i == 0 else "In"
+        ax.set(xlabel = f'{out_in_label}-Degrees on Full Network', ylabel = 'CCDF',)
+        ax.legend()
+        ax.set_axisbelow(True)
+        ax.grid(True)
 
-        leg = axs[1].legend(loc = 'lower right', markerscale=2.,)
-        for lh in leg.legend_handles:
-            lh.set_alpha(1)
+    fig.tight_layout()
 
-        # axs[2].scatter(x2,x2, marker = 'o', color = obs_color, label = 'Observed')
-        # axs[2].scatter(x2,y2, marker = '+', color = ref_model_color, label = ref_model.name)
-        # axs[2].scatter(x2,z2, marker = 'x', color = sum_model_color, label = model_label)
-        # axs[2].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Observed', ylabel = 'Expected')
-        # axs[2].set_ylim(np.min(0.5*x2[x2>0]), 1.2*np.max(x2))
-        # axs[2].set_title("Reciprocated")
-        # axs[2].legend()
-        # axs[2].set_axisbelow(True)
-        # axs[2].grid(True)
+    utils.save_fig(fig, full_path=full_path)
+    plt.close()
 
-        save_fig(fig, full_path)
+def exp_deg_out_in(g, gI, model):
+    """ Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model"""
+    full_path = model.plots_dir + "/deg_annd_cc/exp_deg_out_in.pdf"
 
-        plt.close()
+    fig, axs = plt.subplots(1, 2, figsize = (20,7))
+    axis_scale = 'log' 
+    obs_s, exp_s = 60, 60
+    x, y, z = g._out_degree, gI._out_degree, model._out_degree,
+    axs[0].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = 'Int. + Reconstr.')
+    axs[0].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
+    axs[0].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+
+    x, y, z = g._in_degree, gI._in_degree, model._in_degree,
+    axs[1].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = 'Int. + Reconstr.')
+    axs[1].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
+    axs[1].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+
+    for i, ax in enumerate(axs):
+        ax.set(xscale = axis_scale, yscale = axis_scale,)
+        out_in_label = "Out" if i == 0 else "In"
+        ax.set(xlabel = f'{out_in_label}-Degrees on Full Network', ylabel = f'{out_in_label}-Degrees',)
+        ax.legend()
+        ax.set_axisbelow(True)
+        ax.grid(True)
+        ax.legend(markerscale = 2)
+
+    fig.tight_layout()
+
+    utils.save_fig(fig, full_path=full_path)
+    plt.close()
 
 def set_xylabels(ax, obs_meas, exp_meas, sum_meas, axis_scale = 'log'):
     from matplotlib import ticker
