@@ -132,6 +132,8 @@ class DiGraphEnsemble(GraphEnsemble):
                 unsampled_vI
             )
 
+            print(f'-self._exp_num_edges: {self._exp_num_edges}',)
+
             self._exp_num_edges += num_frozen_edges
 
         return self._exp_num_edges
@@ -427,6 +429,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
         # define the g vars_dir
         g.vars_dir = self.vars_dir_ensembles + f"/samples/graph{graph_idx}"
+        g.graph_idx = graph_idx
         
         # Check if reference graph is available
         if ref_g is not None:
@@ -483,15 +486,6 @@ class DiGraphEnsemble(GraphEnsemble):
         g.adj = sp.csr_array(
             (vals, (rows, cols)), shape=(g.num_vertices, g.num_vertices)
         )
-
-        # calculate num_edges and degrees
-        # g.num_edges()
-        # g.out_degree()
-
-        if ref_g != None:
-            g.ivec = g.pagerank_power(**ref_g._kwargs_pr)
-
-        g.save_vars(name = f"graph{graph_idx}")
 
         return g
 

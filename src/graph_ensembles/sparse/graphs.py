@@ -394,9 +394,6 @@ class Graph(common_functions):
             kwargs_graph.update({'graph_kind': "intra", "intra_size" : intra_size, "vsplit" : vsplit})
             gI = gesp.graphs.DiGraph(vI, eI, **kwargs_graph)
 
-            # compute the page-rank only in the internal part
-            gI.ivec = gI.pagerank_power(**self._kwargs_pr)
-
             del vI, eI
 
         return unsampled_vI, frozen_edges, gI
@@ -736,7 +733,23 @@ class DiGraph(Graph):
         super().__init__(
             v, e, v_id=v_id, src=src, dst=dst, weight=weight, v_group=v_group, **kwargs
         )
+
+    def calculate_measures(self, ref_g, measures):
+        # calculate num_edges and degrees
         
+        it = 0
+        for m in measures:
+            
+            if m.endswith("pr"):
+                self._pr = self.pagerank_power(**ref_g._kwargs_pr)
+            elif m.endswith("degree"):
+                if it == 0:
+                    _ = self.degree()
+            
+            for a in [i for i in measures if "annd" in i]:
+                ddir, ndir = a.split("_")[2:]
+                _ = self.average_nn_degree(ddir=ddir,ndir=ndir,)
+                
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""
         if directed and weighted:
@@ -937,7 +950,8 @@ class DiGraph(Graph):
         to the undirected case.
         """
         # Compute property name
-        name = "av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
+        name = f"_annd_{ddir}_{ndir}"
+        # name = "av_" + ndir.replace("-", "_") + "_nn_d_" + ddir.replace("-", "_")
         if not hasattr(self, name) or recompute or deg_recompute:
             if selfloops is None:
                 selfloops = self.selfloops

@@ -28,7 +28,7 @@ def ccdf_deg_out_in(g, gI, model):
 
     plot_ccdf(axs, g.out_degree(), g.in_degree(), color = dep.obs_color, label = "Full Network")
     plot_ccdf(axs, gI.out_degree(), gI.in_degree(), color = dep.ref_model_color, label = "Internal")
-    plot_ccdf(axs, model.expected_out_degree(), model.expected_in_degree(), color = dep.sum_model_color, label = "Int. + Reconstructed")
+    plot_ccdf(axs, model.expected_out_degree(), model.expected_in_degree(), color = dep.sum_model_color, label = f'Reco. w/ {model.fit_method_title}')
 
     for i, ax in enumerate(axs):
         out_in_label = "Out" if i == 0 else "In"
@@ -42,20 +42,57 @@ def ccdf_deg_out_in(g, gI, model):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
+def annd_vs_deg(g, gI, model, measures):
+    for a in [i for i in measures if "annd" in i]:
+        ddir, ndir = a.split("_")[2:]
+        annd_vs_deg_out_in(g, gI, model, ddir, ndir)
+
+def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
+    
+    meas = f"_annd_{ddir}_{ndir}"
+    deg_meas = f"_{ddir}_degree"
+    full_path = model.plots_dir + f"/deg_annd_cc/{meas[1:]}.pdf"
+
+    fig, axs = plt.subplots(figsize = (20,7))
+    axis_scale = 'log' 
+    obs_s, exp_s = 60, 60
+    deg_x, deg_y, deg_z = g.__dict__[deg_meas], gI.__dict__[deg_meas], model.__dict__[deg_meas]
+    x, y, z = g.__dict__[meas], gI.__dict__[meas], model.__dict__[meas],
+
+    deg_x_on_I, deg_z_on_I = deg_x[gI.idx_intnode_on_full], deg_z[gI.idx_intnode_on_full]
+    x_on_I, z_on_I = x[gI.idx_intnode_on_full], z[gI.idx_intnode_on_full]
+
+    axs.scatter(deg_x_on_I, x_on_I, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs.scatter(deg_y, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
+    axs.scatter(deg_z_on_I, z_on_I, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+
+    ax = axs
+    ax.set(xscale = axis_scale, yscale = axis_scale,)
+    ax.set(xlabel = f'{ddir.title()}-Degrees on Full Network', ylabel = f'Avg.Ne.Ne.Deg. {ddir.title()}-{ndir.title()}',)
+    ax.legend()
+    ax.set_axisbelow(True)
+    ax.grid(True)
+    ax.legend(markerscale = 2)
+
+    fig.tight_layout()
+
+    utils.save_fig(fig, full_path=full_path)
+    plt.close()
+
 def exp_deg_out_in(g, gI, model):
     """ Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model"""
-    full_path = model.plots_dir + "/deg_annd_cc/exp_deg_out_in.pdf"
+    full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.pdf"
 
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
     axis_scale = 'log' 
     obs_s, exp_s = 60, 60
     x, y, z = g._out_degree, gI._out_degree, model._out_degree,
-    axs[0].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = 'Int. + Reconstr.')
+    axs[0].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Reco. w/ {model.fit_method_title}')
     axs[0].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
     axs[0].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
 
     x, y, z = g._in_degree, gI._in_degree, model._in_degree,
-    axs[1].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = 'Int. + Reconstr.')
+    axs[1].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Reco. w/ {model.fit_method_title}')
     axs[1].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
     axs[1].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
 
@@ -231,96 +268,6 @@ def plots_rel_err_n_edges_across_levels(sum_model, model_names, total_levels, ma
 
             plt.close()
 
-def pagerank_on_internal_nodes(g, gI_dirfunc, intra_size, num_vsplits):
-    """
-    Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
-    .) x-axis, there would be the full page rank of the intra nodes.
-    .) y-axis, the page-rank determined on internal connections
-    num_vsplits: integer number of vsplits which are equal to the number of seeds used to select the vI
-    """
-    
-    import math
-    from matplotlib import colormaps as cmaps
-    from matplotlib.colors import to_hex
-    from tqdm import trange
-    import os
-
-    intra_size = [intra_size] if isinstance(intra_size, float) else intra_size
-    ivec_name = g.ivec_name
-    
-    for intra_size in intra_size:
-
-        # check if the folder already exists
-        full_path = g.plots_base_dir + f"/PageRank_on_Intra/intra_size{intra_size}/PR_grid_{num_vsplits}.pdf"
-        if not os.path.exists(full_path):
-
-            # update the parameters for page rank        
-            # p, max_iter, tol, personalize, reverse = kwargs_pr.values()
-
-            # define personlized colors
-            colors = cmaps["viridis"](np.linspace(0,1,num_vsplits))
-
-            # Compute grid size (rows, cols) as close to square as possible
-            n_cols = math.ceil(math.sqrt(num_vsplits))
-            n_rows = math.ceil(num_vsplits / n_cols)
-
-            # define the fig where to store the page-ranks
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(5*n_cols, 5*n_rows), squeeze=False, sharex=True, sharey=True)
-
-            for idx, vsplit in enumerate(trange(num_vsplits, desc="Splitting and Computing the PageRank")):
-                row, col = divmod(idx, n_cols) # returns idx // n_cols, idx % n_cols
-                ax = axes[row, col]
-
-                # # vsplit nodes, edges in interal
-                # vI, eI = g.vsplit_intra_row(v, e, intra_size=intra_size, vsplit=vsplit)
-                
-                # # update the graph name
-                # kwargs_graph.update({'graph_kind': "intra"})
-                # gI = sp.graphs.DiGraph(vI, eI, **kwargs_graph)
-                
-                # # compute the page-rank only in the internal part
-                # pr_gI = pagerank_power(gI.adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
-                # gI_path = gI.vars_dir.replace(f"intra_size{gI.intra_size}", f"intra_size{intra_size}").replace(f"vsplit{gI.vsplit}", f"vsplit{vsplit}")
-                gI_path = gI_dirfunc(intra_size, vsplit)				
-                gI_dict = utils.load_dict(gI_path + "/graph.pkl")
-                pr_gI = gI_dict[ivec_name]
-
-                # select the internal node
-                idx_IntraNode2Full = list(map(lambda x: g.id_dict.get(x), gI_dict["id_dict"]))
-                pr_g_on_I = g.get(ivec_name)[idx_IntraNode2Full]
-
-                # plot the page rank only on the interal nodes
-                _ = ax.plot([pr_g_on_I.min(), pr_g_on_I.max()],
-                            [pr_g_on_I.min(), pr_g_on_I.max()],
-                            'r--')
-                
-                ms, alpha = 30, 0.5
-                _ = ax.scatter(pr_g_on_I, pr_gI, alpha=alpha, label=f"vsplit {vsplit}", c=to_hex(colors[vsplit]), s=ms)
-                _ = ax.set(
-                    xlabel='Full-PR on Intra',
-                    ylabel='Intra PR',
-                    title=f'vsplit {vsplit}'.title(),
-                    xscale='log',
-                    yscale='log'
-                )
-                
-                # don't plot the grid and legend
-                _ = ax.grid(False)
-                leg = ax.legend(fontsize=20)
-                for lh in leg.legend_handles:
-                    lh.set_alpha(1)
-                    lh.set_sizes([60])
-
-            # Hide unused subplots
-            for idx in range(num_vsplits, n_rows * n_cols):
-                row, col = divmod(idx, n_cols)
-                fig.delaxes(axes[row, col])
-
-            fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
-
-            utils.save_fig(fig, full_path=full_path)
-            plt.close()
-
 def _compute_hist2d(x, y, num_bins = 30, axis_scale = "linear"):
     # obtain the 2D density of the pmatrix
     bins = num_bins
@@ -351,29 +298,31 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log"):
     stats = (f'Pears CC = {pears_corr:.3f}\n'
             f'Spear CC = {spear_corr:.3f}')
     bbox = dict(boxstyle='round', fc='whitesmoke', ec='lightgrey', alpha=1)
-    ax.text(0.48, 0.87, stats, fontsize=15, bbox=bbox,
+    ax.text(0.54, 0.89, stats, fontsize=15, bbox=bbox,
             transform=ax.transAxes, horizontalalignment='right')
     # return im
 
-def ivec_on_internal_nodes(model, g, gI, num_bins = 100, num_sampled_graphs = 0):
+def ivec_on_internal_nodes(model, g, gI, num_bins = 100):
     """
     Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
     .) x-axis, there would be the full page rank of the intra nodes.
     .) y-axis, the page-rank determined on internal connections
     num_vsplits: integer number of vsplits which are equal to the number of seeds used to select the vI
     """
-    import os
+    old_font = mpl.rcParams['font.size']
 
-    full_path = model.plots_dir + f"/{g.ivec_name}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
+    mpl.rcParams["font.size"] = 18
+    import os
+    full_path = model.plots_dir + f"/{g._pr_name}_on_intra.pdf"
 
     if True: #not os.path.exists(full_path):
         axis_scale = "log"
         
         fig, axs = plt.subplots(1,2, figsize = (12, 6), sharex=True, sharey=True)
 
-        x = g.ivec_on_I
-        _plot_hist2d(fig, axs[0], x, gI.ivec, num_bins = num_bins, axis_scale = axis_scale)
-        _plot_hist2d(fig, axs[1], x, model.ivec_on_I, num_bins = num_bins, axis_scale = axis_scale)
+        x = g._pr_on_I
+        _plot_hist2d(fig, axs[0], x, gI._pr, num_bins = num_bins, axis_scale = axis_scale)
+        _plot_hist2d(fig, axs[1], x, model._pr_on_I, num_bins = num_bins, axis_scale = axis_scale)
 
         # plot the identity line, no grid, customize the legend, set the lables and scale
         for i, ax in enumerate(axs):
@@ -385,7 +334,7 @@ def ivec_on_internal_nodes(model, g, gI, num_bins = 100, num_sampled_graphs = 0)
                         )
 
             # set title
-            title = "Observed" if i == 0 else "Reconstructed"
+            title = "Observed" if i == 0 else f"Reco. w/ {model.fit_method_title}"
             _ = ax.grid(False)
 
             _ = ax.set(
@@ -400,6 +349,7 @@ def ivec_on_internal_nodes(model, g, gI, num_bins = 100, num_sampled_graphs = 0)
 
         utils.save_fig(fig, full_path=full_path)
         plt.close()
+    mpl.rcParams["font.size"] = old_font
 
 def norm_diffs_per_iteration(plots_dir, diff_norms):
     """
@@ -474,7 +424,7 @@ def _set_alpha(bars, caps, alpha = 0.5):
     [bar.set_alpha(alpha) for bar in bars]
     [cap.set_alpha(alpha) for cap in caps]
 
-def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas = 1):
+def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
     """
     Create 2 plots sharing the same x-axis, which is the ranking position (range(1, N))
     Left) meas computed on the sub-internal graph VS ranking;
@@ -482,38 +432,38 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas 
 
     Insets:
     """
-    full_path = model.plots_dir + f"/ranked_{g.ivec_name}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
+    full_path = model.plots_dir + f"/ranked_{g._pr_name}_on_intra.pdf"
 
     # plot them
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
     axis_scale, msize = 'log', 15
     inset_alpha = 0.3
     inset_zorder_exp = 0
-    title_ivec = g.ivec_name.title()
+    title_ivec = g._pr_name.title()
     
     # x-axis will be just increasing values, i.e. ranking position
-    x = range(1, len(gI.ivec)+1)
+    x = range(1, len(gI._pr)+1)
 
     # scores to assign the ranking
-    g_ivec_desc_on_I = g.ivec_desc_on_I
-    g_rank_on_I = g.rank_on_I
+    g_ivec_desc_on_I = g._pr_desc_on_I
+    g_rank_on_I = g._pr_rank_on_I
     
     # === focus on meas obtained by considering only a portion of the network ===
     # plot the measurements as a function of their rankings in a descending order
-    axs[0].scatter(x, gI.ivec_desc, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
+    axs[0].scatter(x, gI._pr_desc, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
     axs[0].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
     axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_ivec} Values',)
     
-    # plot the reorder gI.ivec with respect to the full-network ranking, i.e. idx_g_ivec_on_I
+    # plot the reorder gI._pr with respect to the full-network ranking, i.e. idx_g_ivec_on_I
     inaxs = inset_ivec_vs_rank(axs[0], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
-    inaxs.scatter(x, gI.ivec[g_rank_on_I], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
+    inaxs.scatter(x, gI._pr[g_rank_on_I], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
-    # plot the reorder model.ivec with respect to the full-network ranking, i.e. idx_g_ivec_on_I
+    # plot the reorder model._pr with respect to the full-network ranking, i.e. idx_g_ivec_on_I
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-    mu, sigma = model.ivec_desc_on_I, model.ivec_std_desc_on_I
+    mu, sigma = model._pr_desc_on_I, model._pr_std_desc_on_I
     axs[1].scatter(x, y = mu, marker = "x", 
-                    color = dep.sum_model_color, label = 'Int. + Reconstr.',)
+                    color = dep.sum_model_color, label = f'Reco. w/ {model.fit_method_title}',)
     axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
                         y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
@@ -526,7 +476,7 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas 
     inaxs = inset_ivec_vs_rank(axs[1], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
 
     # create mu, std arrays and plot scatter + fill between curves
-    mu, sigma = model.ivec_on_I[g_rank_on_I], model.ivec_std_on_I[g_rank_on_I]
+    mu, sigma = model._pr_on_I[g_rank_on_I], model._pr_std_on_I[g_rank_on_I]
     inaxs.scatter(x, y = mu, marker = "x", color = dep.sum_model_color, zorder = inset_zorder_exp)
     inaxs.fill_between(x, y1 = mu + num_sigmas * sigma, y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, alpha = inset_alpha, zorder = inset_zorder_exp)
@@ -542,22 +492,30 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sampled_graphs, num_sigmas 
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_rel_err(g, gI, model, num_sampled_graphs, N = 50):
+def topN_overlap_rel_err(g, gI, model, N = None):
     """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
     
-    full_path = model.plots_dir + f"/topN_{g.ivec_name}_on_intra/num_samples_{int(num_sampled_graphs)}.pdf"
+    full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra.pdf"
+
+    N = gI.num_vertices if N == None else N
+    
+    start, stop, step = 1, N, 25
+    if N > 100:
+        axis_scale = "log"  
+        intervals = np.geomspace(start, stop, step, dtype=int)
+    else: 
+        axis_scale = "linear"
+        intervals = [1] + list(range(step, stop + 1, step)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
 
     if True:
-        step_top_N = 5
-        intervals = [1] + list(range(step_top_N, N + 1, step_top_N)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
         topN_arr = lambda v: [v[:i] for i in intervals]
 
         # observed
-        g_topN_rank = topN_arr(g.rank_on_I)
+        g_topN_rank = topN_arr(g._pr_rank_on_I)
 
         # expected
-        model_topN_rank = topN_arr(model.rank_on_I)
-        gI_topN_rank = topN_arr(gI.rank)
+        model_topN_rank = topN_arr(model._pr_rank_on_I)
+        gI_topN_rank = topN_arr(gI._pr_rank)
 
         # 1. Calculate overlap between g_topN_rank and model_topN_rank
         overlap_perc = lambda r: [np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g_topN_rank, r)]
@@ -565,9 +523,9 @@ def topN_overlap_rel_err(g, gI, model, num_sampled_graphs, N = 50):
         g_gI_overlap = overlap_perc(gI_topN_rank)
 
         # 2. Calculate the total page-rank error
-        g_topN_ivec = topN_arr(g.ivec_on_I)
-        model_topN_ivec = topN_arr(model.ivec_on_I)
-        gI_topN_ivec = topN_arr(gI.ivec)
+        g_topN_ivec = topN_arr(g._pr_on_I)
+        model_topN_ivec = topN_arr(model._pr_on_I)
+        gI_topN_ivec = topN_arr(gI._pr)
 
         topN_rel_err = lambda r: [utils.rel_err_norm(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g_topN_ivec, r)]
 
@@ -575,19 +533,17 @@ def topN_overlap_rel_err(g, gI, model, num_sampled_graphs, N = 50):
         g_gI_rel_err = topN_rel_err(gI_topN_ivec)
 
         fig, axs = plt.subplots(1, 2, figsize = (20,7))
-        axis_scale = 'linear'
+        axis_scale = 'log'
         obs_s, exp_s = 60, 60
         axs[0].scatter(intervals, g_gI_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-        axs[0].scatter(intervals, g_model_overlap, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'{model.name}')
-        axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
+        axs[0].scatter(intervals, g_model_overlap, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Reco. w/ {model.fit_method_title}')
+        axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
 
         axs[1].scatter(intervals, g_gI_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-        axs[1].scatter(intervals, g_model_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'{model.name}')
-        axs[1].set(xscale = axis_scale, yscale = "log", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
+        axs[1].scatter(intervals, g_model_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Reco. w/ {model.fit_method_title}')
+        axs[1].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
 
-        x_ticks = intervals[::3]
         for ax in axs:
-            ax.set_xticks(x_ticks)
             ax.legend()
             ax.grid(False)
 
@@ -631,4 +587,3 @@ def plot_local_fonts(corpkey):
         utils.save_fig(fig, dir_ + "/fonts.pdf")
 
         plt.close()
-        

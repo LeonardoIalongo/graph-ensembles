@@ -70,6 +70,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 if g.intra_size < 1:
                     self.vsplit = g.vsplit
                 self.fit_method = f"num_edges_{g.graph_kind}"
+                self.fit_method_title = self.fit_method.split("_")[-1].title()
 
                 self._create_vars_dir()
             else:
@@ -189,6 +190,23 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         if not (hasattr(self, "num_edges") or hasattr(self, "param")):
             raise ValueError("Either num_edges or param must be set.")
 
+    def delete_ensemble_samples(self, corpkey):
+        if corpkey:
+            import os, shutil
+            samples_folder = self.vars_dir_ensembles + "/samples"
+            if os.path.exists(samples_folder):
+                print(f'===\nDeleting the folder: {samples_folder}\n===\n',)
+                shutil.rmtree(samples_folder)
+    
+    def set_num_vertices_out_in_strengths_to(self, g):
+        """
+        Set some variables to observed graph g
+        """
+        
+        self.num_vertices = g.num_vertices
+        self.prop_out = g.out_strength()
+        self.prop_in = g.in_strength()
+
     def mean_std_sampled_graphs(self, ivec_name, num_sampled_graphs):
         """
         Compute entry-wise running mean for a given meas over sampled graphs.
@@ -198,14 +216,13 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         from os import path
         
         # load it
-        full_path = self.ens_ivec_base_dir + f"/num_samples_{num_sampled_graphs}.csv"
+        full_path = self.vars_dir_ensembles + f"/{ivec_name}/num_samples_{num_sampled_graphs}.csv"
         if path.exists(full_path):
             return np.genfromtxt(full_path) 
 
         # create the meas and save it
         if num_sampled_graphs == 0:
-            if ivec_name == "page_rank":
-                ivec, ivec_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
+            ivec, ivec_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
         else:
             test_ivec = load_dict(self.vars_dir_ensembles + f"/samples/graph0/graph0.pkl")[ivec_name]
             
@@ -219,7 +236,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 ivec, ivec_std = self.recursive_mean_std(i, ivec, ivec_std, gi_val)
 
             # save the mean and std as [[mean],[std]]
-            np.savetxt(full_path, X = np.vstack((ivec, ivec_std)))
+            # np.savetxt(full_path, X = np.vstack((ivec, ivec_std)))
             
         return ivec, ivec_std
 
@@ -268,7 +285,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
             
         return new_mean, new_sem
 
-    def set_ensemble_variables(self, ivec_name = "page_rank", num_samples = 1):
+    def set_ensemble_variables(self, meas_name = ["ivec"], num_samples = 1):
         
         from os import makedirs
         from ...utils import max_sampled_graph_idx
@@ -276,18 +293,15 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         # Create the ensemble of sampled nets
         self.vars_dir_ensembles = self.vars_dir.replace("vars", "vars/ensembles")
         
-        # save norm of differences among two ensemble mean
-        self.ens_ivec_base_dir = self.vars_dir_ensembles + f"/{ivec_name}"
-        makedirs(self.ens_ivec_base_dir, exist_ok = True)
-
         # find the max graph idx in the model.vars_dir and sample the rest
         num_sampled_graphs = max_sampled_graph_idx(self.vars_dir_ensembles + "/samples", num_samples) + 1
         
-        # compute the already mean of meas over the already sampled graphs
-        prev_mean, prev_std = self.mean_std_sampled_graphs(ivec_name, num_sampled_graphs)
-        
+        # save norm of differences among two ensemble mean
+        for m in meas_name:
+            self.__dict__[m], self.__dict__[m+"_std"] = self.mean_std_sampled_graphs(m, num_sampled_graphs)
+            makedirs(self.vars_dir_ensembles + f"/{m}", exist_ok = True)
 
-        return num_sampled_graphs, prev_mean, prev_std
+        return num_sampled_graphs
 
     def load_or_fit(
         self,
@@ -308,7 +322,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
             self.param = np.expand_dims(load_array(path_param), axis = 0) # The code needs np.array([#])
             print(f'-Load the parameter enforcing {self.fit_method} -> param: {self.param}',)
             
-        else: 
+        else:
             print(f'-Fit the parameter with {self.fit_method}',)
             self.fit(
                 x0=x0,

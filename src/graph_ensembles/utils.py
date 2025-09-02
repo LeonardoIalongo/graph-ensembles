@@ -17,11 +17,11 @@ def uu_fun(arr):
     # unique values of arr in order of appearance
     return list(map(int, dict.fromkeys(arr)))
 
-def _set_mpl_params(font = "Times New Roman", fontsize = '23'):
+def _set_mpl_params(font = "DejaVu Serif", fontsize = '23'):
     """
     Set latex if needed and fontsize
     """
-    family = "serif" if font in ["Times New Roman"] else "sans-serif"
+    family = "serif" if font in ["DejaVu Serif"] else "sans-serif"
     plt.rcParams.update({
             "font.family" : family,
             "font.serif": font,
@@ -219,49 +219,72 @@ def max_sampled_graph_idx(dir_, num_samples = None):
         # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
         return -1
 
-def set_ivec_on_I(g, gI):
-    """ 
-    Set the ivec (e.g. page-rank) on the internal nodes.
-    Fills: 
-    1) g.ivec_on_I, gI.ivec
-    2) g.rank_on_I, gI.rank
+def set_ivec_on_I(g, gI, vec_meas=["_pr"]):
     """
-    
-    # prepare the meas over g and gI
-
-    # find the (integer) index of a gI-node, e.g. 1263, with respect to the set of g-nodes classification, e.g. 4
-    # note: idx_intnode_on_full[0] is g-idx of the gI-idx node = 0
-    gI.idx_intnode_on_full = list(map(lambda x: g.id_dict.get(x), gI.id_dict))
-    g.ivec_on_I = g.ivec[gI.idx_intnode_on_full]
-
-    # obtain the idx of ranked (descending) meas
-    inv_argsort = lambda x: np.argsort(x)[::-1]
-    g.rank_on_I = inv_argsort(g.ivec_on_I)
-    gI.rank = inv_argsort(gI.ivec)
-
-    # obtain the descending ivec on I 
-    g.ivec_desc_on_I = g.ivec_on_I[g.rank_on_I]
-    gI.ivec_desc = gI.ivec[gI.rank]
-
-    # save the variables on gI
-    gI.save_vars(name = "graph")
-
-def set_model_ivec_on_I(self, gI):
-    """ 
-    Set the ivec (e.g. page-rank) on the internal nodes.
-    Fills: 
-    1) model.ivec_on_I, model.ivec_std_on_I
-    2) model.rank_on_I
+    Set the ivec (e.g., page-rank, influence vector) on the internal nodes.
+    For each measurement in vec_meas, fills:
+      - g.{meas}_on_I, g.{meas}_rank_on_I, g.{meas}_desc_on_I
+      - gI.{meas}, gI.{meas}_rank, gI.{meas}_desc
     """
+    # Map gI nodes to g nodes
+    gI.idx_intnode_on_full = [g.id_dict.get(node) for node in gI.id_dict]
 
-    self.ivec_on_I = self.ivec[gI.idx_intnode_on_full]
-    self.ivec_std_on_I = self.ivec_std[gI.idx_intnode_on_full]
+    # Helper function for descending sort
+    def argsort_desc(array):
+        """Return indices that would sort the array in descending order."""
+        return np.argsort(array)[::-1]
 
-    # obtain the idx of ranked (descending) meas
-    inv_argsort = lambda x: np.argsort(x)[::-1]
-    self.rank_on_I = inv_argsort(self.ivec_on_I)
-    self.ivec_desc_on_I = self.ivec_on_I[self.rank_on_I]
-    self.ivec_std_desc_on_I = self.ivec_std_on_I[self.rank_on_I]
+    for meas in vec_meas:
+        # Process g attributes
+        g_dict = g.__dict__
+        ivec_on_I = g_dict[meas][gI.idx_intnode_on_full]
+        rank_on_I = argsort_desc(ivec_on_I)
+        desc_on_I = ivec_on_I[rank_on_I]
+
+        g_dict[f"{meas}_on_I"] = ivec_on_I
+        g_dict[f"{meas}_rank_on_I"] = rank_on_I
+        g_dict[f"{meas}_desc_on_I"] = desc_on_I
+
+        # Process gI attributes
+        rank = argsort_desc(gI.__dict__[meas])
+        desc = gI.__dict__[meas][rank]
+
+        gI_dict = gI.__dict__
+        gI_dict[f"{meas}_rank"] = rank
+        gI_dict[f"{meas}_desc"] = desc
+
+    # Save variables for gI
+    # gI.save_vars(name="graph")
+
+def set_model_ivec_on_I(self, gI, vec_meas=["_pr"]):
+    """
+    Set measurement vectors (e.g., page-rank) on internal nodes.
+    For each measurement in vec_meas, fills:
+      - model.{meas}_on_I, model.{meas}_std_on_I
+      - model.{meas}_rank_on_I, model.{meas}_desc_on_I, model.{meas}_std_desc_on_I
+    """
+    mod_dict = self.__dict__
+    idx = gI.idx_intnode_on_full
+    argsort_desc = lambda x: np.argsort(x)[::-1]
+
+    for meas in vec_meas:
+        # Set measurement and std on internal nodes
+        values_on_I = mod_dict[meas][idx]
+        std_on_I = mod_dict[f"{meas}_std"][idx]
+
+        # Rank indices (descending)
+        rank_on_I = argsort_desc(values_on_I)
+
+        # Sorted values and std
+        desc_on_I = values_on_I[rank_on_I]
+        std_desc_on_I = std_on_I[rank_on_I]
+
+        # Assign to object
+        mod_dict[f"{meas}_on_I"] = values_on_I
+        mod_dict[f"{meas}_std_on_I"] = std_on_I
+        mod_dict[f"{meas}_rank_on_I"] = rank_on_I
+        mod_dict[f"{meas}_desc_on_I"] = desc_on_I
+        mod_dict[f"{meas}_std_desc_on_I"] = std_desc_on_I
 
 def signed_rel_err(x, y):
     """ 
