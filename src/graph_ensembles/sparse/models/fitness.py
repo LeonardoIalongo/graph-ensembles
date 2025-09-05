@@ -69,10 +69,6 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 # force attributes wrt intra_size
                 if g.intra_size < 1:
                     self.vsplit = g.vsplit
-                self.fit_method = f"num_edges_{g.graph_kind}"
-                self.fit_method_title = self.fit_method.split("_")[-1].title()
-
-                self._create_vars_dir()
             else:
                 raise ValueError("First argument passed must be a " "DiGraph.")
 
@@ -82,7 +78,10 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         
         elif len(kwargs) > 0:
             self.__dict__.update(kwargs)
-            
+        
+        self.fit_method_title = self.fit_method.split("_")[-1].title()
+
+        self._create_vars_dir()
 
         # Get options from keyword arguments
         # allowed_arguments = [
@@ -119,39 +118,40 @@ class FitnessModel(DiGraphEnsemble, common_functions):
 
             if self.num_vertices <= 0:
                 raise ValueError("Number of vertices must be a positive number.")
-
-        if not hasattr(self, "prop_out"):
-            raise ValueError("prop_out not set.")
-        elif isinstance(self.prop_out, empty_index):
-            raise ValueError("prop_out not set.")
-
-        if not hasattr(self, "prop_in"):
-            raise ValueError("prop_in not set.")
-        elif isinstance(self.prop_in, empty_index):
-            raise ValueError("prop_in not set.")
-
+        
         if not hasattr(self, "selfloops"):
             self.selfloops = False
 
-        # Ensure that fitnesses passed adhere to format (ndarray)
-        msg = "Node out properties must be a numpy array of length " + str(
-            self.num_vertices
-        )
-        assert isinstance(self.prop_out, np.ndarray), msg
-        assert self.prop_out.shape == (self.num_vertices,), msg
+        # if not hasattr(self, "prop_out"):
+        #     raise ValueError("prop_out not set.")
+        # elif isinstance(self.prop_out, empty_index):
+        #     raise ValueError("prop_out not set.")
 
-        msg = "Node in properties must be a numpy array of length " + str(
-            self.num_vertices
-        )
-        assert isinstance(self.prop_in, np.ndarray), msg
-        assert self.prop_in.shape == (self.num_vertices,), msg
+        # if not hasattr(self, "prop_in"):
+        #     raise ValueError("prop_in not set.")
+        # elif isinstance(self.prop_in, empty_index):
+        #     raise ValueError("prop_in not set.")
 
-        # Ensure that fitnesses have positive values only
-        msg = "Node out properties must contain positive values only."
-        assert np.all(self.prop_out >= 0), msg
 
-        msg = "Node in properties must contain positive values only."
-        assert np.all(self.prop_in >= 0), msg
+        # # Ensure that fitnesses passed adhere to format (ndarray)
+        # msg = "Node out properties must be a numpy array of length " + str(
+        #     self.num_vertices
+        # )
+        # assert isinstance(self.prop_out, np.ndarray), msg
+        # assert self.prop_out.shape == (self.num_vertices,), msg
+
+        # msg = "Node in properties must be a numpy array of length " + str(
+        #     self.num_vertices
+        # )
+        # assert isinstance(self.prop_in, np.ndarray), msg
+        # assert self.prop_in.shape == (self.num_vertices,), msg
+
+        # # Ensure that fitnesses have positive values only
+        # msg = "Node out properties must contain positive values only."
+        # assert np.all(self.prop_out >= 0), msg
+
+        # msg = "Node in properties must contain positive values only."
+        # assert np.all(self.prop_in >= 0), msg
 
         # Ensure that number of edges is a positive number
         if hasattr(self, "num_edges"):
@@ -287,7 +287,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
 
     def set_ensemble_variables(self, meas_name = ["ivec"], num_samples = 1):
         
-        from os import makedirs
+        import os
         from ...utils import max_sampled_graph_idx
 
         # Create the ensemble of sampled nets
@@ -299,7 +299,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         # save norm of differences among two ensemble mean
         for m in meas_name:
             self.__dict__[m], self.__dict__[m+"_std"] = self.mean_std_sampled_graphs(m, num_sampled_graphs)
-            makedirs(self.vars_dir_ensembles + f"/{m}", exist_ok = True)
+            os.makedirs(self.vars_dir_ensembles + f"/{m}", exist_ok = True)
 
         return num_sampled_graphs
 
@@ -332,7 +332,8 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 maxiter=maxiter,
                 verbose=verbose,
                 )
-            
+                
+            os.makedirs(os.path.dirname(path_param), exist_ok = True)
             np.savetxt(path_param, self.param, delimiter = ",")
         
 
@@ -467,6 +468,19 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         f_vector, jac_vector = np.sum(f_vector), np.sum(jac_vector)
 
         return f_vector, jac_vector
+
+    @staticmethod
+    def num_edges_fit(num_edges_int, num_edges_bet, fit_method):
+        """Calculate the number of edges to be enforced"""
+        
+        _num_edges_fit = 0
+        if "intra" in fit_method:
+            _num_edges_fit += num_edges_int
+        
+        if "bet" in fit_method:
+            _num_edges_fit += num_edges_bet
+        return _num_edges_fit
+
 
 
     @staticmethod

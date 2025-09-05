@@ -65,7 +65,7 @@ class ScaleInvariantModel(FitnessModel):
 
     @staticmethod
     @njit()  # pragma: no cover
-    def p_ij(d, x_i, y_j, z_ij):
+    def p_ij(d, x_i, y_j, z_ij = 1.0):
         """Compute the probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
             return 0.0

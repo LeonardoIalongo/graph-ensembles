@@ -99,7 +99,7 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
         pdtrans.columns = ["payer_int", "beneficiary_int", 'amount_euro']
 
         # define the diminishing rate of nodes from level to level + 1
-        n_nodes_0 = nodes_from(pdtrans, id_code = 'int').size
+        n_nodes_0 = unique_nodes_from(pdtrans, id_code = 'int').size
         delta_n_clust = 30
         
         # assuming that a network with a number of nodes < lowest_n_nodes (e.g. 10) does not makes sense

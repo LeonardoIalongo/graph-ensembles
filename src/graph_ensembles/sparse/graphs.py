@@ -13,6 +13,7 @@ import os
 from numba import jit
 import warnings
 import networkx as nx
+from .. import utils
 
 class common_functions():
     """ Class to include some common function both for observed Graphs and GraphEnsemble """
@@ -52,7 +53,7 @@ class common_functions():
             self.vars_dir += level_dir
         
         # update it for the model directories, since one has to specify also the fitting method
-        os.makedirs(self.vars_dir, exist_ok = True)
+        # os.makedirs(self.vars_dir, exist_ok = True)
 
         # create plots dir
         self.plots_dir = os.path.dirname(self.vars_dir.replace(f"vars/{self.name}","plots"))
@@ -326,7 +327,7 @@ class Graph(common_functions):
         reverse = kwargs.get('reverse', False)
         return fast_pagerank.pagerank_power(adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
 
-    def vsplit_intra_row(self, v, e, intra_size = 0.7, vsplit = 0, return_row = False):
+    def vsplit_intra_row(self, v, e, intra_size = 0.7, vsplit = 0, fit_method = "intra"):
         """
         Divide the Observed Network into 
         - an intra (frozen) part, whose connections are set as seen; 
@@ -352,21 +353,29 @@ class Graph(common_functions):
         # select the edge ING
         eI = edge_idx(idx_eI)
 
-        if return_row:
-            # select the rest-of-the-world vertex, but including the ones discarded from vI
+        if "bet" in fit_method:
+        
+            # select only the in-between links
             idx_v_row = np.setdiff1d(np.arange(num_nodes), idx_intra_nodes, assume_unique=True)
             vR = v.iloc[idx_v_row].sort_values(by = "id", ignore_index = False)
+        
+            # retain the in-between edges
+            idx_bet = (e['src'].isin(vI['id']) & e['dst'].isin(vR['id'])) | (e['dst'].isin(vI['id']) & e['dst'].isin(vR['id'])) 
 
-            # select the edge ROW
-            eR = edge_idx(~idx_eI)
+            num_edges_bet = np.sum(idx_bet)
+            
+            # select only the in-between edges
+            # eB = edge_idx(idx_bet)
 
-            assert vI.shape[0] + vR.shape[0] == v.shape[0], "Some nodes are not present either in the ING or ROW nodes"
-            assert eI.shape[0] + eR.shape[0] == e.shape[0], "Some edges are not present either in the ING or ROW nodes"
+            # compute the vB nodes
+            # vB = pd.DataFrame(utils.unique_nodes_from(eB, "src", "dst"), columns = ["id"])
 
-            return vI, eI, vR, eR
+            # select only the vB not in vI
+
+            return vI, eI, vR, num_edges_bet
         
         # return these if return_row == False
-        return vI, eI
+        return vI, eI, vI, eI
 
     def _set_frozen_edges_gI(self, intra_size, vsplit, vI, eI, kwargs_graph, ):
         """

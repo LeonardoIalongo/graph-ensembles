@@ -7,7 +7,7 @@ from .. import utils
 
 
 def ccdf_deg_out_in(g, gI, model):
-    full_path = model.plots_dir + "/deg_annd_cc/ccdf_deg_out_in.pdf"
+    full_path = model.plots_dir + "/deg_annd_cc/ccdf_deg_out_in.png"
 
     def _ccdf_vs_deg(deg):
         def normalized_ccdf(arr):
@@ -51,7 +51,7 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
     
     meas = f"_annd_{ddir}_{ndir}"
     deg_meas = f"_{ddir}_degree"
-    full_path = model.plots_dir + f"/deg_annd_cc/{meas[1:]}.pdf"
+    full_path = model.plots_dir + f"/deg_annd_cc/{meas[1:]}.png"
 
     fig, axs = plt.subplots(figsize = (20,7))
     axis_scale = 'log' 
@@ -81,7 +81,7 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
 
 def exp_deg_out_in(g, gI, model):
     """ Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model"""
-    full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.pdf"
+    full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.png"
 
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
     axis_scale = 'log' 
@@ -124,7 +124,7 @@ def set_xylabels(ax, obs_meas, exp_meas, sum_meas, axis_scale = 'log'):
 
 def annd_IO(net, ref_model, sum_model):
     """Plot the annd in-in, out-out, in-out, out-in"""
-    full_path = sum_model.plots_dir + f"/bin_meas_vs_deg/level{net.level}/annd.pdf"
+    full_path = sum_model.plots_dir + f"/bin_meas_vs_deg/level{net.level}/annd.png"
 
     model_label = "Summed" if sum_model.name.startswith("sum-") else "Fractioned"
 
@@ -211,7 +211,7 @@ def plots_rel_err_n_edges_across_levels(sum_model, model_names, total_levels, ma
     quantity_title = quantity_name[:len("_across_levels")+1] + f"_top_level_{sum_model.top_level}"
     if stripes_level != None:
         quantity_title += f"_stripes_{stripes_level}"
-    full_path = sum_model.plots_dir_multi_models + f"/{quantity_title}.pdf"
+    full_path = sum_model.plots_dir_multi_models + f"/{quantity_title}.png"
 
     if not os.path.exists(full_path):
         from utils import fc_title
@@ -313,7 +313,7 @@ def ivec_on_internal_nodes(model, g, gI, num_bins = 100):
 
     mpl.rcParams["font.size"] = 18
     import os
-    full_path = model.plots_dir + f"/{g._pr_name}_on_intra.pdf"
+    full_path = model.plots_dir + f"/{g._pr_name}_on_intra.png"
 
     if True: #not os.path.exists(full_path):
         axis_scale = "log"
@@ -368,7 +368,7 @@ def norm_diffs_per_iteration(plots_dir, diff_norms):
     ax.set_axisbelow(True)
     ax.grid(False)
 
-    full_path = plots_dir + "/diff_norms.pdf"
+    full_path = plots_dir + "/diff_norms.png"
     utils.save_fig(fig, full_path)
     plt.close()
 
@@ -432,7 +432,7 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
 
     Insets:
     """
-    full_path = model.plots_dir + f"/ranked_{g._pr_name}_on_intra.pdf"
+    full_path = model.plots_dir + f"/ranked_{g._pr_name}_on_intra.png"
 
     # plot them
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
@@ -495,7 +495,7 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
 def topN_overlap_rel_err(g, gI, model, N = None):
     """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
     
-    full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra.pdf"
+    full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra.png"
 
     N = gI.num_vertices if N == None else N
     
@@ -559,7 +559,7 @@ def plot_local_fonts(corpkey):
     import os
 
     dir_ = "outputs"
-    not_exists = True if corpkey else not os.path.exists(dir_ + "/fonts.pdf")
+    not_exists = True if corpkey else not os.path.exists(dir_ + "/fonts.png")
     if  not_exists:
 
         os.makedirs(dir_, exist_ok = True)
@@ -584,6 +584,6 @@ def plot_local_fonts(corpkey):
         # Adjust layout
         plt.tight_layout()
 
-        utils.save_fig(fig, dir_ + "/fonts.pdf")
+        utils.save_fig(fig, dir_ + "/fonts.png")
 
         plt.close()

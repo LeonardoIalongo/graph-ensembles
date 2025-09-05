@@ -411,7 +411,7 @@ class DiGraphEnsemble(GraphEnsemble):
         If a reference graph is passed (ref_g) then the properties of the graph
         will be copied to the new samples.
         """
-        from os import makedirs
+        import os
         
         if not hasattr(self, "param"):
             raise Exception("Ensemble has to be fitted before sampling.")
@@ -480,7 +480,7 @@ class DiGraphEnsemble(GraphEnsemble):
         else:
             raise ValueError("Weights method not recognised or implemented.")
 
-        makedirs(g.vars_dir, exist_ok = True) 
+        # os.makedirs(g.vars_dir, exist_ok = True) 
 
         # Convert to adjacency matrix
         g.adj = sp.csr_array(
@@ -745,7 +745,7 @@ class DiGraphEnsemble(GraphEnsemble):
         return rows, cols
     
     @staticmethod
-    @njit(parallel=True)
+    # @njit(parallel=True)
     def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI):
         """Compute the objective function of the num_edges solver and its
         derivative.
@@ -778,7 +778,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
                     # Accumulate results efficiently in scalars
                     f_i += p_val
-
+                
             # Store per-node results
             f_vector[i] = f_i
 

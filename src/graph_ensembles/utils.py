@@ -28,20 +28,12 @@ def _set_mpl_params(font = "DejaVu Serif", fontsize = '23'):
             "font.size" : fontsize
         })
 
-def nodes_from(pdf, id_code = None, level = 0):
+def unique_nodes_from(pdf, src_name, dst_name):
     """
     Get the nodes of the pdf
     """
-    if id_code is None:
-        id_code = pdf.columns[0].split("_")[-1]
-    
-    col0_name = f'payer_{id_code}'
-    col1_name = f'beneficiary_{id_code}'
-    if level > 0:
-        col0_name = f'payer_{id_code}_{level}'
-        col1_name = f'beneficiary_{id_code}_{level}'
-
-    return np.unique(pdf.loc[:, [col0_name, col1_name]].to_numpy().ravel('K'))
+    pdf = pdf.loc[:, [src_name, dst_name]]
+    return np.unique(pdf.to_numpy().ravel('K'))
 
 def string_replace(s, replace_dict):
     """ Replace all the replace_dict keys with values.
@@ -140,13 +132,13 @@ def full_path_retriever(ref_model, level = None, name = None, str_dimXBC = None,
     return replace_path
 
 # Plot Binary Measures
-def save_fig(fig, full_path = None, save = True):
+def save_fig(fig, full_path = None, save = True, dpi = 300):
     if save:
         import os
         dir_ = os.path.dirname(full_path)
         os.makedirs(dir_, exist_ok = True)
         
-        fig.savefig(full_path, bbox_inches="tight")
+        fig.savefig(full_path, dpi = dpi, bbox_inches="tight")
 
 def save_dict(full_path, dict_, save = True):
     """
