@@ -62,9 +62,9 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
     deg_x_on_I, deg_z_on_I = deg_x[gI.idx_intnode_on_full], deg_z[gI.idx_intnode_on_full]
     x_on_I, z_on_I = x[gI.idx_intnode_on_full], z[gI.idx_intnode_on_full]
 
-    axs.scatter(deg_x_on_I, x_on_I, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs.scatter(deg_z_on_I, z_on_I, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
     axs.scatter(deg_y, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
-    axs.scatter(deg_z_on_I, z_on_I, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+    axs.scatter(deg_x_on_I, x_on_I, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
 
     ax = axs
     ax.set(xscale = axis_scale, yscale = axis_scale,)
@@ -293,12 +293,12 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log"):
     
     # plot also the pearson and spearman correlation coefficients
     from scipy import stats	
-    pears_corr = stats.pearsonr(x, y)[0]
+    # pears_corr = stats.pearsonr(x, y)[0]
     spear_corr = stats.spearmanr(x, y)[0]
-    stats = (f'Pears CC = {pears_corr:.3f}\n'
-            f'Spear CC = {spear_corr:.3f}')
+    # stats = (f'Pears CC = {pears_corr:.3f}\n'
+    stats = (f'Spear CC = {spear_corr:.3f}')
     bbox = dict(boxstyle='round', fc='whitesmoke', ec='lightgrey', alpha=1)
-    ax.text(0.54, 0.89, stats, fontsize=15, bbox=bbox,
+    ax.text(0.54, 0.93, stats, fontsize=15, bbox=bbox,
             transform=ax.transAxes, horizontalalignment='right')
     # return im
 

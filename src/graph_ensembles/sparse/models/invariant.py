@@ -6,6 +6,7 @@ from math import isinf
 from math import log
 from math import expm1
 from math import exp
+from numba import njit, prange
 
 
 class ScaleInvariantModel(FitnessModel):
@@ -105,6 +106,131 @@ class ScaleInvariantModel(FitnessModel):
             return -np.inf
         else:
             return -tmp
+
+    @staticmethod
+    @njit()
+    def num_edges_jac_i(fun, jac, d, x_i, y_j, z_ij = 1.0):
+        """Compute the probability of connection and the jacobian
+        contribution of node i and j.
+        """
+        tmp = x_i * y_j * z_ij
+        tmp1 = d[0] * tmp
+        
+        # vars are immutable so return the updated value
+        # print(f'-p_iI: {- np.expm1(-tmp1)}',)
+        return fun - np.expm1(-tmp1).sum(), jac + (tmp * np.exp(-tmp1)).sum()
+        
+
+    @staticmethod
+    @njit(parallel=True)
+    def exp_edges_f_jac(num_edges_jac_i, param, prop_out_I, prop_in_I, prop_out_R, prop_in_R, prop_dyad, selfloops, fit_method):
+
+        N = len(prop_out_I)
+
+        # Preallocate result vectors for each outer loop iteration (i)
+        # These arrays store intermediate totals per i, which can be summed later
+        f_vector = np.zeros(N)
+        jac_vector = np.zeros(N)
+
+        # Outer loop is parallelized with prange
+        # This is the correct and efficient use of numba's parallelism
+        for i in prange(N):
+            
+            # Use scalar accumulators for better memory efficiency and cache usage
+            f_i = 0.0
+            jac_i = 0.0
+            
+            prop_out_i, prop_in_i = prop_out_I[i], prop_in_I[i]
+            
+            if "intra" in fit_method:
+                # print(f'\n-i: {i}',)
+                f_i, jac_i = num_edges_jac_i(f_i, jac_i, param, prop_out_i, prop_in_I)
+                # print(f'-f_i: {f_i}',)
+                f_i, jac_i = num_edges_jac_i(f_i, jac_i, param, prop_out_I, prop_in_i)
+
+                f_i /= 2
+                jac_i /= 2
+                # print(f'-f_i: {f_i}',)
+
+            if "bet" in fit_method:
+                # print(f'-bet',)
+                f_i, jac_i = num_edges_jac_i(f_i, jac_i, param, prop_out_i, prop_in_R)
+                f_i, jac_i = num_edges_jac_i(f_i, jac_i, param, prop_out_R, prop_in_i)
+
+            # Store per-node results
+            f_vector[i] = f_i
+            jac_vector[i] = jac_i
+            # print(f'-f_vector: {f_vector}',)
+
+        # Sum across all nodes to get final result (parallel reduction is fast for large n)
+        f_vector, jac_vector = np.sum(f_vector), np.sum(jac_vector)
+
+        if "intra" in fit_method and not selfloops:
+            # discard self-loops
+            # print(f'-\n SelfLoops',)
+            f_vector, jac_vector = num_edges_jac_i(-f_vector, -jac_vector, param, prop_out_I, prop_in_I)
+            
+            f_vector *= -1
+            jac_vector *= -1
+
+        return f_vector, jac_vector
+
+    @staticmethod
+    @njit()
+    def num_edges_i(fun, d, x_i, y_j, z_ij = 1.0):
+        """Compute the probability of connection and the jacobian
+        contribution of node i and j.
+        """
+        tmp = x_i * y_j * z_ij
+        tmp1 = d[0] * tmp
+        
+        # vars are immutable so return the updated value
+        # print(f'-p_iI: {- np.expm1(-tmp1)}',)
+        return fun - np.expm1(-tmp1).sum()
+
+    @staticmethod
+    @njit(parallel=True)
+    def exp_edges(num_edges_i, param, prop_out_I, prop_in_I, prop_out_R, prop_in_R, prop_dyad, selfloops, fit_method):
+
+        N = len(prop_out_I)
+
+        # Preallocate result vectors for each outer loop iteration (i)
+        # These arrays store intermediate totals per i, which can be summed later
+        f_vector = np.zeros(N)
+
+        # Outer loop is parallelized with prange
+        # This is the correct and efficient use of numba's parallelism
+        for i in prange(N):
+            
+            # Use scalar accumulators for better memory efficiency and cache usage
+            f_i = 0.0
+            
+            prop_out_i, prop_in_i = prop_out_I[i], prop_in_I[i]
+            
+            if "intra" in fit_method:
+                # print(f'\n-i: {i}',)
+                f_i = num_edges_i(f_i, param, prop_out_i, prop_in_I)
+                # print(f'-f_i: {f_i}',)
+                f_i = num_edges_i(f_i, param, prop_out_I, prop_in_i)
+
+                f_i /= 2
+                # print(f'-f_i: {f_i}',)
+
+            if "bet" in fit_method:
+                # print(f'-bet',)
+                f_i = num_edges_i(f_i, param, prop_out_i, prop_in_R)
+                f_i = num_edges_i(f_i, param, prop_out_R, prop_in_i)
+
+            # Store per-node results
+            f_vector[i] = f_i
+
+        # Sum across all nodes to get final result (parallel reduction is fast for large n)
+        f_vector = np.sum(f_vector)
+
+        if "intra" in fit_method and not selfloops:
+            f_vector = -num_edges_i(-f_vector, param, prop_out_I, prop_in_I)
+            
+        return f_vector
 
 
 class MultiInvariantModel(MultiFitnessModel):

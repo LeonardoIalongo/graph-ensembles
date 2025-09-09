@@ -79,7 +79,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         elif len(kwargs) > 0:
             self.__dict__.update(kwargs)
         
-        self.fit_method_title = self.fit_method.split("_")[-1].title()
+        self.fit_method_title = self.fit_method[len("num_edges_"):].title()
 
         self._create_vars_dir()
 
@@ -416,12 +416,15 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         for a given value of delta.
         """
         f, jac = self.exp_edges_f_jac(
-            self.p_jac_ij,
+            self.num_edges_jac_i,
             delta,
-            self.prop_out,
-            self.prop_in,
+            self.prop_out_I,
+            self.prop_in_I,
+            self.prop_out_R,
+            self.prop_in_R,
             self.prop_dyad,
             self.selfloops,
+            self.fit_method,
         )
         
         return f, jac
@@ -429,7 +432,8 @@ class FitnessModel(DiGraphEnsemble, common_functions):
     @staticmethod
     @njit(parallel=True)
     def exp_edges_f_jac(p_jac_ij, param, prop_out, prop_in, prop_dyad, selfloops):
-        """Compute the objective function of the num_edges solver and its
+        """
+        Compute the objective function of the num_edges solver and its
         derivative.
         """
         N = len(prop_out)

@@ -132,13 +132,13 @@ def full_path_retriever(ref_model, level = None, name = None, str_dimXBC = None,
     return replace_path
 
 # Plot Binary Measures
-def save_fig(fig, full_path = None, save = True, dpi = 300):
+def save_fig(fig, full_path = None, save = True, dpi = 100):
     if save:
         import os
         dir_ = os.path.dirname(full_path)
         os.makedirs(dir_, exist_ok = True)
         
-        fig.savefig(full_path, dpi = dpi, bbox_inches="tight")
+        fig.savefig(full_path, dpi = dpi, bbox_inches="tight", format = full_path[-3:])
 
 def save_dict(full_path, dict_, save = True):
     """
@@ -248,14 +248,14 @@ def set_ivec_on_I(g, gI, vec_meas=["_pr"]):
     # Save variables for gI
     # gI.save_vars(name="graph")
 
-def set_model_ivec_on_I(self, gI, vec_meas=["_pr"]):
+def set_model_ivec_on_I(model, gI, vec_meas=["_pr"]):
     """
     Set measurement vectors (e.g., page-rank) on internal nodes.
     For each measurement in vec_meas, fills:
       - model.{meas}_on_I, model.{meas}_std_on_I
       - model.{meas}_rank_on_I, model.{meas}_desc_on_I, model.{meas}_std_desc_on_I
     """
-    mod_dict = self.__dict__
+    mod_dict = model.__dict__
     idx = gI.idx_intnode_on_full
     argsort_desc = lambda x: np.argsort(x)[::-1]
 
@@ -271,9 +271,11 @@ def set_model_ivec_on_I(self, gI, vec_meas=["_pr"]):
         desc_on_I = values_on_I[rank_on_I]
         std_desc_on_I = std_on_I[rank_on_I]
 
-        # Assign to object
+        # Assign to model
         mod_dict[f"{meas}_on_I"] = values_on_I
         mod_dict[f"{meas}_std_on_I"] = std_on_I
+
+        # create new variables for vec_meas ranked from top to bottom
         mod_dict[f"{meas}_rank_on_I"] = rank_on_I
         mod_dict[f"{meas}_desc_on_I"] = desc_on_I
         mod_dict[f"{meas}_std_desc_on_I"] = std_desc_on_I

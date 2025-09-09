@@ -112,7 +112,7 @@ class DiGraphEnsemble(GraphEnsemble):
     def __init__(self, *args, **kwargs):
         self.prop_out = empty_index()
         self.prop_in = empty_index()
-        
+    
     def expected_num_edges(self, recompute=False, unsampled_vI = None, num_frozen_edges = 0):
         """Compute the expected number of edges."""
         if not hasattr(self, "param"):
@@ -745,7 +745,7 @@ class DiGraphEnsemble(GraphEnsemble):
         return rows, cols
     
     @staticmethod
-    # @njit(parallel=True)
+    @njit(parallel=True)
     def exp_edges(p_ij, param, prop_out, prop_in, prop_dyad, selfloops, unsampled_vI):
         """Compute the objective function of the num_edges solver and its
         derivative.

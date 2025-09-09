@@ -327,7 +327,7 @@ class Graph(common_functions):
         reverse = kwargs.get('reverse', False)
         return fast_pagerank.pagerank_power(adj, p=p, max_iter=max_iter, tol=tol, personalize=personalize, reverse=reverse)
 
-    def vsplit_intra_row(self, v, e, intra_size = 0.7, vsplit = 0, fit_method = "intra"):
+    def vsplit_intra(self, v, e, intra_size = 0.7, vsplit = 0):
         """
         Divide the Observed Network into 
         - an intra (frozen) part, whose connections are set as seen; 
@@ -352,6 +352,13 @@ class Graph(common_functions):
 
         # select the edge ING
         eI = edge_idx(idx_eI)
+        
+        # return these if return_row == False
+        return vI, eI, idx_intra_nodes
+
+    def vsplit_row(self, v, vI, e, idx_intra_nodes, fit_method):
+
+        num_nodes = len(v)
 
         if "bet" in fit_method:
         
@@ -372,10 +379,7 @@ class Graph(common_functions):
 
             # select only the vB not in vI
 
-            return vI, eI, vR, num_edges_bet
-        
-        # return these if return_row == False
-        return vI, eI, vI, eI
+            return vR, num_edges_bet
 
     def _set_frozen_edges_gI(self, intra_size, vsplit, vI, eI, kwargs_graph, ):
         """
@@ -896,6 +900,13 @@ class DiGraph(Graph):
             ).tocsr()
 
         return self._in_strength_by_group
+
+    def rescale_ivec_with(self, model, ivec_name = "_pr"):
+        meas = ivec_name
+        mod_dict = model.__dict__
+        scaler = np.sum(mod_dict[f"{meas}_on_I"])
+        self.__dict__[f"{meas}"] *= scaler
+        self.__dict__[f"{meas}_desc"] *= scaler
 
     def average_nn_property(
         self, prop, ndir="out", selfloops=False, deg_recompute=False
