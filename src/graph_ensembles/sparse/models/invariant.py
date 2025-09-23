@@ -45,6 +45,93 @@ class ScaleInvariantModel(FitnessModel):
         """
         super().__init__(*args, **kwargs)
 
+    # @staticmethod
+    # def initialize_model(g, gI, vR, kwargs, num_edges_bet = None, ):
+
+    #     fit_method = kwargs["fit_method"]
+
+    #     if kwargs["intra_size"] == 1:
+    #         model = sp.ScaleInvariantModel(g, **kwargs)
+
+    #     else:
+    #         vR_nodes = vR.T.values[0]
+    #         out_stre = lambda i: g.out_strength()[g.id_dict[i]]
+    #         in_stre = lambda i: g.in_strength()[g.id_dict[i]]
+    #         cmap = lambda stre, nodes: np.array(list(map(stre, nodes)))
+    #         kwargs.update({
+    #                         "prop_out_R" : cmap(out_stre, vR_nodes), "prop_in_R" : cmap(in_stre, vR_nodes), 
+    #                         "prop_out_I" : gI.out_strength(), "prop_in_I" : gI.in_strength(),
+    #                         "num_vertices" : len(g.num_vertices) if "bet" in fit_method else len(gI.num_vertices),
+    #                         "num_edges" : sp.ScaleInvariantModel.num_edges_fit(gI.num_edges(), num_edges_bet, fit_method),
+    #                         "level" : g.level, "intra_size" : gI.intra_size, "vsplit" : gI.vsplit,
+    #                         })
+    #         model = sp.ScaleInvariantModel(**kwargs)
+
+    #     return model
+    @staticmethod
+    def initialize_model(g, gI, vR, kwargs, num_edges_bet=None):
+        """
+        Initialize the ScaleInvariantModel based on the provided graph data.
+
+        Parameters:
+        -----------
+        g : DiGraph
+            The full graph.
+        gI : DiGraph
+            The internal graph (subset of g).
+        vR : DataFrame
+            External nodes (ROW nodes).
+        kwargs : dict
+            Additional parameters for the model.
+        num_edges_bet : int, optional
+            Number of edges between internal and external nodes.
+
+        Returns:
+        --------
+        ScaleInvariantModel
+            The initialized model.
+        """
+        # Extract the fit method from kwargs
+        fit_method = kwargs.get("fit_method", None)
+        if fit_method is None:
+            raise ValueError("The 'fit_method' parameter is required in kwargs.")
+
+        # If intra_size is 1, initialize the model directly with the full graph
+        if kwargs.get("intra_size", 0) == 1:
+            model = ScaleInvariantModel(g, **kwargs)
+        else:
+
+            # if only "intra" in fit_method
+            kwargs.update({
+                            "prop_out_I": gI.out_strength(),
+                            "prop_in_I": gI.in_strength(),
+                            "num_vertices": gI.num_vertices,
+                            "level": g.level,
+                            "intra_size": gI.intra_size,
+                            "vsplit": gI.vsplit,
+                            })
+            
+            # if there is also "inbetween" update the prop_R, num_vertices and num_edges
+            if "bet" in fit_method:
+
+                # Extract ROW nodes and calculate strengths
+                vR_nodes = vR.T.values[0]
+                out_stre = lambda i: g.out_strength()[g.id_dict[i]]
+                in_stre = lambda i: g.in_strength()[g.id_dict[i]]
+                cmap = lambda stre, nodes: np.array(list(map(stre, nodes)))
+
+                # Update kwargs with calculated properties
+                kwargs.update({
+                    "prop_out_R": cmap(out_stre, vR_nodes),
+                    "prop_in_R": cmap(in_stre, vR_nodes),
+                    "num_vertices": g.num_vertices,
+                    })
+
+            # Initialize the model with the updated kwargs
+            model = ScaleInvariantModel(**kwargs)
+
+        return model
+
     @staticmethod
     @njit()
     def p_jac_ij(d, x_i, y_j, z_ij):
@@ -231,6 +318,32 @@ class ScaleInvariantModel(FitnessModel):
             f_vector = -num_edges_i(-f_vector, param, prop_out_I, prop_in_I)
             
         return f_vector
+
+    def expected_num_edges(self, recompute=False, unsampled_vI = None, num_frozen_edges = 0):
+        """Compute the expected number of edges."""
+        if not hasattr(self, "param"):
+            raise Exception("Model must be fitted beforehand.")
+
+        if not hasattr(self, "_exp_num_edges") or recompute:
+
+            unsampled_vI = np.zeros(self.num_vertices, dtype=np.bool_) if unsampled_vI is None else unsampled_vI
+
+            self._exp_num_edges = self.exp_edges(
+                                                self.num_edges_i,
+                                                self.param,
+                                                self.prop_out_I,
+                                                self.prop_in_I,
+                                                self.prop_out_R,
+                                                self.prop_in_R,
+                                                self.prop_dyad,
+                                                self.selfloops,
+                                                self.fit_method,
+            )
+
+
+            self._exp_num_edges += num_frozen_edges
+
+        return self._exp_num_edges
 
 
 class MultiInvariantModel(MultiFitnessModel):

@@ -26,13 +26,13 @@ def ccdf_deg_out_in(g, gI, model):
 
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
 
-    plot_ccdf(axs, g.out_degree(), g.in_degree(), color = dep.obs_color, label = "Full Network")
-    plot_ccdf(axs, gI.out_degree(), gI.in_degree(), color = dep.ref_model_color, label = "Internal")
-    plot_ccdf(axs, model.expected_out_degree(), model.expected_in_degree(), color = dep.sum_model_color, label = f'Reco. w/ {model.fit_method_title}')
+    plot_ccdf(axs, g.out_degree(), g.in_degree(), lw = 9, color = dep.obs_color, label = "Full Network")
+    # plot_ccdf(axs, gI.out_degree(), gI.in_degree(), lw = 7, color = dep.ref_model_color, label = "Internal")
+    plot_ccdf(axs, model.expected_out_degree(),  model.expected_in_degree(), lw = 5, color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}')
 
     for i, ax in enumerate(axs):
         out_in_label = "Out" if i == 0 else "In"
-        ax.set(xlabel = f'{out_in_label}-Degrees on Full Network', ylabel = 'CCDF',)
+        ax.set(xlabel = f'{out_in_label}-Degrees', ylabel = 'CCDF',)
         ax.legend()
         ax.set_axisbelow(True)
         ax.grid(True)
@@ -48,27 +48,41 @@ def annd_vs_deg(g, gI, model, measures):
         annd_vs_deg_out_in(g, gI, model, ddir, ndir)
 
 def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
-    
+
+    num_sigmas = model.num_sigmas
+    num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
+
     meas = f"_annd_{ddir}_{ndir}"
     deg_meas = f"_{ddir}_degree"
     full_path = model.plots_dir + f"/deg_annd_cc/{meas[1:]}.png"
 
     fig, axs = plt.subplots(figsize = (20,7))
     axis_scale = 'log' 
-    obs_s, exp_s = 60, 60
-    deg_x, deg_y, deg_z = g.__dict__[deg_meas], gI.__dict__[deg_meas], model.__dict__[deg_meas]
-    x, y, z = g.__dict__[meas], gI.__dict__[meas], model.__dict__[meas],
+    obs_s, exp_s = 30, 30
+    alpha = 0.4
+    bar_alpha = 0.2
 
-    deg_x_on_I, deg_z_on_I = deg_x[gI.idx_intnode_on_full], deg_z[gI.idx_intnode_on_full]
-    x_on_I, z_on_I = x[gI.idx_intnode_on_full], z[gI.idx_intnode_on_full]
+    # import the degree (x-axis) and the annd (y-axis)
+    deg_x, deg_y, deg_z, deg_z_std = g.__dict__[deg_meas], gI.__dict__[deg_meas], model.__dict__[deg_meas], model.__dict__[deg_meas+"_std"] 
+    x, y, z, z_std = g.__dict__[meas], gI.__dict__[meas], model.__dict__[meas], model.__dict__[meas+"_std"] 
 
-    axs.scatter(deg_z_on_I, z_on_I, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
-    axs.scatter(deg_y, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
-    axs.scatter(deg_x_on_I, x_on_I, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+    # filter deg and annd with respect to the internal nodes
+    proj_on_I = lambda x: x[gI.idx_intnode_on_full]
+    deg_x, deg_z, deg_z_std = proj_on_I(deg_x), proj_on_I(deg_z), proj_on_I(deg_z_std)
+    x, z, z_std = proj_on_I(x), proj_on_I(z), proj_on_I(z_std)
+
+    _, bars, caps = axs.errorbar(
+        x = deg_z, xerr = num_sigmas * deg_z_std, y = z, yerr = num_sigmas * z_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5, alpha = alpha, ms = np.sqrt(exp_s), mec = "k")
+    _set_alpha(bars, caps, alpha = bar_alpha)
+    
+    # axs.scatter(deg_z, z, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs.scatter(deg_x, x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network', alpha = alpha)
+    axs.scatter(deg_y, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s, label = 'Internal', alpha = alpha, ec = "k")
 
     ax = axs
     ax.set(xscale = axis_scale, yscale = axis_scale,)
-    ax.set(xlabel = f'{ddir.title()}-Degrees on Full Network', ylabel = f'Avg.Ne.Ne.Deg. {ddir.title()}-{ndir.title()}',)
+    ax.set(xlabel = f'{ddir.title()}-Degrees', ylabel = f'Avg.Ne.Ne.Deg. {ddir.title()}-{ndir.title()}',)
     ax.legend()
     ax.set_axisbelow(True)
     ax.grid(True)
@@ -80,35 +94,109 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
     plt.close()
 
 def exp_deg_out_in(g, gI, model):
-    """ Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model"""
+    """Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model."""
     full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.png"
 
-    fig, axs = plt.subplots(1, 2, figsize = (20,7))
-    axis_scale = 'log' 
-    obs_s, exp_s = 60, 60
-    x, y, z = g._out_degree, gI._out_degree, model._out_degree,
-    axs[0].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Reco. w/ {model.fit_method_title}')
-    axs[0].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
-    axs[0].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+    fig, axs = plt.subplots(1, 2, figsize=(20, 7))
+    axis_scale = 'log'
+    obs_s, exp_s = 30, 30
+    alpha = 0.4
+    bar_alpha = 0.2
+    
+    num_sigmas = model.num_sigmas
+    num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
 
-    x, y, z = g._in_degree, gI._in_degree, model._in_degree,
-    axs[1].scatter(x,z, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Reco. w/ {model.fit_method_title}')
-    axs[1].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
-    axs[1].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+    # import the out-degree with error bars
+    x, y, mu, sigma = g._out_degree, gI._out_degree, model._out_degree, model._out_degree_std
+
+    # project the ground truth and expected values on I
+    proj_on_I = lambda x: x[gI.idx_intnode_on_full]
+    x, mu, sigma = proj_on_I(x), proj_on_I(mu), proj_on_I(sigma)
+
+    _, bars, caps = axs[0].errorbar(
+        x, mu, yerr=num_sigmas * sigma, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5, ms = np.sqrt(exp_s), mec = "k", alpha = alpha
+    )
+    _set_alpha(bars, caps, alpha = bar_alpha)
+
+    axs[0].scatter(x, x, marker=dep.obs_marker, color=dep.obs_color, s=obs_s, label='Full Network')
+    axs[0].scatter(x, y, marker=dep.ref_model_marker, color=dep.ref_model_color, s=exp_s, label='Internal', ec = "k", alpha = alpha)
+
+    # Plot the in-degree with error bars
+    x, y, mu, sigma = g._in_degree, gI._in_degree, model._in_degree, model._in_degree_std
+    x, mu, sigma = proj_on_I(x), proj_on_I(mu), proj_on_I(sigma)
+
+    _, bars, caps = axs[1].errorbar(
+        x, mu, yerr=num_sigmas * sigma, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+        ms = np.sqrt(exp_s), mec = "k", alpha = alpha)
+    _set_alpha(bars, caps, alpha = bar_alpha)
+
+    axs[1].scatter(x, x, marker=dep.obs_marker, color=dep.obs_color, s=obs_s, label='Full Network')
+    axs[1].scatter(x, y, marker=dep.ref_model_marker, color=dep.ref_model_color, s=exp_s, label='Internal', ec = "k", alpha = alpha)
 
     for i, ax in enumerate(axs):
-        ax.set(xscale = axis_scale, yscale = axis_scale,)
+        ax.set(xscale=axis_scale, yscale=axis_scale)
         out_in_label = "Out" if i == 0 else "In"
-        ax.set(xlabel = f'{out_in_label}-Degrees on Full Network', ylabel = f'{out_in_label}-Degrees',)
+        ax.set(xlabel=f'{out_in_label}-Degrees', ylabel=f'{out_in_label}-Degrees')
         ax.legend()
         ax.set_axisbelow(True)
         ax.grid(True)
-        ax.legend(markerscale = 2)
+        ax.legend(markerscale=2)
 
     fig.tight_layout()
 
     utils.save_fig(fig, full_path=full_path)
     plt.close()
+
+# def exp_deg_out_in(g, gI, model):
+#     """ Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model"""
+#     full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.png"
+
+#     fig, axs = plt.subplots(1, 2, figsize = (20,7))
+#     axis_scale = 'log' 
+#     obs_s, exp_s = 60, 60
+#     inset_alpha = 0.3
+#     num_sigmas = model.num_sigmas
+#     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
+
+#     # plot the out degree with errorbars
+#     x, y, mu, sigma = g._out_degree, gI._out_degree, model._out_degree, model._out_degree_std
+#     axs[0].scatter(x,mu, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+#     axs[0].fill_between(x, y1 = mu + num_sigmas * sigma,
+#                         y2 = mu - num_sigmas * sigma, 
+#                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
+#                         alpha = inset_alpha)
+    
+#     # observed out-degree
+#     axs[0].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
+#     axs[0].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+
+#     # plot the in degree with errorbars
+#     x, y, mu, sigma = g._in_degree, gI._in_degree, model._in_degree, model._in_degree_std
+#     axs[1].scatter(x,mu, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+#     axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
+#                         y2 = mu - num_sigmas * sigma, 
+#                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
+#                         alpha = inset_alpha)
+    
+#     # observed in-degree
+#     axs[1].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
+#     axs[1].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
+
+#     for i, ax in enumerate(axs):
+#         ax.set(xscale = axis_scale, yscale = axis_scale,)
+#         out_in_label = "Out" if i == 0 else "In"
+#         ax.set(xlabel = f'{out_in_label}-Degrees', ylabel = f'{out_in_label}-Degrees',)
+#         ax.legend()
+#         ax.set_axisbelow(True)
+#         ax.grid(True)
+#         ax.legend(markerscale = 2)
+
+#     fig.tight_layout()
+
+#     utils.save_fig(fig, full_path=full_path)
+#     plt.close()
 
 def set_xylabels(ax, obs_meas, exp_meas, sum_meas, axis_scale = 'log'):
     from matplotlib import ticker
@@ -334,7 +422,7 @@ def ivec_on_internal_nodes(model, g, gI, num_bins = 100):
                         )
 
             # set title
-            title = "Observed" if i == 0 else f"Reco. w/ {model.fit_method_title}"
+            title = "Observed" if i == 0 else f"Rec. w/ {model.fit_method_title}"
             _ = ax.grid(False)
 
             _ = ax.set(
@@ -424,7 +512,7 @@ def _set_alpha(bars, caps, alpha = 0.5):
     [bar.set_alpha(alpha) for bar in bars]
     [cap.set_alpha(alpha) for cap in caps]
 
-def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
+def ivec_on_internal_nodes_vs_rank(model, g, gI):
     """
     Create 2 plots sharing the same x-axis, which is the ranking position (range(1, N))
     Left) meas computed on the sub-internal graph VS ranking;
@@ -439,6 +527,8 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
     axis_scale, msize = 'log', 15
     inset_alpha = 0.3
     inset_zorder_exp = 0
+    num_sigmas = model.num_sigmas
+    num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
     title_ivec = g._pr_name.title()
     
     # x-axis will be just increasing values, i.e. ranking position
@@ -460,10 +550,9 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
     # plot the reorder model._pr with respect to the full-network ranking, i.e. idx_g_ivec_on_I
-    num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
     mu, sigma = model._pr_desc_on_I, model._pr_std_desc_on_I
     axs[1].scatter(x, y = mu, marker = "x", 
-                    color = dep.sum_model_color, label = f'Reco. w/ {model.fit_method_title}',)
+                    color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}',)
     axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
                         y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
@@ -492,10 +581,49 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI, num_sigmas = 1):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_rel_err(g, gI, model, N = None):
+def topN_overlap_rel_err(gI, model, N = None):
     """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
     
-    full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra.png"
+    full_path = model.plots_dir + f"/topN_{gI._pr_name}_on_intra.png"
+    num_sigmas = model.num_sigmas
+    num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
+    intervals = gI._intervals
+
+    fig, axs = plt.subplots(1, 2, figsize = (20,7))
+    axis_scale = 'log'
+    obs_s, exp_s = 60, 60
+    axs[0].scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    _, bars, caps = axs[0].errorbar(
+        x = intervals, y = model._topN_overlap, yerr = num_sigmas * model._topN_overlap_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+    )
+    _set_alpha(bars, caps, alpha = 0.5)
+    
+    axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
+
+    axs[1].scatter(intervals, gI._topN_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    _, bars, caps = axs[1].errorbar(
+        x = intervals, y = model._topN_rel_err, yerr = num_sigmas * model._topN_rel_err_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+    )
+    _set_alpha(bars, caps, alpha = 0.5)
+
+    # axs[1].scatter(intervals, model._topN_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[1].set(xscale = axis_scale, yscale = "log", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
+
+    for ax in axs:
+        ax.legend()
+        ax.grid(False)
+
+    fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
+    utils.save_fig(fig, full_path=full_path)
+    plt.close()
+
+def topN_overlap_rel_err_not_ensemble(g, gI, model, N = None):
+    """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
+    
+    full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra_not_ensemble.png"
 
     N = gI.num_vertices if N == None else N
     
@@ -536,11 +664,11 @@ def topN_overlap_rel_err(g, gI, model, N = None):
         axis_scale = 'log'
         obs_s, exp_s = 60, 60
         axs[0].scatter(intervals, g_gI_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-        axs[0].scatter(intervals, g_model_overlap, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Reco. w/ {model.fit_method_title}')
+        axs[0].scatter(intervals, g_model_overlap, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
         axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
 
         axs[1].scatter(intervals, g_gI_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-        axs[1].scatter(intervals, g_model_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Reco. w/ {model.fit_method_title}')
+        axs[1].scatter(intervals, g_model_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
         axs[1].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
 
         for ax in axs:

@@ -236,7 +236,8 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 ivec, ivec_std = self.recursive_mean_std(i, ivec, ivec_std, gi_val)
 
             # save the mean and std as [[mean],[std]]
-            # np.savetxt(full_path, X = np.vstack((ivec, ivec_std)))
+            if not self.corpkey:
+                np.savetxt(full_path, X = np.vstack((ivec, ivec_std)))
             
         return ivec, ivec_std
 
@@ -257,32 +258,31 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         - ens_mean (np.ndarray): Updated mean values.
         - ens_std (np.ndarray): Updated standard deviation values.
         """
+        
+
         # Update mean
         N = i + 1
         
-        # if i = 0, ens_mean = [0, 0, ...] updates while the std stays zero
+        if N == 1:
+            return new_meas, np.zeros_like(new_meas)
+            
         delta = new_meas - ens_mean
         new_mean = ens_mean + delta / N  # using += that is in-place and changes also the outer ens_mean
 
         # --- Update Standard Error of the Mean (SEM) ---
         # Just s^2_N <--> N * sem^2_N, in the formulas above
         # sem^2_N = (N-2) * (N-1) * sem_{N-1} + (x_N - bar(x)_N) * (x_N - bar(x)_{N-1}) / [(N-1) * N]
-        if N > 1:
-            sem_old_squared = ens_std**2
-            s_old_squared = sem_old_squared * (N - 1)
-            
-            new_delta = new_meas - new_mean
-            
-            # Calculate the new sample variance
-            s_new_squared = ((N - 2) * s_old_squared + delta * new_delta) / (N - 1)
-            
-            # Calculate the new SEM from the new sample variance
-            # SEM_new = sqrt(s_new^2 / N)
-            new_sem = np.sqrt(s_new_squared / N)
-        else:
-            # SEM is 0 for a single data point.
-            new_sem = np.zeros_like(new_mean)
-            
+        sem_old_squared = ens_std**2
+        s_old_squared = sem_old_squared * (N - 1)
+        
+        new_delta = new_meas - new_mean
+        
+        # Calculate the new sample variance
+        s_new_squared = ((N - 2) * s_old_squared + delta * new_delta) / (N - 1)
+        
+        # Divide by N, for the sem of the mean
+        new_sem = np.sqrt(s_new_squared / N)
+    
         return new_mean, new_sem
 
     def set_ensemble_variables(self, meas_name = ["ivec"], num_samples = 1):

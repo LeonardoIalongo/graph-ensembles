@@ -17,6 +17,43 @@ from .. import utils
 
 class common_functions():
     """ Class to include some common function both for observed Graphs and GraphEnsemble """
+    def set_ivec_on_I(self, gI, vec_meas=["_pr"]):
+        """
+            Set the ivec (e.g., page-rank, influence vector) on the internal nodes.
+            For each measurement in vec_meas, fills:
+            - g.{meas}_on_I, g.{meas}_rank_on_I, g.{meas}_desc_on_I
+            - gI.{meas}, gI.{meas}_rank, gI.{meas}_desc
+        """
+        # Helper function for descending sort
+        def argsort_desc(array):
+            """Return indices that would sort the array in descending order."""
+            return np.argsort(array)[::-1]
+
+        if not hasattr(gI, "idx_intnode_on_full"):
+            gI.idx_intnode_on_full = [self.id_dict.get(node) for node in gI.id_dict]
+
+        for meas in vec_meas:
+            # Process g attributes
+            g_dict = self.__dict__
+            ivec_on_I = g_dict[meas][gI.idx_intnode_on_full]
+            rank_on_I = argsort_desc(ivec_on_I)
+            desc_on_I = ivec_on_I[rank_on_I]
+
+            g_dict[f"{meas}_on_I"] = ivec_on_I
+            g_dict[f"{meas}_rank_on_I"] = rank_on_I
+            g_dict[f"{meas}_desc_on_I"] = desc_on_I
+
+            # Process gI attributes
+            if not hasattr(gI, f"{meas}_rank"):
+                rank = argsort_desc(gI.__dict__[meas])
+                desc = gI.__dict__[meas][rank]
+
+                gI_dict = gI.__dict__
+                gI_dict[f"{meas}_rank"] = rank
+                gI_dict[f"{meas}_desc"] = desc
+
+        # Save variables for gI
+        # gI.save_vars(name="graph")
     
     def _create_vars_dir(self):
         """
@@ -53,15 +90,11 @@ class common_functions():
             self.vars_dir += level_dir
         
         # update it for the model directories, since one has to specify also the fitting method
-        # os.makedirs(self.vars_dir, exist_ok = True)
+        if not self.corpkey:
+            os.makedirs(self.vars_dir, exist_ok = True)
 
         # create plots dir
         self.plots_dir = os.path.dirname(self.vars_dir.replace(f"vars/{self.name}","plots"))
-        # if self.corpkey:
-        #     self.plots_dir = base_dir + "/plots"
-
-        # else:
-        #     self.plots_base_dir = base_dir + "/plots"
 
     
     def load_or_create_degrees(self):
@@ -356,9 +389,10 @@ class Graph(common_functions):
         # return these if return_row == False
         return vI, eI, idx_intra_nodes
 
-    def vsplit_row(self, v, vI, e, idx_intra_nodes, fit_method):
+    def vsplit_row(self, v, vI, e, idx_intra_nodes, intra_num_edges, fit_method):
 
         num_nodes = len(v)
+        vR, num_edges_bet = None, 0
 
         if "bet" in fit_method:
         
@@ -370,16 +404,10 @@ class Graph(common_functions):
             idx_bet = (e['src'].isin(vI['id']) & e['dst'].isin(vR['id'])) | (e['dst'].isin(vI['id']) & e['dst'].isin(vR['id'])) 
 
             num_edges_bet = np.sum(idx_bet)
-            
-            # select only the in-between edges
-            # eB = edge_idx(idx_bet)
 
-            # compute the vB nodes
-            # vB = pd.DataFrame(utils.unique_nodes_from(eB, "src", "dst"), columns = ["id"])
+        num_edges = gesp.ScaleInvariantModel.num_edges_fit(intra_num_edges, num_edges_bet, fit_method)
 
-            # select only the vB not in vI
-
-            return vR, num_edges_bet
+        return vR, num_edges
 
     def _set_frozen_edges_gI(self, intra_size, vsplit, vI, eI, kwargs_graph, ):
         """
@@ -408,6 +436,8 @@ class Graph(common_functions):
             gI = gesp.graphs.DiGraph(vI, eI, **kwargs_graph)
 
             del vI, eI
+        else:
+            gI = self
 
         return unsampled_vI, frozen_edges, gI
         
@@ -747,13 +777,31 @@ class DiGraph(Graph):
             v, e, v_id=v_id, src=src, dst=dst, weight=weight, v_group=v_group, **kwargs
         )
 
+    def vsplit_intra_and_calculate_measures(self, v, e, intra_size, vsplit, kwargs_graph, measures):
+
+        # split the intra vsplit
+        vI, eI, idx_intra_nodes = self.vsplit_intra(v, e, intra_size=intra_size, vsplit=vsplit)
+        
+        # mask unsampled_vI for fast sampling, frozen edges (integer eI)
+        unsampled_vI, frozen_edges, gI = self._set_frozen_edges_gI(intra_size, vsplit, vI, eI, kwargs_graph)
+
+        # compute the page-rank only in the internal part
+        # set the page rank on g, gI
+        gI.calculate_measures(self, measures)
+        self.calculate_measures(self, measures)
+        self.set_ivec_on_I(gI)
+        gI.set_intervals_on_pr()
+        gI.topN_overlap_rel_err(self)
+
+        return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges
+
     def calculate_measures(self, ref_g, measures):
         # calculate num_edges and degrees
         
         it = 0
         for m in measures:
             
-            if m.endswith("pr"):
+            if m.endswith("pr") and not hasattr(self, "_pr"):
                 self._pr = self.pagerank_power(**ref_g._kwargs_pr)
             elif m.endswith("degree"):
                 if it == 0:
@@ -762,6 +810,62 @@ class DiGraph(Graph):
             for a in [i for i in measures if "annd" in i]:
                 ddir, ndir = a.split("_")[2:]
                 _ = self.average_nn_degree(ddir=ddir,ndir=ndir,)
+
+    def set_intervals_on_pr(self):
+        """ Based on the gI._pr, set the intervals """
+        # find the indexes of descending ordering of gI._pr 
+        # these are the correct intervals, since nodes with the same ranking provides misleading overlap
+        _, counts = np.unique(self._pr, return_counts=True)   # _ = [1,2,3], counts = [1,2,3]
+        N = len(counts)
+        
+        start, stop, step = 1, N, 25
+        if N > 100:
+            spacing = np.geomspace(start, stop, step, dtype=int)
+            spacing = np.unique(spacing)
+        else:
+            spacing = [1] + list(range(step, stop + 1, step)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
+
+        self._intervals = np.cumsum(counts[::-1])[spacing]        # intervals = [1,3,6]
+
+    def topN_overlap_rel_err(self, g, gI = None):
+        """ 
+        Calculate the Overlap of self measures with respect to the ground truth g
+        """
+        # if gI == None: gI = self
+
+        # N = g._pr_on_I.size 
+        
+        # start, stop, step = 1, N, 25
+        # if N > 100:
+        #     self._intervals = np.geomspace(start, stop, step, dtype=int)
+        #     self._intervals = np.unique(self._intervals)
+        # else: 
+        #     self._intervals = [1] + list(range(step, stop + 1, step)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
+
+        topN_arr = lambda v: [v[:i] for i in gI._intervals]
+
+        if not hasattr(g,"_topN_nodes"):
+            g._topN_nodes = topN_arr(g._pr_rank_on_I)
+            g._topN_ivec = topN_arr(g._pr_on_I)
+
+        # observed (this should be done outside the sampling loop)
+        if self.graph_kind.endswith("sampled"):
+            # if self = gs
+            _pr_rank = self._pr_rank_on_I
+            _pr = self._pr_rank_on_I
+        else:
+            # if self = gI
+            _pr_rank = self._pr_rank
+            _pr = self._pr
+
+        self._topN_nodes = topN_arr(_pr_rank)
+        self._topN_ivec = topN_arr(_pr)
+
+        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
+        self._topN_overlap = overlap_perc(self._topN_nodes)
+
+        topN_rel_err = lambda r: np.array([utils.rel_err_norm(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
+        self._topN_rel_err = topN_rel_err(self._topN_ivec)
                 
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""
@@ -901,10 +1005,14 @@ class DiGraph(Graph):
 
         return self._in_strength_by_group
 
-    def rescale_ivec_with(self, model, ivec_name = "_pr"):
+    def rescale_ivec_with(self, model, scaler = False, ivec_name = "_pr"):
         meas = ivec_name
         mod_dict = model.__dict__
-        scaler = np.sum(mod_dict[f"{meas}_on_I"])
+        if scaler == False:
+            scaler = 1
+        else:
+            print('-Rescaling the Internal Page-Rank',)
+            scaler = np.sum(mod_dict[f"{meas}_on_I"])
         self.__dict__[f"{meas}"] *= scaler
         self.__dict__[f"{meas}_desc"] *= scaler
 

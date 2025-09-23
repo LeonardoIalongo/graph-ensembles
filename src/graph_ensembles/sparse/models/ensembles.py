@@ -372,7 +372,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
         return like
 
-    def send_variables_to_gpu(self, arr, device = "cuda:0"):
+    def send_variables_to_gpu(self, unsampled_vI, device = "cuda:0"):
         """Send the arrays to one GPU for efficient calculations"""
         dtype = tc.float32
         from_numpy_to_dev = lambda arr: tc.from_numpy(arr).to(device, dtype = dtype) 
@@ -380,7 +380,11 @@ class DiGraphEnsemble(GraphEnsemble):
         self.prop_out = from_numpy_to_dev(self.prop_out)
         self.prop_in = from_numpy_to_dev(self.prop_in)
         self.selfloops = tc.tensor(self.selfloops).to(device, dtype = tc.bool)
-        return tc.from_numpy(arr).to(device, dtype = tc.bool)
+
+        if unsampled_vI is None:
+            return tc.zeros_like(self.prop_out, dtype=tc.bool)
+
+        return tc.from_numpy(unsampled_vI).to(device, dtype = tc.bool)
 
     def send_variables_to_cpu(self, arr):
         """Send the arrays to one CPUS for efficient calculations"""
@@ -426,6 +430,7 @@ class DiGraphEnsemble(GraphEnsemble):
         g.num_vertices = self.num_vertices
         num_bytes = g.get_num_bytes(g.num_vertices)
         g.id_dtype = np.dtype("u" + str(num_bytes))
+        g.graph_kind = "sampled"
 
         # define the g vars_dir
         g.vars_dir = self.vars_dir_ensembles + f"/samples/graph{graph_idx}"
@@ -480,7 +485,8 @@ class DiGraphEnsemble(GraphEnsemble):
         else:
             raise ValueError("Weights method not recognised or implemented.")
 
-        # os.makedirs(g.vars_dir, exist_ok = True) 
+        if not self.corpkey:
+            os.makedirs(g.vars_dir, exist_ok = True) 
 
         # Convert to adjacency matrix
         g.adj = sp.csr_array(
@@ -552,10 +558,10 @@ class DiGraphEnsemble(GraphEnsemble):
         all_cols = []
 
         # Seed once at the beginning
-        if device.type == 'cuda':
-            tc.cuda.manual_seed(seed)
-        else:
-            tc.manual_seed(seed)
+        # if device.type == 'cuda':
+        #     tc.cuda.manual_seed(seed)
+        # else:
+        #     tc.manual_seed(seed)
 
         # Process in chunks to avoid memory issues
         for start in range(0, N, chunk_row_size):
@@ -578,7 +584,6 @@ class DiGraphEnsemble(GraphEnsemble):
                 param,
                 x_i_chunk.view(-1, 1), # Shape: [chunk_size, 1]
                 prop_in.view(1, -1),   # Shape: [1, N]
-                # z_ij
             )
             
             # 2. Apply masks directly to the probability matrix

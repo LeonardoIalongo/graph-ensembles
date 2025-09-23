@@ -211,43 +211,6 @@ def max_sampled_graph_idx(dir_, num_samples = None):
         # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
         return -1
 
-def set_ivec_on_I(g, gI, vec_meas=["_pr"]):
-    """
-    Set the ivec (e.g., page-rank, influence vector) on the internal nodes.
-    For each measurement in vec_meas, fills:
-      - g.{meas}_on_I, g.{meas}_rank_on_I, g.{meas}_desc_on_I
-      - gI.{meas}, gI.{meas}_rank, gI.{meas}_desc
-    """
-    # Map gI nodes to g nodes
-    gI.idx_intnode_on_full = [g.id_dict.get(node) for node in gI.id_dict]
-
-    # Helper function for descending sort
-    def argsort_desc(array):
-        """Return indices that would sort the array in descending order."""
-        return np.argsort(array)[::-1]
-
-    for meas in vec_meas:
-        # Process g attributes
-        g_dict = g.__dict__
-        ivec_on_I = g_dict[meas][gI.idx_intnode_on_full]
-        rank_on_I = argsort_desc(ivec_on_I)
-        desc_on_I = ivec_on_I[rank_on_I]
-
-        g_dict[f"{meas}_on_I"] = ivec_on_I
-        g_dict[f"{meas}_rank_on_I"] = rank_on_I
-        g_dict[f"{meas}_desc_on_I"] = desc_on_I
-
-        # Process gI attributes
-        rank = argsort_desc(gI.__dict__[meas])
-        desc = gI.__dict__[meas][rank]
-
-        gI_dict = gI.__dict__
-        gI_dict[f"{meas}_rank"] = rank
-        gI_dict[f"{meas}_desc"] = desc
-
-    # Save variables for gI
-    # gI.save_vars(name="graph")
-
 def set_model_ivec_on_I(model, gI, vec_meas=["_pr"]):
     """
     Set measurement vectors (e.g., page-rank) on internal nodes.
