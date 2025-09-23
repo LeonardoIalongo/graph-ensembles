@@ -790,9 +790,9 @@ class DiGraph(Graph):
         gI.calculate_measures(self, measures)
         self.calculate_measures(self, measures)
         self.set_ivec_on_I(gI)
-        gI.set_intervals_on_pr()
+        gI.set_intervals(unique_ivec=False)
         gI.topN_overlap_rel_err(self)
-
+        
         return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges
 
     def calculate_measures(self, ref_g, measures):
@@ -811,36 +811,48 @@ class DiGraph(Graph):
                 ddir, ndir = a.split("_")[2:]
                 _ = self.average_nn_degree(ddir=ddir,ndir=ndir,)
 
-    def set_intervals_on_pr(self):
-        """ Based on the gI._pr, set the intervals """
+    def set_intervals(self, unique_ivec = False):
+        """ 
+        Define the intervals that will slice the topN_nodes and topN_ivec.
+        Note: the slicing will be done as arr[:i] in topN_overlap_rel_err
+        """
         # find the indexes of descending ordering of gI._pr 
         # these are the correct intervals, since nodes with the same ranking provides misleading overlap
-        _, counts = np.unique(self._pr, return_counts=True)   # _ = [1,2,3], counts = [1,2,3]
-        N = len(counts)
-        
-        start, stop, step = 1, N, 25
-        if N > 100:
-            spacing = np.geomspace(start, stop, step, dtype=int)
-            spacing = np.unique(spacing)
-        else:
-            spacing = [1] + list(range(step, stop + 1, step)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
+        # def create_spacing(stop, num = 50): # old num=25
+        #     start = 1
+        #     if stop > 100:
+        #         spacing = np.geomspace(start, stop, num, endpoint=True, dtype=int)
+        #         print(f'-spacing: \n {spacing}',)
+        #         spacing = np.unique(spacing)
+        #     else:
+        #         spacing = np.linspace(start, stop, num, endpoint=True, dtype=int)
+        #     return spacing
+        def create_spacing(stop, num = 50):
+            if stop > 100:
+                spacing = np.zeros(shape = num, dtype = int)
+                spacing[1:] = np.geomspace(1, stop-1, num-1, endpoint=True, dtype=int)
+                print(f'-spacing, 2: \n {spacing}',)
+                spacing = np.unique(spacing)
+            else:
+                spacing = np.linspace(start = 0, stop = stop-1, num = num, endpoint = True, dtype = int)
+            return spacing
 
-        self._intervals = np.cumsum(counts[::-1])[spacing]        # intervals = [1,3,6]
+        if unique_ivec:
+            _, counts = np.unique(self._pr, return_counts=True)   # _ = [1,2,3], counts = [1,2,3]
+            spacing = create_spacing(stop = len(counts))
+            spacing = np.cumsum(counts[::-1])[spacing]        # intervals = [1,3,6]
+        else:
+            N = self._pr.size
+            spacing = create_spacing(stop = N) #+ 1
+
+        self._intervals = spacing
 
     def topN_overlap_rel_err(self, g, gI = None):
         """ 
         Calculate the Overlap of self measures with respect to the ground truth g
         """
-        # if gI == None: gI = self
-
-        # N = g._pr_on_I.size 
         
-        # start, stop, step = 1, N, 25
-        # if N > 100:
-        #     self._intervals = np.geomspace(start, stop, step, dtype=int)
-        #     self._intervals = np.unique(self._intervals)
-        # else: 
-        #     self._intervals = [1] + list(range(step, stop + 1, step)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
+        if gI == None: gI = self
 
         topN_arr = lambda v: [v[:i] for i in gI._intervals]
 
@@ -850,11 +862,11 @@ class DiGraph(Graph):
 
         # observed (this should be done outside the sampling loop)
         if self.graph_kind.endswith("sampled"):
-            # if self = gs
+            # if self == gs
             _pr_rank = self._pr_rank_on_I
             _pr = self._pr_rank_on_I
         else:
-            # if self = gI
+            # if self == gI
             _pr_rank = self._pr_rank
             _pr = self._pr
 
@@ -1011,8 +1023,9 @@ class DiGraph(Graph):
         if scaler == False:
             scaler = 1
         else:
-            print('-Rescaling the Internal Page-Rank',)
             scaler = np.sum(mod_dict[f"{meas}_on_I"])
+        
+        # multiply by it since scaler isin [0,1]
         self.__dict__[f"{meas}"] *= scaler
         self.__dict__[f"{meas}_desc"] *= scaler
 
