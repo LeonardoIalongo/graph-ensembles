@@ -72,7 +72,6 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
     elif dataset_nyd.startswith("ING"):
 
         # select the last two digis of the year
-        last_digits = str(year)[2:]
         full_path = lambda dataset_folder: f"{dataset_folder}/{xgrid_time_xtrans_time}/pdtrans_no_rotw_gridSelfLoops_52559299_{id_code}.csv"
         
         # decide whether to go for COREALGOS directory or LOCAL one based on the corpkey finding

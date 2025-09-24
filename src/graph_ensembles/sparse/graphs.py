@@ -790,8 +790,8 @@ class DiGraph(Graph):
         gI.calculate_measures(self, measures)
         self.calculate_measures(self, measures)
         self.set_ivec_on_I(gI)
-        gI.set_intervals(unique_ivec=False)
-        gI.topN_overlap_rel_err(self)
+        gI.set_intervals(unique_counting=True)
+        gI.topN_overlap_rel_err(self, force_calc=True)
         
         return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges
 
@@ -811,43 +811,32 @@ class DiGraph(Graph):
                 ddir, ndir = a.split("_")[2:]
                 _ = self.average_nn_degree(ddir=ddir,ndir=ndir,)
 
-    def set_intervals(self, unique_ivec = False):
+    def set_intervals(self, unique_counting = False):
         """ 
         Define the intervals that will slice the topN_nodes and topN_ivec.
         Note: the slicing will be done as arr[:i] in topN_overlap_rel_err
         """
-        # find the indexes of descending ordering of gI._pr 
-        # these are the correct intervals, since nodes with the same ranking provides misleading overlap
-        # def create_spacing(stop, num = 50): # old num=25
-        #     start = 1
-        #     if stop > 100:
-        #         spacing = np.geomspace(start, stop, num, endpoint=True, dtype=int)
-        #         print(f'-spacing: \n {spacing}',)
-        #         spacing = np.unique(spacing)
-        #     else:
-        #         spacing = np.linspace(start, stop, num, endpoint=True, dtype=int)
-        #     return spacing
+
         def create_spacing(stop, num = 50):
             if stop > 100:
                 spacing = np.zeros(shape = num, dtype = int)
                 spacing[1:] = np.geomspace(1, stop-1, num-1, endpoint=True, dtype=int)
-                print(f'-spacing, 2: \n {spacing}',)
                 spacing = np.unique(spacing)
             else:
                 spacing = np.linspace(start = 0, stop = stop-1, num = num, endpoint = True, dtype = int)
             return spacing
 
-        if unique_ivec:
+        if unique_counting:
             _, counts = np.unique(self._pr, return_counts=True)   # _ = [1,2,3], counts = [1,2,3]
             spacing = create_spacing(stop = len(counts))
             spacing = np.cumsum(counts[::-1])[spacing]        # intervals = [1,3,6]
         else:
             N = self._pr.size
-            spacing = create_spacing(stop = N) #+ 1
+            spacing = create_spacing(stop = N) + 1
 
         self._intervals = spacing
 
-    def topN_overlap_rel_err(self, g, gI = None):
+    def topN_overlap_rel_err(self, g, gI = None, force_calc = False):
         """ 
         Calculate the Overlap of self measures with respect to the ground truth g
         """
@@ -856,7 +845,7 @@ class DiGraph(Graph):
 
         topN_arr = lambda v: [v[:i] for i in gI._intervals]
 
-        if not hasattr(g,"_topN_nodes"):
+        if not hasattr(g,"_topN_nodes") or force_calc:
             g._topN_nodes = topN_arr(g._pr_rank_on_I)
             g._topN_ivec = topN_arr(g._pr_on_I)
 
@@ -876,8 +865,8 @@ class DiGraph(Graph):
         overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
         self._topN_overlap = overlap_perc(self._topN_nodes)
 
-        topN_rel_err = lambda r: np.array([utils.rel_err_norm(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
-        self._topN_rel_err = topN_rel_err(self._topN_ivec)
+        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
+        self._topN_tot_rel_err = topN_rel_err(self._topN_ivec)
                 
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""

@@ -222,26 +222,31 @@ def set_model_ivec_on_I(model, gI, vec_meas=["_pr"]):
     idx = gI.idx_intnode_on_full
     argsort_desc = lambda x: np.argsort(x)[::-1]
 
-    for meas in vec_meas:
-        # Set measurement and std on internal nodes
-        values_on_I = mod_dict[meas][idx]
-        std_on_I = mod_dict[f"{meas}_std"][idx]
+    if not hasattr(model, "_pr_on_I"):
+        for meas in vec_meas:
+            # Set measurement and std on internal nodes
+            values_on_I = mod_dict[meas][idx]
+            std_on_I = mod_dict[f"{meas}_std"][idx]
 
-        # Rank indices (descending)
-        rank_on_I = argsort_desc(values_on_I)
+            # Rank indices (descending)
+            rank_on_I = argsort_desc(values_on_I)
 
-        # Sorted values and std
-        desc_on_I = values_on_I[rank_on_I]
-        std_desc_on_I = std_on_I[rank_on_I]
+            # Sorted values and std
+            desc_on_I = values_on_I[rank_on_I]
+            std_desc_on_I = std_on_I[rank_on_I]
 
-        # Assign to model
-        mod_dict[f"{meas}_on_I"] = values_on_I
-        mod_dict[f"{meas}_std_on_I"] = std_on_I
+            # Assign to model
+            mod_dict[f"{meas}_on_I"] = values_on_I
+            mod_dict[f"{meas}_std_on_I"] = std_on_I
 
-        # create new variables for vec_meas ranked from top to bottom
-        mod_dict[f"{meas}_rank_on_I"] = rank_on_I
-        mod_dict[f"{meas}_desc_on_I"] = desc_on_I
-        mod_dict[f"{meas}_std_desc_on_I"] = std_desc_on_I
+            # create new variables for vec_meas ranked from top to bottom
+            mod_dict[f"{meas}_rank_on_I"] = rank_on_I
+            mod_dict[f"{meas}_desc_on_I"] = desc_on_I
+            mod_dict[f"{meas}_std_desc_on_I"] = std_desc_on_I
+
+def tot_rel_err(x, y, ord = 1):
+
+    return np.linalg.norm(signed_rel_err(x, y), ord = ord)
 
 def signed_rel_err(x, y):
     """ 

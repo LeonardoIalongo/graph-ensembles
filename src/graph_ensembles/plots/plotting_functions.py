@@ -7,7 +7,7 @@ from .. import utils
 
 
 def ccdf_deg_out_in(g, gI, model):
-    full_path = model.plots_dir + "/deg_annd_cc/ccdf_deg_out_in.png"
+    full_path = model.plots_dir + "/ccdf_deg_out_in.png"
 
     def _ccdf_vs_deg(deg):
         def normalized_ccdf(arr):
@@ -30,9 +30,10 @@ def ccdf_deg_out_in(g, gI, model):
     # plot_ccdf(axs, gI.out_degree(), gI.in_degree(), lw = 7, color = dep.ref_model_color, label = "Internal")
     plot_ccdf(axs, model.expected_out_degree(),  model.expected_in_degree(), lw = 5, color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}')
 
+    axis_scale = "log"
     for i, ax in enumerate(axs):
         out_in_label = "Out" if i == 0 else "In"
-        ax.set(xlabel = f'{out_in_label}-Degrees', ylabel = 'CCDF',)
+        ax.set(xlabel = f'{out_in_label}-Degrees', ylabel = 'CCDF', xscale = axis_scale, yscale = "linear")
         ax.legend()
         ax.set_axisbelow(True)
         ax.grid(True)
@@ -148,55 +149,6 @@ def exp_deg_out_in(g, gI, model):
 
     utils.save_fig(fig, full_path=full_path)
     plt.close()
-
-# def exp_deg_out_in(g, gI, model):
-#     """ Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model"""
-#     full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.png"
-
-#     fig, axs = plt.subplots(1, 2, figsize = (20,7))
-#     axis_scale = 'log' 
-#     obs_s, exp_s = 60, 60
-#     inset_alpha = 0.3
-#     num_sigmas = model.num_sigmas
-#     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-
-#     # plot the out degree with errorbars
-#     x, y, mu, sigma = g._out_degree, gI._out_degree, model._out_degree, model._out_degree_std
-#     axs[0].scatter(x,mu, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
-#     axs[0].fill_between(x, y1 = mu + num_sigmas * sigma,
-#                         y2 = mu - num_sigmas * sigma, 
-#                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
-#                         alpha = inset_alpha)
-    
-#     # observed out-degree
-#     axs[0].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
-#     axs[0].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
-
-#     # plot the in degree with errorbars
-#     x, y, mu, sigma = g._in_degree, gI._in_degree, model._in_degree, model._in_degree_std
-#     axs[1].scatter(x,mu, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
-#     axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
-#                         y2 = mu - num_sigmas * sigma, 
-#                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
-#                         alpha = inset_alpha)
-    
-#     # observed in-degree
-#     axs[1].scatter(x[gI.idx_intnode_on_full],y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = obs_s, label = 'Internal')
-#     axs[1].scatter(x,x, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Full Network')
-
-#     for i, ax in enumerate(axs):
-#         ax.set(xscale = axis_scale, yscale = axis_scale,)
-#         out_in_label = "Out" if i == 0 else "In"
-#         ax.set(xlabel = f'{out_in_label}-Degrees', ylabel = f'{out_in_label}-Degrees',)
-#         ax.legend()
-#         ax.set_axisbelow(True)
-#         ax.grid(True)
-#         ax.legend(markerscale = 2)
-
-#     fig.tight_layout()
-
-#     utils.save_fig(fig, full_path=full_path)
-#     plt.close()
 
 def set_xylabels(ax, obs_meas, exp_meas, sum_meas, axis_scale = 'log'):
     from matplotlib import ticker
@@ -581,8 +533,10 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_rel_err(gI, model, N = None):
-    """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
+def topN_overlap_rel_err(gI, model):
+    """
+    Over the N-firms with highest ivec values, plot the average overlap and the total relative error over all the sampled networks
+    """
     
     full_path = model.plots_dir + f"/topN_{gI._pr_name}_on_intra.png"
     num_sigmas = model.num_sigmas
@@ -601,14 +555,14 @@ def topN_overlap_rel_err(gI, model, N = None):
     
     axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
 
-    axs[1].scatter(intervals, gI._topN_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    axs[1].scatter(intervals, gI._topN_tot_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
     _, bars, caps = axs[1].errorbar(
-        x = intervals, y = model._topN_rel_err, yerr = num_sigmas * model._topN_rel_err_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        x = intervals, y = model._topN_tot_rel_err, yerr = num_sigmas * model._topN_tot_rel_err_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
         label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
     )
     _set_alpha(bars, caps, alpha = 0.5)
 
-    # axs[1].scatter(intervals, model._topN_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
+    # axs[1].scatter(intervals, model._topN_tot_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
     axs[1].set(xscale = axis_scale, yscale = "log", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
 
     for ax in axs:
@@ -620,56 +574,41 @@ def topN_overlap_rel_err(gI, model, N = None):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_rel_err_not_ensemble(g, gI, model, N = None):
+def topN_overlap_rel_err_on_avg_pr(g, gI, model):
     """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
     
     full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra_not_ensemble.png"
-
-    N = gI.num_vertices if N == None else N
-    
-    start, stop, step = 1, N, 25
-    if N > 100:
-        axis_scale = "log"  
-        intervals = np.geomspace(start, stop, step, dtype=int)
-    else: 
-        axis_scale = "linear"
-        intervals = [1] + list(range(step, stop + 1, step)) #[1] + [step_top_N*i for i in range(1, num_points+1)]
+    intervals = gI._intervals
 
     if True:
         topN_arr = lambda v: [v[:i] for i in intervals]
 
-        # observed
-        g_topN_rank = topN_arr(g._pr_rank_on_I)
+        # observed and expected by the model
 
-        # expected
-        model_topN_rank = topN_arr(model._pr_rank_on_I)
-        gI_topN_rank = topN_arr(gI._pr_rank)
+        # 1. Calculate overlap between g_topN_nodes and model_topN_nodes
+        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
+        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
 
-        # 1. Calculate overlap between g_topN_rank and model_topN_rank
-        overlap_perc = lambda r: [np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g_topN_rank, r)]
-        g_model_overlap = overlap_perc(model_topN_rank)
-        g_gI_overlap = overlap_perc(gI_topN_rank)
+        # obtain the slicing of the page-rank ranking with respect to intervals
+        model_topN_nodes = topN_arr(model._pr_rank_on_I)
 
-        # 2. Calculate the total page-rank error
-        g_topN_ivec = topN_arr(g._pr_on_I)
+        # calculate the overlap
+        g_model_overlap = overlap_perc(model_topN_nodes)
+
+        # obtain the slicing of the relative error ranking with respect to intervals
         model_topN_ivec = topN_arr(model._pr_on_I)
-        gI_topN_ivec = topN_arr(gI._pr)
-
-        topN_rel_err = lambda r: [utils.rel_err_norm(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g_topN_ivec, r)]
-
         g_model_rel_err = topN_rel_err(model_topN_ivec)
-        g_gI_rel_err = topN_rel_err(gI_topN_ivec)
 
         fig, axs = plt.subplots(1, 2, figsize = (20,7))
         axis_scale = 'log'
         obs_s, exp_s = 60, 60
-        axs[0].scatter(intervals, g_gI_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-        axs[0].scatter(intervals, g_model_overlap, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
-        axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
+        axs[0].scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+        axs[0].scatter(intervals, g_model_overlap, marker = dep.sum_model_marker, color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
+        axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
 
-        axs[1].scatter(intervals, g_gI_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-        axs[1].scatter(intervals, g_model_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
-        axs[1].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
+        axs[1].scatter(intervals, gI._topN_tot_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+        axs[1].scatter(intervals, g_model_rel_err, marker = dep.sum_model_marker, color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
+        axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
 
         for ax in axs:
             ax.legend()
