@@ -255,6 +255,9 @@ def signed_rel_err(x, y):
     """
     return (x-y) / y
 
+def rel_err(x, y):
+    return abs(signed_rel_err(x, y))
+
 def rel_err_norm(x, y, ord = 1):
     """ Relative error between x and y. It returns a scalar """
     return np.linalg.norm(x - y, ord = ord) / np.linalg.norm(y, ord = ord)

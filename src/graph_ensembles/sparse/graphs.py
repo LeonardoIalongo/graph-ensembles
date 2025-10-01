@@ -791,7 +791,7 @@ class DiGraph(Graph):
         self.calculate_measures(self, measures)
         self.set_ivec_on_I(gI)
         gI.set_intervals(unique_counting=True)
-        gI.topN_overlap_rel_err(self, force_calc=True)
+        gI.topN_overlap_tot_rel_err(self, force_calc=True)
         
         return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges
 
@@ -814,7 +814,7 @@ class DiGraph(Graph):
     def set_intervals(self, unique_counting = False):
         """ 
         Define the intervals that will slice the topN_nodes and topN_ivec.
-        Note: the slicing will be done as arr[:i] in topN_overlap_rel_err
+        Note: the slicing will be done as arr[:i] in topN_overlap_tot_rel_err
         """
 
         def create_spacing(stop, num = 50):
@@ -836,7 +836,7 @@ class DiGraph(Graph):
 
         self._intervals = spacing
 
-    def topN_overlap_rel_err(self, g, gI = None, force_calc = False):
+    def topN_overlap_tot_rel_err(self, g, gI = None, force_calc = False):
         """ 
         Calculate the Overlap of self measures with respect to the ground truth g
         """
@@ -865,8 +865,8 @@ class DiGraph(Graph):
         overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
         self._topN_overlap = overlap_perc(self._topN_nodes)
 
-        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
-        self._topN_tot_rel_err = topN_rel_err(self._topN_ivec)
+        topN_tot_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
+        self._topN_tot_rel_err = topN_tot_rel_err(self._topN_ivec)
                 
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""

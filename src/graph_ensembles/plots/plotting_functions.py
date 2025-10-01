@@ -533,48 +533,96 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_rel_err(gI, model):
+def topN_overlap(gI, model):
     """
     Over the N-firms with highest ivec values, plot the average overlap and the total relative error over all the sampled networks
     """
     
-    full_path = model.plots_dir + f"/topN_{gI._pr_name}_on_intra.png"
+    full_path = model.plots_dir + f"/topN_overlap_{gI._pr_name}.png"
     num_sigmas = model.num_sigmas
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
     intervals = gI._intervals
 
-    fig, axs = plt.subplots(1, 2, figsize = (20,7))
+    fig, ax = plt.subplots(figsize = (12,7))
     axis_scale = 'log'
     obs_s, exp_s = 60, 60
-    axs[0].scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-    _, bars, caps = axs[0].errorbar(
+
+    # internal topN overlap
+    ax.scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    
+    # expected topN overlap on average
+    _, bars, caps = ax.errorbar(
         x = intervals, y = model._topN_overlap, yerr = num_sigmas * model._topN_overlap_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
         label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
     )
     _set_alpha(bars, caps, alpha = 0.5)
+
+    # expected topN overlap over mean "#48ACF0" #4E937A
+    ax.scatter(intervals, model._topN_overlap_over_mean, marker = dep.sum_model_marker, color = "#22AED1", s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
     
-    axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
-
-    axs[1].scatter(intervals, gI._topN_tot_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
-    _, bars, caps = axs[1].errorbar(
-        x = intervals, y = model._topN_tot_rel_err, yerr = num_sigmas * model._topN_tot_rel_err_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
-        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
-    )
-    _set_alpha(bars, caps, alpha = 0.5)
-
-    # axs[1].scatter(intervals, model._topN_tot_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
-    axs[1].set(xscale = axis_scale, yscale = "log", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
-
-    for ax in axs:
-        ax.legend()
-        ax.grid(False)
+    ax.set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
+    
+    ax.legend()
+    ax.grid(False)
 
     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
 
     utils.save_fig(fig, full_path=full_path)
     plt.close()
+    
+# def topN_overlap_tot_rel_err(gI, model):
+#     """
+#     Over the N-firms with highest ivec values, plot the average overlap and the total relative error over all the sampled networks
+#     """
+    
+#     full_path = model.plots_dir + f"/topN_{gI._pr_name}_on_intra.png"
+#     num_sigmas = model.num_sigmas
+#     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
+#     intervals = gI._intervals
 
-def topN_overlap_rel_err_on_avg_pr(g, gI, model):
+#     fig, axs = plt.subplots(1, 2, figsize = (20,7))
+#     axis_scale = 'log'
+#     obs_s, exp_s = 60, 60
+
+#     # internal topN overlap
+#     axs[0].scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    
+#     # expected topN overlap on average
+#     _, bars, caps = axs[0].errorbar(
+#         x = intervals, y = model._topN_overlap, yerr = num_sigmas * model._topN_overlap_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+#         label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+#     )
+#     _set_alpha(bars, caps, alpha = 0.5)
+
+#     # expected topN overlap over mean "#48ACF0" #4E937A
+#     axs[0].scatter(intervals, model._topN_overlap_over_mean, marker = dep.sum_model_marker, color = "#22AED1", s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    
+#     axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
+
+
+#     # internal tot_rel_err
+#     axs[1].scatter(intervals, gI._topN_tot_rel_err,  marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    
+#     # expected topN overlap on average
+#     _, bars, caps = axs[1].errorbar(
+#         x = intervals, y = model._topN_tot_rel_err, yerr = num_sigmas * model._topN_tot_rel_err_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+#         label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+#     )
+#     _set_alpha(bars, caps, alpha = 0.5)
+
+#     # axs[1].scatter(intervals, model._topN_tot_rel_err, marker = 'x', color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
+#     axs[1].set(xscale = axis_scale, yscale = "log", xlabel = 'Top N Firms', ylabel = 'Total Relative Error (%)',)
+
+#     for ax in axs:
+#         ax.legend()
+#         ax.grid(False)
+
+#     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
+#     utils.save_fig(fig, full_path=full_path)
+#     plt.close()
+
+def topN_overlap_tot_rel_err_on_avg_pr(g, gI, model):
     """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
     
     full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra_not_ensemble.png"

@@ -20,7 +20,7 @@ obs_marker = "^"
 ref_model_color = "#f77f00" #"#009DDC" #"#0714b1" #"darkviolet"
 ref_model_ms = 7
 ref_model_marker = "o"
-sum_model_color = "#d62828" #"#FCBF49" # #"#FCBF49" #"#E3B505" #"#f77f00" #"red"
+sum_model_color = "#d62828" #"#FCBF49" # #"#FCBF49" #"#E3B505"s
 sum_model_ms = 7
 sum_model_marker = "H"
 

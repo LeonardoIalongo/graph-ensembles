@@ -346,7 +346,7 @@ class ScaleInvariantModel(FitnessModel):
 
         return self._exp_num_edges
 
-    def topN_overlap_rel_err_over_mean(self, g, gI):
+    def topN_overlap_tot_rel_err_over_mean(self, g, gI):
         
         topN_arr = lambda v: [v[:i] for i in gI._intervals]
         
