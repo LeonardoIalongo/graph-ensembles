@@ -838,7 +838,7 @@ class DiGraph(Graph):
 
     def topN_overlap_tot_rel_err(self, g, gI = None, force_calc = False):
         """ 
-        Calculate the Overlap of self measures with respect to the ground truth g
+        Calculate the overlap of self measures with respect to the ground truth g
         """
         
         if gI == None: gI = self
