@@ -68,7 +68,7 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
     x, y, z, z_std = g.__dict__[meas], gI.__dict__[meas], model.__dict__[meas], model.__dict__[meas+"_std"] 
 
     # filter deg and annd with respect to the internal nodes
-    proj_on_I = lambda x: x[gI.idx_intnode_on_full]
+    proj_on_I = lambda x: x[gI.internal_nodes]
     deg_x, deg_z, deg_z_std = proj_on_I(deg_x), proj_on_I(deg_z), proj_on_I(deg_z_std)
     x, z, z_std = proj_on_I(x), proj_on_I(z), proj_on_I(z_std)
 
@@ -111,7 +111,7 @@ def exp_deg_out_in(g, gI, model):
     x, y, mu, sigma = g._out_degree, gI._out_degree, model._out_degree, model._out_degree_std
 
     # project the ground truth and expected values on I
-    proj_on_I = lambda x: x[gI.idx_intnode_on_full]
+    proj_on_I = lambda x: x[gI.internal_nodes]
     x, mu, sigma = proj_on_I(x), proj_on_I(mu), proj_on_I(sigma)
 
     _, bars, caps = axs[0].errorbar(
@@ -342,7 +342,7 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log"):
             transform=ax.transAxes, horizontalalignment='right')
     # return im
 
-def ivec_on_internal_nodes(model, g, gI, num_bins = 100):
+def pr_on_internal_nodes(model, g, gI, num_bins = 100):
     """
     Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
     .) x-axis, there would be the full page rank of the intra nodes.
@@ -412,8 +412,8 @@ def norm_diffs_per_iteration(plots_dir, diff_norms):
     utils.save_fig(fig, full_path)
     plt.close()
 
-def inset_ivec_vs_rank(ax, x, true_rank, axis_scale = "log", size = 15, zorder = 1):
-    # in the inset, plot the meas based on the g_ivec_on_I ranking
+def inset_pr_vs_rank(ax, x, true_rank, axis_scale = "log", size = 15, zorder = 1):
+    # in the inset, plot the meas based on the g_pr_on_I ranking
     inax_w = 0.3
     pos_xy = [0.03, 0.03]
     kwargs_inaxs = {"xscale" : axis_scale, "yscale" : axis_scale}
@@ -464,7 +464,7 @@ def _set_alpha(bars, caps, alpha = 0.5):
     [bar.set_alpha(alpha) for bar in bars]
     [cap.set_alpha(alpha) for cap in caps]
 
-def ivec_on_internal_nodes_vs_rank(model, g, gI):
+def pr_on_internal_nodes_vs_rank(model, g, gI):
     """
     Create 2 plots sharing the same x-axis, which is the ranking position (range(1, N))
     Left) meas computed on the sub-internal graph VS ranking;
@@ -481,43 +481,43 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI):
     inset_zorder_exp = 0
     num_sigmas = model.num_sigmas
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-    title_ivec = g._pr_name.title()
+    title_pr = g._pr_name.title()
     
     # x-axis will be just increasing values, i.e. ranking position
     x = range(1, len(gI._pr)+1)
 
     # scores to assign the ranking
-    g_ivec_desc_on_I = g._pr_desc_on_I
-    g_rank_on_I = g._pr_rank_on_I
+    g_pr_on_I_desc = g._pr_on_I_desc
+    g_pr_on_I_rank = g._pr_on_I_rank
     
     # === focus on meas obtained by considering only a portion of the network ===
     # plot the measurements as a function of their rankings in a descending order
     axs[0].scatter(x, gI._pr_desc, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
-    axs[0].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
-    axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_ivec} Values',)
+    axs[0].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
+    axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_pr} Values',)
     
-    # plot the reorder gI._pr with respect to the full-network ranking, i.e. idx_g_ivec_on_I
-    inaxs = inset_ivec_vs_rank(axs[0], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
-    inaxs.scatter(x, gI._pr[g_rank_on_I], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
+    # plot the reorder gI._pr with respect to the full-network ranking, i.e. idx_g_pr_on_I
+    inaxs = inset_pr_vs_rank(axs[0], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize, zorder = 1)
+    inaxs.scatter(x, gI._pr[g_pr_on_I_rank], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
-    # plot the reorder model._pr with respect to the full-network ranking, i.e. idx_g_ivec_on_I
-    mu, sigma = model._pr_desc_on_I, model._pr_std_desc_on_I
+    # plot the reorder model._pr with respect to the full-network ranking, i.e. idx_g_pr_on_I
+    mu, sigma = model._pr_on_I_desc, model._pr_on_I_std_desc
     axs[1].scatter(x, y = mu, marker = "x", 
                     color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}',)
     axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
                         y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
                         alpha = inset_alpha)
-    axs[1].scatter(x, g_ivec_desc_on_I, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
-    axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_ivec} Values',)
+    axs[1].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
+    axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'rank (descending)', ylabel = f'{title_pr} Values',)
     
 
-    # in the inset, plot the meas based on the g_ivec_on_I ranking
-    inaxs = inset_ivec_vs_rank(axs[1], x, true_rank = g_ivec_desc_on_I, axis_scale=axis_scale, size = msize, zorder = 1)
+    # in the inset, plot the meas based on the g_pr_on_I ranking
+    inaxs = inset_pr_vs_rank(axs[1], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize, zorder = 1)
 
     # create mu, std arrays and plot scatter + fill between curves
-    mu, sigma = model._pr_on_I[g_rank_on_I], model._pr_std_on_I[g_rank_on_I]
+    mu, sigma = model._pr_on_I[g_pr_on_I_rank], model._pr_std_on_I[g_pr_on_I_rank]
     inaxs.scatter(x, y = mu, marker = "x", color = dep.sum_model_color, zorder = inset_zorder_exp)
     inaxs.fill_between(x, y1 = mu + num_sigmas * sigma, y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, alpha = inset_alpha, zorder = inset_zorder_exp)
@@ -533,12 +533,12 @@ def ivec_on_internal_nodes_vs_rank(model, g, gI):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap(gI, model):
+def topN_overlap_pr(gI, model):
     """
-    Over the N-firms with highest ivec values, plot the average overlap and the total relative error over all the sampled networks
+    Over the N-firms with highest pr values, plot the average overlap and the total relative error over all the sampled networks
     """
     
-    full_path = model.plots_dir + f"/topN_overlap_{gI._pr_name}.png"
+    full_path = model.plots_dir + f"/topN_overlap_pr_{gI._pr_name}.png"
     num_sigmas = model.num_sigmas
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
     intervals = gI._intervals
@@ -548,17 +548,17 @@ def topN_overlap(gI, model):
     obs_s, exp_s = 60, 60
 
     # internal topN overlap
-    ax.scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    ax.scatter(intervals, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
     
     # expected topN overlap on average
     _, bars, caps = ax.errorbar(
-        x = intervals, y = model._topN_overlap, yerr = num_sigmas * model._topN_overlap_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+        x = intervals, y = model._topN_overlap_pr, yerr = num_sigmas * model._topN_overlap_pr_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
         label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
     )
     _set_alpha(bars, caps, alpha = 0.5)
 
     # expected topN overlap over mean "#48ACF0" #4E937A
-    ax.scatter(intervals, model._topN_overlap_over_mean, marker = dep.sum_model_marker, color = "#22AED1", s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    ax.scatter(intervals, model._topN_overlap_pr_over_mean, marker = dep.sum_model_marker, color = "#22AED1", s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
     
     ax.set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
     
@@ -570,9 +570,9 @@ def topN_overlap(gI, model):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
     
-# def topN_overlap_tot_rel_err(gI, model):
+# def topN_overlap_pr_tot_rel_err(gI, model):
 #     """
-#     Over the N-firms with highest ivec values, plot the average overlap and the total relative error over all the sampled networks
+#     Over the N-firms with highest pr values, plot the average overlap and the total relative error over all the sampled networks
 #     """
     
 #     full_path = model.plots_dir + f"/topN_{gI._pr_name}_on_intra.png"
@@ -585,17 +585,17 @@ def topN_overlap(gI, model):
 #     obs_s, exp_s = 60, 60
 
 #     # internal topN overlap
-#     axs[0].scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+#     axs[0].scatter(intervals, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
     
 #     # expected topN overlap on average
 #     _, bars, caps = axs[0].errorbar(
-#         x = intervals, y = model._topN_overlap, yerr = num_sigmas * model._topN_overlap_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
+#         x = intervals, y = model._topN_overlap_pr, yerr = num_sigmas * model._topN_overlap_pr_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
 #         label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
 #     )
 #     _set_alpha(bars, caps, alpha = 0.5)
 
 #     # expected topN overlap over mean "#48ACF0" #4E937A
-#     axs[0].scatter(intervals, model._topN_overlap_over_mean, marker = dep.sum_model_marker, color = "#22AED1", s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+#     axs[0].scatter(intervals, model._topN_overlap_pr_over_mean, marker = dep.sum_model_marker, color = "#22AED1", s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
     
 #     axs[0].set(xscale = axis_scale, yscale = "linear", xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
 
@@ -622,8 +622,8 @@ def topN_overlap(gI, model):
 #     utils.save_fig(fig, full_path=full_path)
 #     plt.close()
 
-def topN_overlap_tot_rel_err_on_avg_pr(g, gI, model):
-    """Over the N-firms with highest ivec values, plot the overlap their overal and the total relative error"""
+def topN_overlap_pr_tot_rel_err_on_avg_pr(g, gI, model):
+    """Over the N-firms with highest pr values, plot the overlap their overal and the total relative error"""
     
     full_path = model.plots_dir + f"/topN_{g._pr_name}_on_intra_not_ensemble.png"
     intervals = gI._intervals
@@ -633,24 +633,24 @@ def topN_overlap_tot_rel_err_on_avg_pr(g, gI, model):
 
         # observed and expected by the model
 
-        # 1. Calculate overlap between g_topN_nodes and model_topN_nodes
-        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
-        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
+        # 1. Calculate overlap between g_topN_pr_on_I_rank and model_topN_pr_on_I_rank
+        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_pr_on_I_rank, r)])
+        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_pr, r)])
 
         # obtain the slicing of the page-rank ranking with respect to intervals
-        model_topN_nodes = topN_arr(model._pr_rank_on_I)
+        model_topN_pr_on_I_rank = topN_arr(model._pr_on_I_rank)
 
         # calculate the overlap
-        g_model_overlap = overlap_perc(model_topN_nodes)
+        g_model_overlap = overlap_perc(model_topN_pr_on_I_rank)
 
         # obtain the slicing of the relative error ranking with respect to intervals
-        model_topN_ivec = topN_arr(model._pr_on_I)
-        g_model_rel_err = topN_rel_err(model_topN_ivec)
+        model_topN_pr = topN_arr(model._pr_on_I)
+        g_model_rel_err = topN_rel_err(model_topN_pr)
 
         fig, axs = plt.subplots(1, 2, figsize = (20,7))
         axis_scale = 'log'
         obs_s, exp_s = 60, 60
-        axs[0].scatter(intervals, gI._topN_overlap, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+        axs[0].scatter(intervals, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
         axs[0].scatter(intervals, g_model_overlap, marker = dep.sum_model_marker, color = dep.sum_model_color, s = obs_s, label = f'Rec. w/ {model.fit_method_title}')
         axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Top N Firms', ylabel = 'Overlap (%)',)
 

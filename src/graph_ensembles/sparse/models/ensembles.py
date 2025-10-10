@@ -155,7 +155,7 @@ class DiGraphEnsemble(GraphEnsemble):
         
         # add internal degrees to the right g-idx node
         for idx_gI in non_zero_deg:
-            idx_g = gI.idx_intnode_on_full[idx_gI]
+            idx_g = gI.internal_nodes[idx_gI]
             model_deg[idx_g] += deg[idx_gI]
 
         return model_deg

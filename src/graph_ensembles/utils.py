@@ -211,15 +211,15 @@ def max_sampled_graph_idx(dir_, num_samples = None):
         # this helps to create the first graph_0 in the folder. Otherwise, i - max_graph_idx >= 0:
         return -1
 
-def set_model_ivec_on_I(model, gI, vec_meas=["_pr"]):
+def set_model_pr_on_I(model, gI, vec_meas=["_pr"]):
     """
     Set measurement vectors (e.g., page-rank) on internal nodes.
     For each measurement in vec_meas, fills:
       - model.{meas}_on_I, model.{meas}_std_on_I
-      - model.{meas}_rank_on_I, model.{meas}_desc_on_I, model.{meas}_std_desc_on_I
+      - model.{meas}_on_I_rank, model.{meas}_on_I_desc, model.{meas}_on_I_std_desc
     """
     mod_dict = model.__dict__
-    idx = gI.idx_intnode_on_full
+    idx = gI.internal_nodes
     argsort_desc = lambda x: np.argsort(x)[::-1]
 
     if not hasattr(model, "_pr_on_I"):
@@ -232,17 +232,17 @@ def set_model_ivec_on_I(model, gI, vec_meas=["_pr"]):
             rank_on_I = argsort_desc(values_on_I)
 
             # Sorted values and std
-            desc_on_I = values_on_I[rank_on_I]
-            std_desc_on_I = std_on_I[rank_on_I]
+            on_I_desc = values_on_I[rank_on_I]
+            on_I_std_desc = std_on_I[rank_on_I]
 
             # Assign to model
             mod_dict[f"{meas}_on_I"] = values_on_I
             mod_dict[f"{meas}_std_on_I"] = std_on_I
 
             # create new variables for vec_meas ranked from top to bottom
-            mod_dict[f"{meas}_rank_on_I"] = rank_on_I
-            mod_dict[f"{meas}_desc_on_I"] = desc_on_I
-            mod_dict[f"{meas}_std_desc_on_I"] = std_desc_on_I
+            mod_dict[f"{meas}_on_I_rank"] = rank_on_I
+            mod_dict[f"{meas}_on_I_desc"] = on_I_desc
+            mod_dict[f"{meas}_on_I_std_desc"] = on_I_std_desc
 
 def tot_rel_err(x, y, ord = 1):
 

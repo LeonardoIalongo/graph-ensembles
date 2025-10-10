@@ -207,7 +207,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         self.prop_out = g.out_strength()
         self.prop_in = g.in_strength()
 
-    def mean_std_sampled_graphs(self, ivec_name, num_sampled_graphs):
+    def mean_std_sampled_graphs(self, pr_name, num_sampled_graphs):
         """
         Compute entry-wise running mean for a given meas over sampled graphs.
         Returns the mean array.
@@ -216,30 +216,30 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         from os import path
         
         # load it
-        full_path = self.vars_dir_ensembles + f"/{ivec_name}/num_samples_{num_sampled_graphs}.csv"
+        full_path = self.vars_dir_ensembles + f"/{pr_name}/num_samples_{num_sampled_graphs}.csv"
         if path.exists(full_path):
             return np.genfromtxt(full_path) 
 
         # create the meas and save it
         if num_sampled_graphs == 0:
-            ivec, ivec_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
+            pr, pr_std = np.zeros(self.num_vertices*2, dtype = float).reshape(2, self.num_vertices)
         else:
-            test_ivec = load_dict(self.vars_dir_ensembles + f"/samples/graph0/graph0.pkl")[ivec_name]
+            test_pr = load_dict(self.vars_dir_ensembles + f"/samples/graph0/graph0.pkl")[pr_name]
             
-            # create ivec and ivec_std as array
-            ivec = np.zeros_like(np.atleast_1d(test_ivec), dtype = float)
-            ivec_std = ivec.copy()
+            # create pr and pr_std as array
+            pr = np.zeros_like(np.atleast_1d(test_pr), dtype = float)
+            pr_std = pr.copy()
 
             # recursive mean and std
             for i in range(num_sampled_graphs):
-                gi_val = load_dict(self.vars_dir_ensembles + f"/samples/graph{i}/graph{i}.pkl")[ivec_name]
-                ivec, ivec_std = self.recursive_mean_std(i, ivec, ivec_std, gi_val)
+                gi_val = load_dict(self.vars_dir_ensembles + f"/samples/graph{i}/graph{i}.pkl")[pr_name]
+                pr, pr_std = self.recursive_mean_std(i, pr, pr_std, gi_val)
 
             # save the mean and std as [[mean],[std]]
             if not self.corpkey:
-                np.savetxt(full_path, X = np.vstack((ivec, ivec_std)))
+                np.savetxt(full_path, X = np.vstack((pr, pr_std)))
             
-        return ivec, ivec_std
+        return pr, pr_std
 
     def recursive_mean_std(self, i, ens_mean=None, ens_std=None, new_meas=None):
         """
@@ -285,7 +285,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
     
         return new_mean, new_sem
 
-    def set_ensemble_variables(self, meas_name = ["ivec"], num_samples = 1):
+    def set_ensemble_variables(self, meas_name = ["pr"], num_samples = 1):
         
         import os
         from ...utils import max_sampled_graph_idx

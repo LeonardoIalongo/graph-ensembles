@@ -346,23 +346,23 @@ class ScaleInvariantModel(FitnessModel):
 
         return self._exp_num_edges
 
-    def topN_overlap_tot_rel_err_over_mean(self, g, gI):
+    def topN_overlap_pr_tot_rel_err_over_mean(self, g, gI):
         
         topN_arr = lambda v: [v[:i] for i in gI._intervals]
         
-        # 1. Calculate overlap between g_topN_nodes and model_topN_nodes
-        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
-        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
-
+        # 1. Calculate overlap between g_topN_pr_on_I_rank and model_topN_pr_on_I_rank
+        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_pr_on_I_rank, r)])
+        topN_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_pr, r)])
+ 
         # obtain the slicing of the page-rank ranking with respect to intervals
-        model_topN_nodes = topN_arr(self._pr_rank_on_I)
+        model_topN_pr_on_I_rank = topN_arr(self._pr_on_I_rank)
 
         # calculate the overlap
-        self._topN_overlap_over_mean = overlap_perc(model_topN_nodes)
+        self._topN_overlap_pr_over_mean = overlap_perc(model_topN_pr_on_I_rank)
 
         # obtain the slicing of the relative error ranking with respect to intervals
-        model_topN_ivec = topN_arr(self._pr_on_I)
-        self._topN_tot_rel_err_over_mean = topN_rel_err(model_topN_ivec)
+        model_topN_pr = topN_arr(self._pr_on_I)
+        self._topN_tot_rel_err_over_mean = topN_rel_err(model_topN_pr)
 
 
 class MultiInvariantModel(MultiFitnessModel):

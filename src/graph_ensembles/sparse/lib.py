@@ -22,7 +22,7 @@ def normalise_rows(rows, clms, weights):
 
 @jit(nopython=True)  # pragma: no cover
 def propagate_measure(indptr, indices, weights, meas, absorb=False):
-    N = len(ivec)
+    N = len(pr)
     update = np.zeros(N, dtype=np.float64)
 
     for i in range(len(indptr) - 1):

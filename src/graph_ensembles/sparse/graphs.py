@@ -14,14 +14,17 @@ from numba import jit
 import warnings
 import networkx as nx
 from .. import utils
+from graph_ensembles.sparse.overlap_helpers import overlap_helpers
 
 class common_functions():
     """ Class to include some common function both for observed Graphs and GraphEnsemble """
-    def set_ivec_on_I(self, gI, vec_meas=["_pr"]):
+    def set_pr_on_I(self, gI, vec_meas=["_pr"]):
         """
-            Set the ivec (e.g., page-rank, influence vector) on the internal nodes.
+            self is the ground truth g or the model;
+
+            Set the PR on the internal nodes.
             For each measurement in vec_meas, fills:
-            - g.{meas}_on_I, g.{meas}_rank_on_I, g.{meas}_desc_on_I
+            - g.{meas}_on_I, g.{meas}_on_I_rank, g.{meas}_on_I_desc
             - gI.{meas}, gI.{meas}_rank, gI.{meas}_desc
         """
         # Helper function for descending sort
@@ -29,19 +32,19 @@ class common_functions():
             """Return indices that would sort the array in descending order."""
             return np.argsort(array)[::-1]
 
-        if not hasattr(gI, "idx_intnode_on_full"):
-            gI.idx_intnode_on_full = [self.id_dict.get(node) for node in gI.id_dict]
+        if not hasattr(gI, "internal_nodes"):
+            gI.internal_nodes = [self.id_dict.get(node) for node in gI.id_dict]
 
         for meas in vec_meas:
             # Process g attributes
             g_dict = self.__dict__
-            ivec_on_I = g_dict[meas][gI.idx_intnode_on_full]
-            rank_on_I = argsort_desc(ivec_on_I)
-            desc_on_I = ivec_on_I[rank_on_I]
+            pr_on_I = g_dict[meas][gI.internal_nodes]
+            rank_on_I = argsort_desc(pr_on_I)
+            on_I_desc = pr_on_I[rank_on_I]
 
-            g_dict[f"{meas}_on_I"] = ivec_on_I
-            g_dict[f"{meas}_rank_on_I"] = rank_on_I
-            g_dict[f"{meas}_desc_on_I"] = desc_on_I
+            g_dict[f"{meas}_on_I"] = pr_on_I
+            g_dict[f"{meas}_on_I_rank"] = rank_on_I
+            g_dict[f"{meas}_on_I_desc"] = on_I_desc
 
             # Process gI attributes
             if not hasattr(gI, f"{meas}_rank"):
@@ -140,7 +143,7 @@ class common_functions():
         lighter_g_dict.pop("adj", None)
         save_dict(self.vars_dir + f"/{name}.pkl", lighter_g_dict)
 
-class Graph(common_functions):
+class Graph(common_functions, overlap_helpers):
     """General class for undirected graphs.
 
     Note that edges can be weighted or not. If they are not, the strengths
@@ -777,21 +780,27 @@ class DiGraph(Graph):
             v, e, v_id=v_id, src=src, dst=dst, weight=weight, v_group=v_group, **kwargs
         )
 
-    def vsplit_intra_and_calculate_measures(self, v, e, intra_size, vsplit, kwargs_graph, measures):
-
+    def vsplit_intra_and_calculate_measures(g, v, e, intra_size, vsplit, kwargs_graph, measures):
+        """
+        Calculate the measures for g and gI.
+        For clearness, it is really beneficial to substitute self (usual 1st argument of a class) with g.
+        """
+        
         # split the intra vsplit
-        vI, eI, idx_intra_nodes = self.vsplit_intra(v, e, intra_size=intra_size, vsplit=vsplit)
+        vI, eI, idx_intra_nodes = g.vsplit_intra(v, e, intra_size=intra_size, vsplit=vsplit)
         
         # mask unsampled_vI for fast sampling, frozen edges (integer eI)
-        unsampled_vI, frozen_edges, gI = self._set_frozen_edges_gI(intra_size, vsplit, vI, eI, kwargs_graph)
+        unsampled_vI, frozen_edges, gI = g._set_frozen_edges_gI(intra_size, vsplit, vI, eI, kwargs_graph)
 
-        # compute the page-rank only in the internal part
-        # set the page rank on g, gI
-        gI.calculate_measures(self, measures)
-        self.calculate_measures(self, measures)
-        self.set_ivec_on_I(gI)
-        gI.set_intervals(unique_counting=True)
-        gI.topN_overlap_tot_rel_err(self, force_calc=True)
+        # calculate the "_pr", "_out_degree", "_in_degree" for gI and g (=g)
+        gI.calculate_measures(g, measures)
+        g.calculate_measures(g, measures)
+        
+        # set the page rank of g on internal gI
+        g.set_pr_on_I(gI)
+        
+        # gI.set_intervals(unique_counting=True)
+        # gI.topN_overlap_pr_tot_rel_err(g, force_calc=True)
         
         return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges
 
@@ -813,8 +822,8 @@ class DiGraph(Graph):
 
     def set_intervals(self, unique_counting = False):
         """ 
-        Define the intervals that will slice the topN_nodes and topN_ivec.
-        Note: the slicing will be done as arr[:i] in topN_overlap_tot_rel_err
+        Define the intervals that will slice the topN_pr_on_I_rank and topN_pr.
+        Note: the slicing will be done as arr[:i] in topN_overlap_pr_tot_rel_err
         """
 
         def create_spacing(stop, num = 50):
@@ -836,7 +845,7 @@ class DiGraph(Graph):
 
         self._intervals = spacing
 
-    def topN_overlap_tot_rel_err(self, g, gI = None, force_calc = False):
+    def topN_overlap_pr_tot_rel_err(self, g, gI = None, force_calc = False):
         """ 
         Calculate the overlap of self measures with respect to the ground truth g
         """
@@ -845,28 +854,28 @@ class DiGraph(Graph):
 
         topN_arr = lambda v: [v[:i] for i in gI._intervals]
 
-        if not hasattr(g,"_topN_nodes") or force_calc:
-            g._topN_nodes = topN_arr(g._pr_rank_on_I)
-            g._topN_ivec = topN_arr(g._pr_on_I)
+        if not hasattr(g,"_topN_pr_on_I_rank") or force_calc:
+            g._topN_pr_on_I_rank = topN_arr(g._pr_on_I_rank)
+            g._topN_pr = topN_arr(g._pr_on_I)
 
         # observed (this should be done outside the sampling loop)
         if self.graph_kind.endswith("sampled"):
             # if self == gs
-            _pr_rank = self._pr_rank_on_I
-            _pr = self._pr_rank_on_I
+            _pr_rank = self._pr_on_I_rank
+            _pr = self._pr_on_I_rank
         else:
             # if self == gI
             _pr_rank = self._pr_rank
             _pr = self._pr
 
-        self._topN_nodes = topN_arr(_pr_rank)
-        self._topN_ivec = topN_arr(_pr)
+        self._topN_pr_on_I_rank = topN_arr(_pr_rank)
+        self._topN_pr = topN_arr(_pr)
 
-        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_nodes, r)])
-        self._topN_overlap = overlap_perc(self._topN_nodes)
+        overlap_perc = lambda r: np.array([np.intersect1d(g_topN, exp_topN).size / g_topN.size for g_topN, exp_topN in zip(g._topN_pr_on_I_rank, r)])
+        self._topN_overlap_pr = overlap_perc(self._topN_pr_on_I_rank)
 
-        topN_tot_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_ivec, r)])
-        self._topN_tot_rel_err = topN_tot_rel_err(self._topN_ivec)
+        topN_tot_rel_err = lambda r: np.array([utils.tot_rel_err(exp_topN, g_topN) * 100 for g_topN, exp_topN in zip(g._topN_pr, r)])
+        self._topN_tot_rel_err = topN_tot_rel_err(self._topN_pr)
                 
     def adjacency_matrix(self, directed=True, weighted=False):
         """Return the adjacency matrix of the graph."""
@@ -1006,8 +1015,8 @@ class DiGraph(Graph):
 
         return self._in_strength_by_group
 
-    def rescale_ivec_with(self, model, scaler = False, ivec_name = "_pr"):
-        meas = ivec_name
+    def rescale_pr_with(self, model, scaler = False, pr_name = "_pr"):
+        meas = pr_name
         mod_dict = model.__dict__
         if scaler == False:
             scaler = 1
