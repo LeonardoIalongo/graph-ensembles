@@ -23,6 +23,7 @@ ref_model_marker = "o"
 sum_model_color = "#d62828" #"#FCBF49" # #"#FCBF49" #"#E3B505"s
 sum_model_ms = 7
 sum_model_marker = "H"
+azure_color = "#22AED1"
 
 # custom cmap
 # cmap = mpl.colors.LinearSegmentedColormap.from_list("", [obs_color,sum_model_color,ref_model_color, "#5FAD56", "#F2C14E"])

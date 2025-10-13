@@ -93,8 +93,8 @@ class common_functions():
             self.vars_dir += level_dir
         
         # update it for the model directories, since one has to specify also the fitting method
-        if not self.corpkey:
-            os.makedirs(self.vars_dir, exist_ok = True)
+        # if not self.corpkey:
+        #     os.makedirs(self.vars_dir, exist_ok = True)
 
         # create plots dir
         self.plots_dir = os.path.dirname(self.vars_dir.replace(f"vars/{self.name}","plots"))

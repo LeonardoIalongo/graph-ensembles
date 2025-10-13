@@ -198,7 +198,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 print(f'===\nDeleting the folder: {samples_folder}\n===\n',)
                 shutil.rmtree(samples_folder)
     
-    def set_num_vertices_out_in_strengths_to(self, g):
+    def set_observables_from(self, g):
         """
         Set some variables to observed graph g
         """
@@ -255,10 +255,9 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         - new_meas (np.ndarray): New measurement values to include (shape: (N,)).
 
         Returns:
-        - ens_mean (np.ndarray): Updated mean values.
-        - ens_std (np.ndarray): Updated standard deviation values.
+        - new_mean (np.ndarray): Updated mean values.
+        - new_sem (np.ndarray): Updated standard deviation values.
         """
-        
 
         # Update mean
         N = i + 1
@@ -282,7 +281,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         
         # Divide by N, for the sem of the mean
         new_sem = np.sqrt(s_new_squared / N)
-    
+        
         return new_mean, new_sem
 
     def set_ensemble_variables(self, meas_name = ["pr"], num_samples = 1):
@@ -297,9 +296,9 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         num_sampled_graphs = max_sampled_graph_idx(self.vars_dir_ensembles + "/samples", num_samples) + 1
         
         # save norm of differences among two ensemble mean
-        for m in meas_name:
-            self.__dict__[m], self.__dict__[m+"_std"] = self.mean_std_sampled_graphs(m, num_sampled_graphs)
-            os.makedirs(self.vars_dir_ensembles + f"/{m}", exist_ok = True)
+        # for m in meas_name:
+        #     self.__dict__[m], self.__dict__[m+"_std"] = self.mean_std_sampled_graphs(m, num_sampled_graphs)
+        #     os.makedirs(self.vars_dir_ensembles + f"/{m}", exist_ok = True)
 
         return num_sampled_graphs
 
@@ -332,7 +331,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
                 maxiter=maxiter,
                 verbose=verbose,
                 )
-                
+            print(f'-Fitted Param: {self.param[0]}',)
             os.makedirs(os.path.dirname(path_param), exist_ok = True)
             np.savetxt(path_param, self.param, delimiter = ",")
         

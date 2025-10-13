@@ -485,8 +485,8 @@ class DiGraphEnsemble(GraphEnsemble):
         else:
             raise ValueError("Weights method not recognised or implemented.")
 
-        if not self.corpkey:
-            os.makedirs(g.vars_dir, exist_ok = True) 
+        # if not self.corpkey:
+        #     os.makedirs(g.vars_dir, exist_ok = True) 
 
         # Convert to adjacency matrix
         g.adj = sp.csr_array(
@@ -558,10 +558,10 @@ class DiGraphEnsemble(GraphEnsemble):
         all_cols = []
 
         # Seed once at the beginning
-        # if device.type == 'cuda':
-        #     tc.cuda.manual_seed(seed)
-        # else:
-        #     tc.manual_seed(seed)
+        if device.type == 'cuda':
+            tc.cuda.manual_seed(seed)
+        else:
+            tc.manual_seed(seed)
 
         # Process in chunks to avoid memory issues
         for start in range(0, N, chunk_row_size):

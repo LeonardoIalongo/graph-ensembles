@@ -21,28 +21,33 @@ class overlap_helpers:
 
         true_len, est_len = len(true_meas), len(est_meas)
         topN_overlap = []
-        min_num_nodes = []
+        # min_num_nodes = []
+        jacc_similarity = lambda A, B: len(A & B) / len(A.union(B))
 
         # range over the maximum placement in the rankings
-        for l in range(max(true_len, est_len)):
+        min_rank_len = min(true_len, est_len)
+        for l in range(min_rank_len):
 
             # i and j are clipped not to exceed its length
             i,j = min(l, true_len-1), min(l, est_len-1)
             true_meas_i, est_meas_j = set(true_meas[i]), set(est_meas[j])
 
             # compute the jaccard similarity as overlap
-            overlap_ij = len(true_meas_i & est_meas_j) / len(true_meas_i.union(est_meas_j))
+            overlap_ij = jacc_similarity(true_meas_i, est_meas_j)
             topN_overlap.append(overlap_ij)
 
             # fill the min_num_nodes with the minimum among the true_meas_i and est_meas_j number of nodes
-            min_num_nodes.append(min(len(true_meas_i), len(est_meas_j)))
+            # if max, multiple vertical overlaps when A or B reaches the total numb of nodes
+            # min_num_nodes.append(min(len(true_meas_i), len(est_meas_j)))
+        
+        topN_overlap_range = range(1, min_rank_len + 1)
 
-        return min_num_nodes, topN_overlap
+        return topN_overlap_range, topN_overlap
 
     def topN_overlap_g_pr_on_I(g, est_meas):
         
-        if not hasattr(g, "_topN_pr_on_I"):
-            g._topN_pr_on_I = g.topN_by_rank(g._pr_on_I)
+        # if not hasattr(g, "_topN_pr_on_I"):
+        g._topN_pr_on_I = g.topN_by_rank(g._pr_on_I)
 
         return overlap_helpers.topN_overlap_2_meas(g._topN_pr_on_I, est_meas)
 
@@ -67,8 +72,25 @@ class overlap_helpers:
             # print(f'-gI_model_dict["_topN"+meas]: {gI_model_dict["_topN"+meas]}',)
 
             # calculate the overlal between the topN page-rank on I and the topN of the measure
-            gI_model_dict["_topN_overlap"+meas+"_min_num_nodes"], gI_model_dict["_topN_overlap"+meas] = g.topN_overlap_g_pr_on_I(gI_model_dict["_topN"+meas])
+            gI_model_dict["_topN_overlap"+meas+"_range"], gI_model_dict["_topN_overlap"+meas] = g.topN_overlap_g_pr_on_I(gI_model_dict["_topN"+meas])
 
+
+    def topN_overlap_pr(g, gI_model = None):
+        """
+        Overlap btw the PR-ground-truth and the out/in degrees
+        """
+
+        # if gI_model == None, then gI_model must equal g. So, g = gI_model
+        if gI_model == None:
+            gI_model = g
+
+        if gI_model.graph_kind == "intra" and gI_model.kind == "obs":
+            pr_measure = ["_pr"]
+        else:
+            pr_measure = ["_pr_on_I"]
+            
+        return g.topN_overlap_pr_out_in(gI_model, pr_measure)
+    
     def topN_overlap_pr_out_in_degree(g, gI_model = None, internal_nodes = None):
         """
         Overlap btw the PR-ground-truth and the out/in degrees
@@ -83,9 +105,9 @@ class overlap_helpers:
         else:
             degree_measures = ["_out_degree_on_I", "_in_degree_on_I"]
 
-            if not hasattr(gI_model, "_out_degree_on_I"):
-                gI_model._out_degree_on_I = gI_model._out_degree[internal_nodes]
-                gI_model._in_degree_on_I = gI_model._in_degree[internal_nodes]
+            #if not hasattr(gI_model, "_out_degree_on_I"):
+            # gI_model._out_degree_on_I = gI_model._out_degree[internal_nodes]
+            # gI_model._in_degree_on_I = gI_model._in_degree[internal_nodes]
 
         return g.topN_overlap_pr_out_in(gI_model, degree_measures)
 
@@ -94,14 +116,29 @@ class overlap_helpers:
         Calculate the Overlap Between the PR of self and 
         """
 
-        if not hasattr(g, "_out_strength_on_I"):
-            g._out_strength_on_I = g._out_strength[internal_nodes]
-            g._in_strength_on_I = g._in_strength[internal_nodes]
+        #if not hasattr(g, "_out_strength_on_I"):
+        g._out_strength_on_I = g._out_strength[internal_nodes]
+        g._in_strength_on_I = g._in_strength[internal_nodes]
 
         return g.topN_overlap_pr_out_in(g, measures = ["_out_strength_on_I", "_in_strength_on_I"])
 
-    def topN_overlap_pr_deg_stre(g, gI, gI_model = None):
+    def calculate_out_in_degree_strength_on_I(g, gI, model):
+        
+        internal_nodes = gI.internal_nodes
 
+        # calculate the strengths
+        g._out_strength_on_I = g._out_strength[internal_nodes]
+        g._in_strength_on_I = g._in_strength[internal_nodes]
+
+        # calculate the degrees on I for gI
+        model._out_degree_on_I = model._out_degree[internal_nodes]
+        model._in_degree_on_I = model._in_degree[internal_nodes]
+
+    def topN_overlap_pr_deg_stre(g, gI, gI_model = None):
+        """
+        g is treated as self
+        """
+        
         if gI_model == None:
             gI_model = gI
 
@@ -109,9 +146,9 @@ class overlap_helpers:
         internal_nodes = gI.internal_nodes
         
         # ground truth
-        if not hasattr(g, "_topN_overlap_out_degree_on_I"):
-            g.topN_overlap_pr_out_in_degree(internal_nodes=internal_nodes)
-            g.topN_overlap_pr_out_in_strengths(internal_nodes=internal_nodes)
+        #if not hasattr(g, "_topN_overlap_out_degree_on_I"):
+        g.topN_overlap_pr_out_in_degree(internal_nodes=internal_nodes)
+        g.topN_overlap_pr_out_in_strengths(internal_nodes=internal_nodes)
 
         # internal graph out/in degree
         g.topN_overlap_pr_out_in_degree(gI_model, internal_nodes=internal_nodes)
