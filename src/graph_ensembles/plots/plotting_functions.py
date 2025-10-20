@@ -401,7 +401,7 @@ def topN_overlap_pr(gI, model):
     obs_s, exp_s = 60, 60
 
     # internal topN overlap
-    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s, label = 'Internal')
+    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal')
     
     # expected topN overlap on average
     # _, bars, caps = ax.errorbar(
@@ -433,7 +433,7 @@ def topN_overlap_pr_deg_stre(g, gI, model):
 
     # out direction
     x, y = g._topN_overlap_out_degree_on_I_range, g._topN_overlap_out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'Out-Degree')
+    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, s = obs_s * 1.4, label = 'Out-Degree')
 
     x, y = g._topN_overlap_out_strength_on_I_range, g._topN_overlap_out_strength_on_I
     axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, s = obs_s, label = 'Out-Strength')
@@ -447,7 +447,7 @@ def topN_overlap_pr_deg_stre(g, gI, model):
 
     # in direction
     x, y = g._topN_overlap_in_degree_on_I_range, g._topN_overlap_in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, s = obs_s, label = 'In-Degree')
+    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, s = obs_s * 1.4, label = 'In-Degree')
 
     x, y = g._topN_overlap_in_strength_on_I_range, g._topN_overlap_in_strength_on_I
     axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, s = obs_s, label = 'In-Strength')
