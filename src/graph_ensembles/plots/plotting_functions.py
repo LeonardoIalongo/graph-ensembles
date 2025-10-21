@@ -245,6 +245,49 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
         plt.close()
     mpl.rcParams["font.size"] = old_font
 
+def out_in_degree_internal_VS_restricted(g, gI, model):
+
+    full_path = model.plots_dir + f"/out_in_degree_internal_vs_restricted.png"
+    
+    fig, axs = plt.subplots(1, 2, figsize = (24,8))
+    axis_scale = 'log'
+    obs_s, exp_s = 100, 50
+
+    # out direction
+    x, y = g._out_degree_on_I, gI._out_degree
+    _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
+    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal Out-Degree')
+
+    y = model._out_degree_on_I
+    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    # plot the reference identity line
+
+
+    # in direction
+    x, y = g._in_degree_on_I, gI._in_degree
+    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
+    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal In-Degree')
+    
+    y = model._in_degree_on_I
+    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+
+    axis_scale = "log" #if out_min == 0 or in_min == 0 else "log"
+    for i, ax in enumerate(axs):
+        lgd = ax.legend()
+        for legend_handle in lgd.legend_handles:
+            legend_handle.set_sizes([100])
+        
+        xy_label = "Out-" if i == 0 else "In-"
+        ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated " + xy_label + 'Degree',)
+        ax.set_axisbelow(True)
+        ax.grid(True)
+    
+    fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
+    utils.save_fig(fig, full_path=full_path)
+    plt.close()
+
 def norm_diffs_per_iteration(plots_dir, diff_norms):
     """
     Plot the norm diff against the numb of iteration to inspect convergence properties

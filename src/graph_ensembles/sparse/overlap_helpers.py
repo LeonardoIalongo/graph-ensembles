@@ -1,5 +1,70 @@
 class overlap_helpers:
-    
+
+    @staticmethod
+    def get_ranked_groups(arr):
+        """
+        Group indices by their values in descending order.
+        
+        Args:
+            arr: Input array
+            
+        Returns:
+            List of lists containing indices grouped by unique values in descending order
+        """
+        import numpy as np
+        # Get unique values in descending order
+        unique_vals = sorted(set(arr), reverse=True)
+        # Group indices that share the same value
+        return [list(np.where(arr == val)[0]) for val in unique_vals]
+
+
+    def topN_overlap_2_meas_fast(true_meas, est_meas):
+        """
+        Calculate Jaccard similarity between ranked groups incrementally.
+        
+        Args:
+            true_meas (np.ndarray): First measure (e.g. page rank values)
+            est_meas (np.ndarray): Second measure (e.g. out-degrees)
+            num_vertices (int): Optional early stopping point
+            
+        Returns:
+            tuple: (range(1,N+1), overlap_values)
+        """
+
+        # Get ranked groups
+        true_ranked = overlap_helpers.get_ranked_groups(true_meas)
+        est_ranked = overlap_helpers.get_ranked_groups(est_meas)
+        
+        # print(f'-true_ranked: {true_ranked}',)
+        # print(f'-est_ranked: {est_ranked}',)
+
+        # Initialize empty sets and results
+        topN_true = set()
+        topN_est = set()
+        overlaps = []
+        
+        # Define Jaccard similarity
+        jacc_similarity = lambda A, B: len(A & B) / len(A | B)
+        
+        # Iterate through ranks
+        max_rank = min(len(true_ranked), len(est_ranked))
+        for N in range(max_rank):
+            
+            # Add nodes at current rank to sets
+            topN_true.update(true_ranked[N])
+            topN_est.update(est_ranked[N])
+            
+            # Calculate overlap
+            overlap = jacc_similarity(topN_true, topN_est)
+            overlaps.append(overlap)
+
+            # print(f'\n-N: {N}',)
+            # print(f'-topN_true: {topN_true}',)
+            # print(f'-topN_est: {topN_est}',)
+            # print(f'-overlap: {overlap}',)
+                
+        return range(1, len(overlaps) + 1), overlaps
+
     def topN_by_rank(g, arr):
         """
         Return a list containing the topN@K, where K is the placement in the rank.
@@ -113,7 +178,7 @@ class overlap_helpers:
         """
         return g.topN_overlap_pr_out_in(measures = ["_out_strength_on_I", "_in_strength_on_I"])
 
-    def calculate_out_in_degree_strength_on_I(g, gI, model = None):
+    def out_in_degree_strength_on_I(g, gI, model = None):
         """
         Calculate the usefull measures for computing the overlap
         Note: model._pr_on_I was already computed

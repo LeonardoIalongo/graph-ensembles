@@ -132,7 +132,7 @@ def full_path_retriever(ref_model, level = None, name = None, str_dimXBC = None,
     return replace_path
 
 # Plot Binary Measures
-def save_fig(fig, full_path = None, save = True, dpi = 100):
+def save_fig(fig, full_path = None, save = True, dpi = 300):
     if save:
         import os
         dir_ = os.path.dirname(full_path)

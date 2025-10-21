@@ -345,6 +345,57 @@ class ScaleInvariantModel(FitnessModel):
             self._exp_num_edges += num_frozen_edges
 
         return self._exp_num_edges
+    
+    def sample_wrapper(self, g, gI, unsampled_vI, frozen_edges, measures, force_resampling = False):
+        """
+        Define all the variables needed for sampling
+        """
+        from tqdm import trange
+        import os
+
+        # def var for self vars
+        mod_vars = self.__dict__
+        vsplit, vsplits = gI.vsplit, self.vsplits
+        num_graph_samples_per_vsplit, chunk_row_size = self.num_graph_samples_per_vsplit, self.chunk_row_size
+        
+        # find the starting index graph (0 if a collector routine is not implemented)
+        num_start_graph = self.set_ensemble_variables(measures, num_graph_samples_per_vsplit)
+
+        # Note: the seed = vsplit only works for solo-agent. The graph-sampling is parallelized, so it would be random even if vsplit specified.
+        # That's why .sample() has graph_idx as argument
+        # set graph_idx = 0, since if all the graphs are already sampled in the next calculations it will have a number different to None
+        fname = self.vars_dir + "/" + "_".join([x.strip("_") for x in measures]) + "_std.pkl"
+        if not os.path.exists(fname) or force_resampling:
+            print(f'-Sampling vsplit {vsplit} for {measures}: {num_start_graph} graphs already sampled, {np.clip(num_graph_samples_per_vsplit - num_start_graph, 0, None)} remaining')
+            for graph_idx in trange(num_start_graph, num_graph_samples_per_vsplit, 
+                            desc=f"-Total progress {int(np.round((vsplit+1)/len(vsplits) * 100))}%, Inner Graph Sampling", position = 0, leave= True):
+
+                # sample
+                gs = self.sample(ref_g = g, unsampled_vI = unsampled_vI, frozen_edges = frozen_edges, 
+                                graph_idx = graph_idx, chunk_row_size = chunk_row_size)
+                gs.calculate_measures(g, measures)
+                gs.set_pr_on_I(gI)
+                
+                # save the ensemble average and std for every measures on the self class
+                for m in measures:
+                    if num_start_graph == graph_idx == 0:
+                        mod_vars[f"prev{m}"], mod_vars[f"prev{m}_std"] = 0, 0
+                    mod_vars[f"prev{m}"], mod_vars[f"prev{m}_std"] = \
+                            self.recursive_mean_std(graph_idx, mod_vars[f"prev{m}"], mod_vars[f"prev{m}_std"], gs.__dict__[m])
+
+            for m in measures:
+                mod_vars[m] = mod_vars[f"prev{m}"]
+                mod_vars[m+"_std"] = mod_vars[f"prev{m}_std"]
+
+            # save the dict of measures
+            measures_std = measures.copy()
+            measures_std.extend([x + "_std" for x in measures])
+            meas_dict = {k:mod_vars[k] for k in mod_vars if k in measures_std}
+            utils.save_dict(fname, meas_dict)
+        else:
+            print(f'-Loading {measures} and std for vsplit {vsplit} over {num_graph_samples_per_vsplit } graphs')
+            meas_dict = utils.load_dict(fname)
+            mod_vars.update(meas_dict)
 
     def topN_overlap_pr_tot_rel_err_over_mean(self, g, gI):
         

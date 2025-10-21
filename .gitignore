@@ -22,3 +22,4 @@ sythetic_network/*
 error.txt
 examples/dap_enlarge_network.ipynb
 examples/test_gpu.py
+desktop.ini

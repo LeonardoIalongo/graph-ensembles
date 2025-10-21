@@ -799,9 +799,6 @@ class DiGraph(Graph):
         # set the page rank of g on internal gI
         g.set_pr_on_I(gI)
         
-        # gI.set_intervals(unique_counting=True)
-        # gI.topN_overlap_pr_tot_rel_err(g, force_calc=True)
-        
         return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges
 
     def calculate_measures(self, ref_g, measures):
