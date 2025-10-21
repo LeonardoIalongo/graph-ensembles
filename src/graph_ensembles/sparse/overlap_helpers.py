@@ -15,10 +15,10 @@ class overlap_helpers:
         # Get unique values in descending order
         unique_vals = sorted(set(arr), reverse=True)
         # Group indices that share the same value
-        return [list(np.where(arr == val)[0]) for val in unique_vals]
+        return [np.where(arr == val)[0] for val in unique_vals]
 
 
-    def topN_overlap_2_meas_fast(true_meas, est_meas):
+    def topN_overlap_2_meas_fast(true_meas, est_meas, max_rank = None):
         """
         Calculate Jaccard similarity between ranked groups incrementally.
         
@@ -47,7 +47,8 @@ class overlap_helpers:
         jacc_similarity = lambda A, B: len(A & B) / len(A | B)
         
         # Iterate through ranks
-        max_rank = min(len(true_ranked), len(est_ranked))
+        if max_rank == None:
+            max_rank = min(len(true_ranked), len(est_ranked))
         for N in range(max_rank):
             
             # Add nodes at current rank to sets
@@ -65,55 +66,6 @@ class overlap_helpers:
                 
         return range(1, len(overlaps) + 1), overlaps
 
-    def topN_by_rank(g, arr):
-        """
-        Return a list containing the topN@K, where K is the placement in the rank.
-        E.g. K = 3, provides the 1st, 2nd and 3rd classified nodes
-        """
-        import numpy as np
-
-        # arr: 1D numpy array of values
-        uniq_vals = np.unique(arr)[::-1][:g.__dict__.get("_topN_max_rank", None)]  # descending order
-        return [np.where(arr >= val)[0] for val in uniq_vals]
-    
-    @staticmethod
-    def topN_overlap_2_meas(true_meas, est_meas):
-        """
-        Returns 
-        1) the overlap at topN among the true_meas and est_meas
-        2) the minum number of nodes involved in the operation to be used in the topN plotting
-        """
-
-        true_len, est_len = len(true_meas), len(est_meas)
-        topN_overlap = []
-        jacc_similarity = lambda A, B: len(A & B) / len(A.union(B))
-
-        # range over the maximum placement in the rankings
-        min_rank_len = min(true_len, est_len)
-        for l in range(min_rank_len):
-
-            # i and j are clipped not to exceed its length
-            i,j = min(l, true_len-1), min(l, est_len-1)
-            true_meas_i, est_meas_j = set(true_meas[i]), set(est_meas[j])
-
-            # compute the jaccard similarity as overlap
-            overlap_ij = jacc_similarity(true_meas_i, est_meas_j)
-            topN_overlap.append(overlap_ij)
-
-            # fill the min_num_nodes with the minimum among the true_meas_i and est_meas_j number of nodes
-            # if max, multiple vertical overlaps when A or B reaches the total numb of nodes
-            # min_num_nodes.append(min(len(true_meas_i), len(est_meas_j)))
-        
-        topN_overlap_range = range(1, min_rank_len + 1)
-
-        return topN_overlap_range, topN_overlap
-
-    def topN_overlap_g_pr_on_I(g, est_meas):
-        
-        # if not hasattr(g, "_topN_pr_on_I"):
-        g._topN_pr_on_I = g.topN_by_rank(g._pr_on_I)
-        return overlap_helpers.topN_overlap_2_meas(g._topN_pr_on_I, est_meas)
-
     def topN_overlap_pr_out_in(g, gI_model = None, measures = ["_pr"]):
         """
         Calculate the topN_overlap between the out/in deg rankings.
@@ -129,16 +81,17 @@ class overlap_helpers:
         if gI_model == None:
             gI_model = g
         
+        g_pr_on_I = g._pr_on_I
+        max_rank = g.__dict__.get("_topN_max_rank", None)
+        
+        # smart way of creating a not-existing var with changing name
+        gI_model_dict = gI_model.__dict__
+        
+        # loop over the measures
         for meas in measures:
-            gI_model_dict = gI_model.__dict__
-
-            # calculate the topN of the respective meas
-            gI_model_dict["_topN"+meas] = g.topN_by_rank(gI_model_dict[meas])
-
-            # print(f'-gI_model_dict["_topN"+meas]: {gI_model_dict["_topN"+meas]}',)
-
-            # calculate the overlal between the topN page-rank on I and the topN of the measure
-            gI_model_dict["_topN_overlap"+meas+"_range"], gI_model_dict["_topN_overlap"+meas] = g.topN_overlap_g_pr_on_I(gI_model_dict["_topN"+meas])
+            var_name = "_topN_overlap"+meas
+            gI_model_dict[var_name+"_range"], gI_model_dict[var_name] \
+                                = overlap_helpers.topN_overlap_2_meas_fast(g_pr_on_I, gI_model_dict[meas], max_rank)
 
 
     def topN_overlap_pr(g, gI_model = None):
