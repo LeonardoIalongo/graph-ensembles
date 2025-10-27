@@ -17,8 +17,12 @@ class overlap_helpers:
         # Group indices that share the same value
         return [np.where(arr == val)[0] for val in unique_vals]
 
+    def similarity(A, B, type_ = "jaccard"):
 
-    def topN_overlap_2_meas_fast(true_meas, est_meas, max_rank = None):
+        if type_ == "jaccard":
+            return len(A & B) / len(B)
+
+    def topN_overlap_2_meas_fast(true_meas, est_meas, max_pos = None):
         """
         Calculate Jaccard similarity between ranked groups incrementally.
         
@@ -42,22 +46,28 @@ class overlap_helpers:
         topN_true = set()
         topN_est = set()
         overlaps = []
+        overlaps_range = []
         
-        # Define Jaccard similarity
-        jacc_similarity = lambda A, B: len(A & B) / len(A | B)
+        # Define Similarity
+        # similarity = lambda A, B: len(A & B) / len(A | B) # jaccard similarity
+        
         
         # Iterate through ranks
-        if max_rank == None:
-            max_rank = min(len(true_ranked), len(est_ranked))
-        for N in range(max_rank):
+        # set it to min if you want to remove the straight line at the end (inclusion rather than similarity)
+        if max_pos == None:
+            max_pos = max(len(true_ranked), len(est_ranked)) 
+        for N in range(max_pos):
             
             # Add nodes at current rank to sets
-            topN_true.update(true_ranked[N])
-            topN_est.update(est_ranked[N])
+            if N < len(true_ranked):
+                topN_true.update(true_ranked[N])
+            if N < len(est_ranked):
+                topN_est.update(est_ranked[N])
             
             # Calculate overlap
-            overlap = jacc_similarity(topN_true, topN_est)
+            overlap = overlap_helpers.similarity(topN_true, topN_est)
             overlaps.append(overlap)
+            overlaps_range.append(len(topN_est))
 
             # print(f'\n-N: {N}',)
             # print(f'-topN_true: {topN_true}',)
@@ -70,28 +80,48 @@ class overlap_helpers:
         """
         Calculate the topN_overlap between the out/in deg rankings.
         The function is abstract so refer to the Example for a better understanding of the passages.
-        Indeed, to host every measure and class we did gI_model_dict = gI_model.__dict__. In the example, instead, there is a practical application for out_degree and gI
-        gI_model: gI (internal) or g itgI_model
+        Indeed, to host every measure and class we did gI_model_vars = gI_model.__dict__. In the example, instead, there is a practical application for out_degree and gI
+        gI_model: gI (internal) or g
 
         Example:
         gI._topN_out_degree = topN_by_rank(gI._out_degree)
         gI._topN_overlap_out_degree = topN_overlap_g_pr_on_I(gI._topN_out_degree)
         """
+        import os
+        from graph_ensembles import utils
+
         # if no specification, then ground truth is assumed to be passed
         if gI_model == None:
             gI_model = g
-        
-        g_pr_on_I = g._pr_on_I
-        max_rank = g.__dict__.get("_topN_max_rank", None)
-        
+
         # smart way of creating a not-existing var with changing name
-        gI_model_dict = gI_model.__dict__
+        gI_model_vars = gI_model.__dict__
+
+        if len(measures) == 2:
+            fname = gI_model.vars_dir + "/topN_overlap_out_in_" + measures[0].strip("_out") + "_range.pkl"
+        else:
+            fname = gI_model.vars_dir + "/topN_overlap" + measures[0] + "_range.pkl"
         
-        # loop over the measures
-        for meas in measures:
-            var_name = "_topN_overlap"+meas
-            gI_model_dict[var_name+"_range"], gI_model_dict[var_name] \
-                                = overlap_helpers.topN_overlap_2_meas_fast(g_pr_on_I, gI_model_dict[meas], max_rank)
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        if not os.path.exists(fname):
+
+            g_pr_on_I = g._pr_on_I
+            max_pos = g.__dict__.get("_topN_max_pos", None)
+            
+            # loop over the measures and select only the new ones to be saved
+            meas_dict = {}
+            for meas in measures:
+                print(f'-Computing topN overlap PR VS {meas} for {gI_model.name}-{gI_model.graph_kind}', )
+                var_name = "_topN_overlap"+meas
+                gI_model_vars[var_name+"_range"], gI_model_vars[var_name] \
+                                    = overlap_helpers.topN_overlap_2_meas_fast(g_pr_on_I, gI_model_vars[meas], max_pos)
+                meas_dict[var_name+"_range"], meas_dict[var_name] = gI_model_vars[var_name+"_range"], gI_model_vars[var_name]
+            utils.save_dict(fname, meas_dict)
+        
+        else:
+            print(f'-Loading topN overlap PR VS {measures} for {gI_model.name}-{gI_model.graph_kind}')
+            meas_dict = utils.load_dict(fname)
+            gI_model_vars.update(meas_dict)
 
 
     def topN_overlap_pr(g, gI_model = None):

@@ -346,7 +346,7 @@ class ScaleInvariantModel(FitnessModel):
 
         return self._exp_num_edges
     
-    def sample_wrapper(self, g, gI, unsampled_vI, frozen_edges, measures, force_resampling = False):
+    def sample_wrapper(self, g, gI, unsampled_vI, frozen_edges, measures, recompute = False):
         """
         Define all the variables needed for sampling
         """
@@ -365,7 +365,7 @@ class ScaleInvariantModel(FitnessModel):
         # That's why .sample() has graph_idx as argument
         # set graph_idx = 0, since if all the graphs are already sampled in the next calculations it will have a number different to None
         fname = self.vars_dir + "/" + "_".join([x.strip("_") for x in measures]) + "_std.pkl"
-        if not os.path.exists(fname) or force_resampling:
+        if not os.path.exists(fname) or recompute:
             print(f'-Sampling vsplit {vsplit} for {measures}: {num_start_graph} graphs already sampled, {np.clip(num_graph_samples_per_vsplit - num_start_graph, 0, None)} remaining')
             for graph_idx in trange(num_start_graph, num_graph_samples_per_vsplit, 
                             desc=f"-Total progress {int(np.round((vsplit+1)/len(vsplits) * 100))}%, Inner Graph Sampling", position = 0, leave= True):

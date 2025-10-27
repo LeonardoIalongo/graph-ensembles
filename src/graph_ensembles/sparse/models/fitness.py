@@ -79,7 +79,8 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         elif len(kwargs) > 0:
             self.__dict__.update(kwargs)
         
-        self.fit_method_title = self.fit_method[len("num_edges_"):].title()
+        title_conversion = lambda x: x[len("num_edges_"):].title()
+        self.fit_method_title = title_conversion("internal" if "intra" in self.fit_method else self.fit_method)
 
         self._create_vars_dir()
 

@@ -228,12 +228,12 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
                         )
 
             # set title
-            title = "Observed" if i == 0 else f"Rec. w/ {model.fit_method_title}"
+            title = "Internal" if i == 0 else f"Rec. w/ {model.fit_method_title}"
             _ = ax.grid(False)
 
             _ = ax.set(
-                        xlabel='Full-PR on Internal Nodes',
-                        ylabel='Intra PR',
+                        xlabel='Empirical',
+                        ylabel='Estimated',
                         xscale=axis_scale,
                         yscale=axis_scale,
                         title = title
@@ -254,23 +254,23 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
     obs_s, exp_s = 100, 50
 
     # out direction
-    x, y = g._out_degree_on_I, gI._out_degree
-    _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
+    x, y = g._out_degree_on_I, model._out_degree_on_I
+    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+    y = gI._out_degree
     axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal Out-Degree')
 
-    y = model._out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
     # plot the reference identity line
-
+    _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
     # in direction
-    x, y = g._in_degree_on_I, gI._in_degree
-    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
-    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal In-Degree')
-    
-    y = model._in_degree_on_I
+    x, y = g._in_degree_on_I, model._in_degree_on_I
     axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
+    y = gI._in_degree
+    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal In-Degree')
+    
+    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
     axis_scale = "log" #if out_min == 0 or in_min == 0 else "log"
     for i, ax in enumerate(axs):
@@ -279,7 +279,7 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
             legend_handle.set_sizes([100])
         
         xy_label = "Out-" if i == 0 else "In-"
-        ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated " + xy_label + 'Degree',)
+        ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated",)
         ax.set_axisbelow(True)
         ax.grid(True)
     
@@ -444,7 +444,7 @@ def topN_overlap_pr(gI, model):
     obs_s, exp_s = 60, 60
 
     # internal topN overlap
-    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal')
+    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s * 1.2, label = 'Internal')
     
     # expected topN overlap on average
     # _, bars, caps = ax.errorbar(
@@ -510,7 +510,7 @@ def topN_overlap_pr_deg_stre(g, gI, model):
         for legend_handle in lgd.legend_handles:
             legend_handle.set_sizes([100])
         
-        ax.set(ylim = [None, 1.05], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap',)
+        ax.set(ylim = [None, 1.05], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
         ax.set_axisbelow(True)
         ax.grid(True)
     

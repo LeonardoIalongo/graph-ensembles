@@ -177,7 +177,7 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.prop_dyad,
                 self.selfloops,
                 unsampled_vI
-            )
+                )
 
             self._degree = res[0]
             self._out_degree = res[1]
@@ -188,8 +188,30 @@ class DiGraphEnsemble(GraphEnsemble):
                 self.add_frozen_degrees(gI, "out")
                 self.add_frozen_degrees(gI, "in")
 
-
         return self._degree
+
+    def expected_degrees_loader(self, unsampled_vI = None, gI = None, recompute = False):
+        import os
+
+        # save the dict of measures
+        deg_measures = ["_out_degree", "_in_degree"]
+        mod_vars = self.__dict__
+        fname = self.vars_dir + "/out_in_degree.pkl"
+
+        # check if extists, then load it
+        if os.path.exists(fname) and not recompute:
+            print(f'-Loading {deg_measures}')
+            meas_dict = utils.load_dict(fname)
+            mod_vars.update(meas_dict)
+        
+        else:
+            print('-Computing The Degrees',)
+            # create self._out_degree and in_degree
+            _ = self.expected_degree(unsampled_vI, gI, recompute = recompute)
+
+            # select degrees and save the dict
+            meas_dict = {k:mod_vars[k] for k in mod_vars if k in deg_measures}
+            utils.save_dict(fname, meas_dict)
 
     def expected_out_degree(self, recompute=False):
         """Compute the expected out degree."""
