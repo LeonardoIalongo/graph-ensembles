@@ -206,7 +206,6 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
     old_font = mpl.rcParams['font.size']
 
     mpl.rcParams["font.size"] = 18
-    import os
     full_path = model.plots_dir + f"/{g._pr_name}_on_intra.png"
 
     if True: #not os.path.exists(full_path):
@@ -222,7 +221,8 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
         for i, ax in enumerate(axs):
             
             # plot the reference identity line
-            _ = ax.plot([x.min(), x.max()],
+            _ = ax.plot(
+                        [x.min(), x.max()],
                         [x.min(), x.max()],
                         'r--', zorder = 1,
                         )
@@ -243,6 +243,7 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
 
         utils.save_fig(fig, full_path=full_path)
         plt.close()
+        
     mpl.rcParams["font.size"] = old_font
 
 def out_in_degree_internal_VS_restricted(g, gI, model):
@@ -510,7 +511,7 @@ def topN_overlap_pr_deg_stre(g, gI, model):
         for legend_handle in lgd.legend_handles:
             legend_handle.set_sizes([100])
         
-        ax.set(ylim = [None, 1.05], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
+        ax.set(ylim = [None, None], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
         ax.set_axisbelow(True)
         ax.grid(True)
     

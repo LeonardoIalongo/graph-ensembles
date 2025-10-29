@@ -70,7 +70,7 @@ class ScaleInvariantModel(FitnessModel):
 
     #     return model
     @staticmethod
-    def initialize_model(g, gI, vR, kwargs, num_edges_bet=None):
+    def initialize_model(g, gI, vR, kwargs):
         """
         Initialize the ScaleInvariantModel based on the provided graph data.
 
@@ -84,8 +84,6 @@ class ScaleInvariantModel(FitnessModel):
             External nodes (ROW nodes).
         kwargs : dict
             Additional parameters for the model.
-        num_edges_bet : int, optional
-            Number of edges between internal and external nodes.
 
         Returns:
         --------
@@ -104,19 +102,17 @@ class ScaleInvariantModel(FitnessModel):
 
             # if only "intra" in fit_method
             kwargs.update({
-                            "prop_out_I": gI.out_strength(),
-                            "prop_in_I": gI.in_strength(),
                             "num_vertices": gI.num_vertices,
                             "level": g.level,
-                            "intra_size": gI.intra_size,
-                            "vsplit": gI.vsplit,
                             })
             
             # if there is also "inbetween" update the prop_R, num_vertices and num_edges
             if "bet" in fit_method:
 
-                # Extract ROW nodes and calculate strengths
+                # extract vR identifier
                 vR_nodes = vR.T.values[0]
+
+                # create maps from identifiers to index (g.id_dict[i]) and search for the relative strengths
                 out_stre = lambda i: g.out_strength()[g.id_dict[i]]
                 in_stre = lambda i: g.in_strength()[g.id_dict[i]]
                 cmap = lambda stre, nodes: np.array(list(map(stre, nodes)))
@@ -125,7 +121,7 @@ class ScaleInvariantModel(FitnessModel):
                 kwargs.update({
                     "prop_out_R": cmap(out_stre, vR_nodes),
                     "prop_in_R": cmap(in_stre, vR_nodes),
-                    "num_vertices": g.num_vertices,
+                    "num_vertices": g.num_vertices, # gI.num_vertices + ROW = g.num_vertices
                     })
 
             # Initialize the model with the updated kwargs
@@ -216,7 +212,7 @@ class ScaleInvariantModel(FitnessModel):
         N = len(prop_out_I)
 
         # Preallocate result vectors for each outer loop iteration (i)
-        # These arrays store intermediate totals per i, which can be summed later
+        # These arrays store intermediate totals per i, which will be summed later
         f_vector = np.zeros(N)
         jac_vector = np.zeros(N)
 
@@ -350,6 +346,7 @@ class ScaleInvariantModel(FitnessModel):
         """
         Define all the variables needed for sampling
         """
+
         from tqdm import trange
         import os
 
@@ -362,18 +359,28 @@ class ScaleInvariantModel(FitnessModel):
         num_start_graph = self.set_ensemble_variables(measures, num_graph_samples_per_vsplit)
 
         # Note: the seed = vsplit only works for solo-agent. The graph-sampling is parallelized, so it would be random even if vsplit specified.
-        # That's why .sample() has graph_idx as argument
-        # set graph_idx = 0, since if all the graphs are already sampled in the next calculations it will have a number different to None
-        fname = self.vars_dir + "/" + "_".join([x.strip("_") for x in measures]) + "_std.pkl"
+        
+        # set the file name where to store the page-rank and degrees
+        # save also the full degrees since they are neede for the ccdf plot
+        measures = [x for x in measures if "degree" not in x]
+        fname = self.vars_dir + "/" + "_".join([x.strip("_") for x in measures]) + "_std_on_full_net.pkl"
         if not os.path.exists(fname) or recompute:
+            
             print(f'-Sampling vsplit {vsplit} for {measures}: {num_start_graph} graphs already sampled, {np.clip(num_graph_samples_per_vsplit - num_start_graph, 0, None)} remaining')
             for graph_idx in trange(num_start_graph, num_graph_samples_per_vsplit, 
                             desc=f"-Total progress {int(np.round((vsplit+1)/len(vsplits) * 100))}%, Inner Graph Sampling", position = 0, leave= True):
 
                 # sample
-                gs = self.sample(ref_g = g, unsampled_vI = unsampled_vI, frozen_edges = frozen_edges, 
-                                graph_idx = graph_idx, chunk_row_size = chunk_row_size)
+                gs = self.sample(ref_g = g, 
+                                unsampled_vI = unsampled_vI, 
+                                frozen_edges = frozen_edges, 
+                                graph_idx = graph_idx, 
+                                chunk_row_size = chunk_row_size)
+                
+                # now calculate the needed
                 gs.calculate_measures(g, measures)
+                
+                # # restrict the pr only on I
                 gs.set_pr_on_I(gI)
                 
                 # save the ensemble average and std for every measures on the self class
@@ -387,11 +394,12 @@ class ScaleInvariantModel(FitnessModel):
                 mod_vars[m] = mod_vars[f"prev{m}"]
                 mod_vars[m+"_std"] = mod_vars[f"prev{m}_std"]
 
-            # save the dict of measures
+            # save the dict of measures with std
             measures_std = measures.copy()
             measures_std.extend([x + "_std" for x in measures])
             meas_dict = {k:mod_vars[k] for k in mod_vars if k in measures_std}
             utils.save_dict(fname, meas_dict)
+        
         else:
             print(f'-Loading {measures} and std for vsplit {vsplit} over {num_graph_samples_per_vsplit } graphs')
             meas_dict = utils.load_dict(fname)

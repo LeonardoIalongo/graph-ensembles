@@ -18,6 +18,7 @@ from graph_ensembles.sparse.overlap_helpers import overlap_helpers
 
 class common_functions():
     """ Class to include some common function both for observed Graphs and GraphEnsemble """
+    
     def set_pr_on_I(self, gI, vec_meas=["_pr"]):
         """
             self is the ground truth g or the model;
@@ -374,7 +375,8 @@ class Graph(common_functions, overlap_helpers):
         num_nodes = v.shape[0]
         num_intra_nodes = int(intra_size * num_nodes)
 
-        # fixed a seed, extract num_intra_nodes indexes for the vI nodes 
+        # fixed a seed, extract num_intra_nodes indexes for the vI nodes
+        # Note the "id" could be whatever identifier, e.g. the naics_code = 119911 
         np.random.seed(vsplit)
         idx_intra_nodes = np.random.choice(num_nodes, size = num_intra_nodes, replace=False)
         vI = v.iloc[idx_intra_nodes].sort_values(by = "id", ignore_index = False)
@@ -389,7 +391,6 @@ class Graph(common_functions, overlap_helpers):
         # select the edge ING
         eI = edge_idx(idx_eI)
         
-        # return these if return_row == False
         return vI, eI, idx_intra_nodes
 
     def vsplit_row(self, v, vI, e, idx_intra_nodes, intra_num_edges, fit_method):
@@ -421,8 +422,8 @@ class Graph(common_functions, overlap_helpers):
         """
         unsampled_vI, frozen_edges = None, None
         if intra_size < 1:
-            # convert the id nodes into index 
-            # use the g.id_dict since the objective is to sample the full network. So, nodes must have the full-indexes 
+
+            # convert the id nodes (e.g. naics_code = 119911) into index using g.id_dict = { id_idx : int_idx } = { 119911 : 14 }
             idx_vI = list(map(self.id_dict.get, vI.id.values))
 
             # use mask since in parallel numba there is no operation such as "v in vI"
@@ -796,7 +797,7 @@ class DiGraph(Graph):
         gI.calculate_measures(g, measures)
         g.calculate_measures(g, measures)
         
-        # set the page rank of g on internal gI
+        # restrict the page rank of g on internal gI
         g.set_pr_on_I(gI)
         
         return gI, vI, eI, idx_intra_nodes, unsampled_vI, frozen_edges

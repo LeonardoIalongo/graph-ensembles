@@ -608,9 +608,7 @@ class DiGraphEnsemble(GraphEnsemble):
                 prop_in.view(1, -1),   # Shape: [1, N]
             )
             
-            # 2. Apply masks directly to the probability matrix
-            
-            # Mask for self-loops
+            # If selfloops = False, enter and set p_ii = 0 
             if not selfloops:
                 # Create indices for the diagonal within this chunk
                 # The columns to zero-out are from `start` to `end-1`
@@ -620,6 +618,7 @@ class DiGraphEnsemble(GraphEnsemble):
 
             # Mask for unsampled vertices
             if unsampled_vI.any():
+                
                 # Get the unsampled status for the current chunk of rows
                 u_i_chunk = unsampled_vI[start:end] # Shape: [chunk_size]
                 
@@ -744,16 +743,16 @@ class DiGraphEnsemble(GraphEnsemble):
         import pandas as pd
 
         rows, cols = self.tc_block_parallel_sample_improved(
-                                                p_ij, 
-                                                param, 
-                                                prop_out, 
-                                                prop_in,
-                                                prop_dyad, 
-                                                selfloops, 
-                                                unsampled_vI,
-                                                chunk_row_size,
-                                                seed
-                                            )
+                                                            p_ij, 
+                                                            param, 
+                                                            prop_out, 
+                                                            prop_in,
+                                                            prop_dyad, 
+                                                            selfloops, 
+                                                            unsampled_vI,
+                                                            chunk_row_size,
+                                                            seed
+                                                            )
 
         # Flatten rows/cols (List[List[int64]]) to 1D numpy arrays
         # rows = np.fromiter(chain.from_iterable(sampled_rows), dtype=np.int64)

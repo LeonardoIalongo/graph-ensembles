@@ -80,7 +80,7 @@ class FitnessModel(DiGraphEnsemble, common_functions):
             self.__dict__.update(kwargs)
         
         title_conversion = lambda x: x[len("num_edges_"):].title()
-        self.fit_method_title = title_conversion("internal" if "intra" in self.fit_method else self.fit_method)
+        self.fit_method_title = title_conversion("num_edges_internal" if "intra" == self.fit_method else self.fit_method)
 
         self._create_vars_dir()
 
@@ -325,13 +325,13 @@ class FitnessModel(DiGraphEnsemble, common_functions):
         else:
             print(f'-Fit the parameter with {self.fit_method}',)
             self.fit(
-                x0=x0,
-                method=method,
-                atol=atol,
-                rtol=rtol,
-                maxiter=maxiter,
-                verbose=verbose,
-                )
+                    x0=x0,
+                    method=method,
+                    atol=atol,
+                    rtol=rtol,
+                    maxiter=maxiter,
+                    verbose=verbose,
+                    )
             print(f'-Fitted Param: {self.param[0]}',)
             os.makedirs(os.path.dirname(path_param), exist_ok = True)
             np.savetxt(path_param, self.param, delimiter = ",")
