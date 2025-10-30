@@ -255,21 +255,22 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
     obs_s, exp_s = 100, 50
 
     # out direction
+    alpha = .8
     x, y = g._out_degree_on_I, model._out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
     y = gI._out_degree
-    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal Out-Degree')
+    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
 
     # plot the reference identity line
     _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
     # in direction
     x, y = g._in_degree_on_I, model._in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
     y = gI._in_degree
-    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal In-Degree')
+    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
     
     _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
@@ -277,8 +278,9 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
     for i, ax in enumerate(axs):
         lgd = ax.legend()
         for legend_handle in lgd.legend_handles:
-            legend_handle.set_sizes([100])
-        
+            legend_handle.set_alpha(1)
+            legend_handle.set_sizes([200])
+            
         xy_label = "Out-" if i == 0 else "In-"
         ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated",)
         ax.set_axisbelow(True)
@@ -443,9 +445,10 @@ def topN_overlap_pr(gI, model):
     fig, ax = plt.subplots(figsize = (12,7))
     axis_scale = 'log'
     obs_s, exp_s = 60, 60
+    alpha = .8
 
     # internal topN overlap
-    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, s = exp_s * 1.2, label = 'Internal')
+    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.2, label = 'Internal')
     
     # expected topN overlap on average
     # _, bars, caps = ax.errorbar(
@@ -455,7 +458,7 @@ def topN_overlap_pr(gI, model):
     # _set_alpha(bars, caps, alpha = 0.5)
 
     # expected topN overlap over mean "#48ACF0" #4E937A
-    ax.scatter(model._topN_overlap_pr_on_I_range, model._topN_overlap_pr_on_I, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    ax.scatter(model._topN_overlap_pr_on_I_range, model._topN_overlap_pr_on_I, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
     
     ax.set(xscale = axis_scale, yscale = "linear", xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
     
@@ -474,33 +477,34 @@ def topN_overlap_pr_deg_stre(g, gI, model):
     fig, axs = plt.subplots(1, 2, figsize = (24,8))
     axis_scale = 'log'
     obs_s, exp_s = 100, 50
+    alpha = .8
 
     # out direction
     x, y = g._topN_overlap_out_degree_on_I_range, g._topN_overlap_out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, s = obs_s * 1.4, label = 'Out-Degree')
+    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, edgecolor = dep.obs_edgecolor, alpha = alpha, s = obs_s * 1.4, label = 'Out-Degree')
 
     x, y = g._topN_overlap_out_strength_on_I_range, g._topN_overlap_out_strength_on_I
-    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, s = obs_s, label = 'Out-Strength')
+    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, edgecolor = dep.azure_edgecolor, alpha = alpha, s = obs_s, label = 'Out-Strength')
 
     x, y = gI._topN_overlap_out_degree_range, gI._topN_overlap_out_degree
-    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal Out-Degree')
+    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
 
     x, y = model._topN_overlap_out_degree_on_I_range, model._topN_overlap_out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
 
     # in direction
     x, y = g._topN_overlap_in_degree_on_I_range, g._topN_overlap_in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, s = obs_s * 1.4, label = 'In-Degree')
+    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, edgecolor = dep.obs_edgecolor, alpha = alpha, s = obs_s * 1.4, label = 'In-Degree')
 
     x, y = g._topN_overlap_in_strength_on_I_range, g._topN_overlap_in_strength_on_I
-    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, s = obs_s, label = 'In-Strength')
+    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, edgecolor = dep.azure_edgecolor, alpha = alpha, s = obs_s, label = 'In-Strength')
 
     x, y = gI._topN_overlap_in_degree_range, gI._topN_overlap_in_degree
-    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, s = exp_s * 1.4, label = 'Internal In-Degree')
+    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
 
     x, y = model._topN_overlap_in_degree_on_I_range, model._topN_overlap_in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
     out_min = np.min([g._topN_overlap_out_degree_on_I[0], gI._topN_overlap_out_degree[0], g._topN_overlap_out_strength_on_I[0], model._topN_overlap_out_degree_on_I[0]])
     in_min = np.min([g._topN_overlap_in_degree_on_I[0], gI._topN_overlap_in_degree[0], g._topN_overlap_in_strength_on_I[0], model._topN_overlap_in_degree_on_I[0]])
@@ -509,7 +513,8 @@ def topN_overlap_pr_deg_stre(g, gI, model):
     for _, ax in enumerate(axs):
         lgd = ax.legend()
         for legend_handle in lgd.legend_handles:
-            legend_handle.set_sizes([100])
+            legend_handle.set_alpha(1)
+            legend_handle.set_sizes([200])
         
         ax.set(ylim = [None, None], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
         ax.set_axisbelow(True)
