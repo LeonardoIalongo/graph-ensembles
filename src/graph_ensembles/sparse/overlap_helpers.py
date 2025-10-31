@@ -188,13 +188,18 @@ class overlap_helpers:
         Overlap btw the PR-ground-truth and the out/in degrees
         """
 
-        # gI_model == None --> ground truth
-        # gI_model.graph_kind == "intra" and gI_model.kind == "obs" --> gI (the internal network)
-        isinternal = gI_model.graph_kind == "intra" and gI_model.kind == "obs" if gI_model is not None else None
-        if gI_model == None or not isinternal:
+        
+        # ground truth
+        if gI_model == None:
             degree_measures = ["_out_degree_on_I", "_in_degree_on_I"]
-        elif isinternal:
+        
+        # internal and observed
+        elif gI_model.graph_kind == "intra" and gI_model.kind == "obs": # isinternal
             degree_measures = ["_out_degree", "_in_degree"]
+        
+        # model case
+        else:
+            degree_measures = ["_out_degree_on_I", "_in_degree_on_I"]
 
         return g.topN_overlap_pr_out_in(gI_model, degree_measures, recompute)
 

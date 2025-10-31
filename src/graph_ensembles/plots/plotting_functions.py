@@ -166,7 +166,7 @@ def _compute_hist2d(x, y, num_bins = 30, axis_scale = "linear"):
     # obtain the 2D density of the pmatrix
     bins = num_bins
     if axis_scale == "log":
-        log_bins = lambda a: np.geomspace(start = np.min(a), stop = np.max(a), num = num_bins+1)
+        log_bins = lambda a: np.geomspace(start = np.min(a[a>0]), stop = np.max(a[a>0]), num = num_bins+1)
         bins = [log_bins(x), log_bins(y)]
     H, xedges, yedges = np.histogram2d(x, y, bins)
 
@@ -175,7 +175,7 @@ def _compute_hist2d(x, y, num_bins = 30, axis_scale = "linear"):
 
     return H, xedges, yedges
 
-def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log"):
+def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log", correlation = "Spearman", colorbar = True):
 
     H, xedges, yedges = _compute_hist2d(x, y, num_bins = num_bins, axis_scale=axis_scale)
     mesh = ax.pcolormesh(xedges, yedges, H, cmap=dep.cmap, norm=axis_scale, zorder=1)
@@ -183,18 +183,19 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log"):
     #                     origin='lower', extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
     #                     zorder = 1)
 
-    fig.colorbar(mesh)
+    if colorbar:
+        fig.colorbar(mesh)
     
-    # plot also the pearson and spearman correlation coefficients
-    from scipy import stats	
-    # pears_corr = stats.pearsonr(x, y)[0]
-    spear_corr = stats.spearmanr(x, y)[0]
-    # stats = (f'Pears CC = {pears_corr:.3f}\n'
-    stats = (f'Spear CC = {spear_corr:.3f}')
-    bbox = dict(boxstyle='round', fc='whitesmoke', ec='lightgrey', alpha=1)
-    ax.text(0.54, 0.93, stats, fontsize=15, bbox=bbox,
-            transform=ax.transAxes, horizontalalignment='right')
-    # return im
+    if correlation == "Spearman":
+        # plot also the pearson and spearman correlation coefficients
+        from scipy import stats	
+        # pears_corr = stats.pearsonr(x, y)[0]
+        spear_corr = stats.spearmanr(x, y)[0]
+        # stats = (f'Pears CC = {pears_corr:.3f}\n'
+        stats = (f'Spear CC = {spear_corr:.3f}')
+        bbox = dict(boxstyle='round', fc='whitesmoke', ec='lightgrey', alpha=1)
+        ax.text(0.54, 0.93, stats, fontsize=15, bbox=bbox,
+                transform=ax.transAxes, horizontalalignment='right')
 
 def pr_on_internal_nodes(model, g, gI, num_bins = 100):
     """
@@ -246,50 +247,151 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
         
     mpl.rcParams["font.size"] = old_font
 
-def out_in_degree_internal_VS_restricted(g, gI, model):
+def get_kde_colors(x, y, sort_by = "density"):
+    from scipy.stats import gaussian_kde
 
+    xy = np.vstack([x,y])
+    z = gaussian_kde(xy)(xy)
+
+    if sort_by is not None:
+        if sort_by == "density":
+            # Sort the points by density, so that the densest points are plotted last
+            idx = z.argsort()
+            return x[idx], y[idx], z[idx]
+
+
+def out_in_degree_internal_VS_restricted(g, gI, model):
+    from matplotlib.lines import Line2D
     full_path = model.plots_dir + f"/out_in_degree_internal_vs_restricted.png"
     
     fig, axs = plt.subplots(1, 2, figsize = (24,8))
     axis_scale = 'log'
-    obs_s, exp_s = 100, 50
-
-    # out direction
-    alpha = .8
-    x, y = g._out_degree_on_I, model._out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
-
-    y = gI._out_degree
-    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
-
-    # plot the reference identity line
-    _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
-
-    # in direction
-    x, y = g._in_degree_on_I, model._in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
-
-    y = gI._in_degree
-    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
+    num_bins = 30
+    exp_cmap = "viridis"
+    internal_cmap = "plasma"
     
-    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
-
-    axis_scale = "log" #if out_min == 0 or in_min == 0 else "log"
+    # out direction
+    x = g._out_degree_on_I
+    y_exp = model._out_degree_on_I
+    y_int = gI._out_degree
+    
+    H_red, xedges, yedges = _compute_hist2d_square(x, y_exp, num_bins=num_bins, axis_scale=axis_scale)
+    axs[0].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
+    
+    H_green, xedges, yedges = _compute_hist2d_square(x, y_int, num_bins=num_bins, axis_scale=axis_scale)
+    axs[0].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
+    
+    # identity line
+    # _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
+    
+    # Set x limits to actual data range
+    # axs[0].set_xlim(1, 1e5)
+    
+    # in direction
+    x = g._in_degree_on_I
+    y_exp = model._in_degree_on_I
+    y_int = gI._in_degree
+    
+    H_red, xedges, yedges = _compute_hist2d_square(x, y_exp, num_bins=num_bins, axis_scale=axis_scale)
+    axs[1].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
+    
+    H_green, xedges, yedges = _compute_hist2d_square(x, y_int, num_bins=num_bins, axis_scale=axis_scale)
+    axs[1].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
+    
+    # identity line
+    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
+    
+    # Set x limits to actual data range
+    axs[1].set_xlim(x.min(), x.max())
+    
     for i, ax in enumerate(axs):
-        lgd = ax.legend()
-        for legend_handle in lgd.legend_handles:
-            legend_handle.set_alpha(1)
-            legend_handle.set_sizes([200])
-            
+        # Create circle proxy artists for legend
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, 
+                   label=f'Rec. w/ {model.fit_method_title}'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, 
+                   label='Internal Degree')
+        ]
+        ax.legend(handles=legend_elements, loc=4)
+        
         xy_label = "Out-" if i == 0 else "In-"
-        ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated",)
+        ax.set(xscale=axis_scale, yscale=axis_scale, xlabel=xy_label + 'Degree', ylabel="Estimated")
         ax.set_axisbelow(True)
         ax.grid(True)
+        ax.set_aspect('equal', adjustable='box')
     
     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
-
     utils.save_fig(fig, full_path=full_path)
     plt.close()
+
+def _compute_hist2d_square(x, y, num_bins=30, axis_scale="linear"):
+    if axis_scale == "log":
+        # Combine x and y to get common range for square bins
+        xy_combined = np.concatenate([x[x>0], y[y>0]])
+        bins = np.geomspace(start=np.min(xy_combined), stop=np.max(xy_combined), num=num_bins+1)
+        bins = [bins, bins]
+    else:
+        bins = num_bins
+    
+    H, xedges, yedges = np.histogram2d(x, y, bins)
+    H = H.T / x.size
+    return H, xedges, yedges
+
+# OLD PLOTS WITH OBLONG SQUARES
+# def out_in_degree_internal_VS_restricted(g, gI, model):
+#     from matplotlib.lines import Line2D
+#     full_path = model.plots_dir + f"/out_in_degree_internal_vs_restricted.png"
+    
+#     fig, axs = plt.subplots(1, 2, figsize = (24,8))
+#     axis_scale = 'log'
+#     num_bins = 30 #int(np.sqrt(gI.num_vertices))
+#     exp_cmap = "viridis"
+#     internal_cmap = "plasma"
+    
+#     # out direction
+#     x = g._out_degree_on_I
+#     y = model._out_degree_on_I
+#     H_red, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
+#     axs[0].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
+    
+#     y = gI._out_degree
+#     H_green, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
+#     axs[0].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
+    
+#     # identity line
+#     _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
+    
+#     # in direction
+#     x = g._in_degree_on_I
+#     y = model._in_degree_on_I
+#     H_red, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
+#     axs[1].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
+    
+#     y = gI._in_degree
+#     H_green, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
+#     axs[1].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
+    
+#     # identity line
+#     _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
+    
+#     for i, ax in enumerate(axs):
+#         # Create circle proxy artists for legend
+#         legend_elements = [
+#             Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, 
+#                    label=f'Rec. w/ {model.fit_method_title}'),
+#             Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, 
+#                    label='Internal Degree')
+#         ]
+#         ax.legend(handles=legend_elements, loc=4)
+        
+#         xy_label = "Out-" if i == 0 else "In-"
+#         ax.set(xscale=axis_scale, yscale=axis_scale, xlabel=xy_label + 'Degree', ylabel="Estimated")
+#         ax.set_axisbelow(True)
+#         ax.grid(True)
+    
+#     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+#     utils.save_fig(fig, full_path=full_path)
+#     plt.close()
 
 def norm_diffs_per_iteration(plots_dir, diff_norms):
     """
@@ -376,7 +478,7 @@ def pr_on_internal_nodes_vs_rank(model, g, gI):
 
     # plot them
     fig, axs = plt.subplots(1, 2, figsize = (20,7))
-    axis_scale, msize = 'log', 15
+    axis_scale, msize = 'log', 50
     inset_alpha = 0.3
     inset_zorder_exp = 0
     num_sigmas = model.num_sigmas
@@ -393,28 +495,28 @@ def pr_on_internal_nodes_vs_rank(model, g, gI):
     # === focus on meas obtained by considering only a portion of the network ===
     # plot the measurements as a function of their rankings in a descending order
     axs[0].scatter(x, gI._pr_desc, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
-    axs[0].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
+    axs[0].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize * 0.5, label = 'Full Network')
     axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Rank (descending)', ylabel = f'{title_pr} Values',)
     
     # plot the reorder gI._pr with respect to the full-network ranking, i.e. idx_g_pr_on_I
-    inaxs = inset_pr_vs_rank(axs[0], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize, zorder = 1)
+    inaxs = inset_pr_vs_rank(axs[0], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize * 0.5, zorder = 1)
     inaxs.scatter(x, gI._pr[g_pr_on_I_rank], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
     # plot the reorder model._pr with respect to the full-network ranking, i.e. idx_g_pr_on_I
     mu, sigma = model._pr_on_I_desc, model._pr_on_I_std_desc
-    axs[1].scatter(x, y = mu, marker = "x", 
+    axs[1].scatter(x, y = mu, marker = "x", s = msize,
                     color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}',)
     axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
                         y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
                         alpha = inset_alpha)
-    axs[1].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize, label = 'Full Network')
+    axs[1].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize * 0.5, label = 'Full Network')
     axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Rank (descending)', ylabel = f'{title_pr} Values',)
     
 
     # in the inset, plot the meas based on the g_pr_on_I ranking
-    inaxs = inset_pr_vs_rank(axs[1], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize, zorder = 1)
+    inaxs = inset_pr_vs_rank(axs[1], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize * 0.5, zorder = 1)
 
     # create mu, std arrays and plot scatter + fill between curves
     mu, sigma = model._pr_on_I[g_pr_on_I_rank], model._pr_std_on_I[g_pr_on_I_rank]
