@@ -143,13 +143,13 @@ class DiGraphEnsemble(GraphEnsemble):
         
         if out_or_in == "out":
             deg = gI.out_degree()
-            model_deg = self._out_degree.copy()
+            model_deg = self._out_degree
         elif out_or_in == "in":
             deg = gI.in_degree()
-            model_deg = self._in_degree.copy()
+            model_deg = self._in_degree
         else:
             deg = gI.degree()
-            model_deg = self._degree.copy()
+            model_deg = self._degree
 
         non_zero_deg = np.nonzero(deg)[0]
         

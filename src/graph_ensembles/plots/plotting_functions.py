@@ -247,151 +247,50 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
         
     mpl.rcParams["font.size"] = old_font
 
-def get_kde_colors(x, y, sort_by = "density"):
-    from scipy.stats import gaussian_kde
-
-    xy = np.vstack([x,y])
-    z = gaussian_kde(xy)(xy)
-
-    if sort_by is not None:
-        if sort_by == "density":
-            # Sort the points by density, so that the densest points are plotted last
-            idx = z.argsort()
-            return x[idx], y[idx], z[idx]
-
-
 def out_in_degree_internal_VS_restricted(g, gI, model):
-    from matplotlib.lines import Line2D
+
     full_path = model.plots_dir + f"/out_in_degree_internal_vs_restricted.png"
     
     fig, axs = plt.subplots(1, 2, figsize = (24,8))
     axis_scale = 'log'
-    num_bins = 30
-    exp_cmap = "viridis"
-    internal_cmap = "plasma"
-    
+    obs_s, exp_s = 100, 50
+
     # out direction
-    x = g._out_degree_on_I
-    y_exp = model._out_degree_on_I
-    y_int = gI._out_degree
-    
-    H_red, xedges, yedges = _compute_hist2d_square(x, y_exp, num_bins=num_bins, axis_scale=axis_scale)
-    axs[0].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
-    
-    H_green, xedges, yedges = _compute_hist2d_square(x, y_int, num_bins=num_bins, axis_scale=axis_scale)
-    axs[0].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
-    
-    # identity line
-    # _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
-    
-    # Set x limits to actual data range
-    # axs[0].set_xlim(1, 1e5)
-    
+    alpha = .8
+    x, y = g._out_degree_on_I, model._out_degree_on_I
+    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+    y = gI._out_degree
+    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
+
+    # plot the reference identity line
+    _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
+
     # in direction
-    x = g._in_degree_on_I
-    y_exp = model._in_degree_on_I
-    y_int = gI._in_degree
+    x, y = g._in_degree_on_I, model._in_degree_on_I
+    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+    y = gI._in_degree
+    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
     
-    H_red, xedges, yedges = _compute_hist2d_square(x, y_exp, num_bins=num_bins, axis_scale=axis_scale)
-    axs[1].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
-    
-    H_green, xedges, yedges = _compute_hist2d_square(x, y_int, num_bins=num_bins, axis_scale=axis_scale)
-    axs[1].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
-    
-    # identity line
-    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
-    
-    # Set x limits to actual data range
-    axs[1].set_xlim(x.min(), x.max())
-    
+    _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
+
+    axis_scale = "log" #if out_min == 0 or in_min == 0 else "log"
     for i, ax in enumerate(axs):
-        # Create circle proxy artists for legend
-        legend_elements = [
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, 
-                   label=f'Rec. w/ {model.fit_method_title}'),
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, 
-                   label='Internal Degree')
-        ]
-        ax.legend(handles=legend_elements, loc=4)
-        
+        lgd = ax.legend()
+        for legend_handle in lgd.legend_handles:
+            legend_handle.set_alpha(1)
+            legend_handle.set_sizes([200])
+            
         xy_label = "Out-" if i == 0 else "In-"
-        ax.set(xscale=axis_scale, yscale=axis_scale, xlabel=xy_label + 'Degree', ylabel="Estimated")
+        ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated",)
         ax.set_axisbelow(True)
         ax.grid(True)
-        ax.set_aspect('equal', adjustable='box')
     
     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
+
     utils.save_fig(fig, full_path=full_path)
     plt.close()
-
-def _compute_hist2d_square(x, y, num_bins=30, axis_scale="linear"):
-    if axis_scale == "log":
-        # Combine x and y to get common range for square bins
-        xy_combined = np.concatenate([x[x>0], y[y>0]])
-        bins = np.geomspace(start=np.min(xy_combined), stop=np.max(xy_combined), num=num_bins+1)
-        bins = [bins, bins]
-    else:
-        bins = num_bins
-    
-    H, xedges, yedges = np.histogram2d(x, y, bins)
-    H = H.T / x.size
-    return H, xedges, yedges
-
-# OLD PLOTS WITH OBLONG SQUARES
-# def out_in_degree_internal_VS_restricted(g, gI, model):
-#     from matplotlib.lines import Line2D
-#     full_path = model.plots_dir + f"/out_in_degree_internal_vs_restricted.png"
-    
-#     fig, axs = plt.subplots(1, 2, figsize = (24,8))
-#     axis_scale = 'log'
-#     num_bins = 30 #int(np.sqrt(gI.num_vertices))
-#     exp_cmap = "viridis"
-#     internal_cmap = "plasma"
-    
-#     # out direction
-#     x = g._out_degree_on_I
-#     y = model._out_degree_on_I
-#     H_red, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
-#     axs[0].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
-    
-#     y = gI._out_degree
-#     H_green, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
-#     axs[0].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
-    
-#     # identity line
-#     _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
-    
-#     # in direction
-#     x = g._in_degree_on_I
-#     y = model._in_degree_on_I
-#     H_red, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
-#     axs[1].pcolormesh(xedges, yedges, H_red, cmap=exp_cmap, norm=axis_scale, zorder=1)
-    
-#     y = gI._in_degree
-#     H_green, xedges, yedges = _compute_hist2d(x, y, num_bins=num_bins, axis_scale=axis_scale)
-#     axs[1].pcolormesh(xedges, yedges, H_green, cmap=internal_cmap, norm=axis_scale, zorder=1)
-    
-#     # identity line
-#     _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls='--', color="grey", zorder=-1)
-    
-#     for i, ax in enumerate(axs):
-#         # Create circle proxy artists for legend
-#         legend_elements = [
-#             Line2D([0], [0], marker='o', color='w', markerfacecolor='red', markersize=10, 
-#                    label=f'Rec. w/ {model.fit_method_title}'),
-#             Line2D([0], [0], marker='o', color='w', markerfacecolor='green', markersize=10, 
-#                    label='Internal Degree')
-#         ]
-#         ax.legend(handles=legend_elements, loc=4)
-        
-#         xy_label = "Out-" if i == 0 else "In-"
-#         ax.set(xscale=axis_scale, yscale=axis_scale, xlabel=xy_label + 'Degree', ylabel="Estimated")
-#         ax.set_axisbelow(True)
-#         ax.grid(True)
-    
-#     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
-#     utils.save_fig(fig, full_path=full_path)
-#     plt.close()
 
 def norm_diffs_per_iteration(plots_dir, diff_norms):
     """

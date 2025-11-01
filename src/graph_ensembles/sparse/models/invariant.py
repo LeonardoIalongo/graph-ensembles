@@ -362,7 +362,7 @@ class ScaleInvariantModel(FitnessModel):
         
         # set the file name where to store the page-rank and degrees
         # save also the full degrees since they are neede for the ccdf plot
-        measures = [x for x in measures if "degree" not in x]
+        # measures = [x for x in measures if "degree" not in x]
         fname = self.vars_dir + "/" + "_".join([x.strip("_") for x in measures]) + "_std_on_full_net.pkl"
         if not os.path.exists(fname) or recompute:
             

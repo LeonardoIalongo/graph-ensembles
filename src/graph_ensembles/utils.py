@@ -256,11 +256,62 @@ def signed_rel_err(x, y):
     return (x-y) / y
 
 def rel_err(x, y):
+    if x.shape != y.shape:
+        ValueError(f"Shapes are not the same: x.shape {x.shape}, y.shape {y.shape}")
     return abs(signed_rel_err(x, y))
 
 def rel_err_norm(x, y, ord = 1):
     """ Relative error between x and y. It returns a scalar """
     return np.linalg.norm(x - y, ord = ord) / np.linalg.norm(y, ord = ord)
+
+def max_sqerr_rel_err(x, y, only_positive = True):
+    if only_positive:
+        xidx, yidx = x>0, y>0
+        xidx_union_yidx = xidx + yidx
+        x = x[xidx_union_yidx]
+        y = y[xidx_union_yidx]
+    rel_error = rel_err(x, y)
+    
+    return np.max(rel_error), np.linalg.norm(rel_error)
+
+def pmatrix_vectorized(g, param, unsampled_vI, edges_in_p = False):
+
+    """
+    To chekc the results via numba, one can use this function to calculate them directly on the pmatrix.
+    As the number of involved nodes increases, it won't be possible to build the pmatrix
+
+    Return: pmatrix, matrix of internal edges
+    """
+   
+    out_in_strength_matrix = g._out_strength.reshape(-1, 1) @ g._in_strength.reshape(1, -1)
+    # print(f'-out_in_strength_matrix: {out_in_strength_matrix.shape}',)
+
+    unsampled_vI = unsampled_vI.astype(bool)
+    
+    p = -np.expm1(-param * out_in_strength_matrix)
+
+    # set to 1 the probabilities for the fixed internal nodes
+    unsampled_pairs = unsampled_vI.reshape(-1, 1) @ unsampled_vI.reshape(1, -1)
+    
+    observed_value_unsampled_pairs = g.adjacency_matrix().todense()[unsampled_pairs]
+    # print(f'-np.sum(observed_value_unsampled_pairs): {np.sum(observed_value_unsampled_pairs)}',)
+    
+    # if = 0, return the "stochastic" part, i.e. without the frozen edges
+    # print(f'-edges_in_p: {edges_in_p}',)
+    if edges_in_p:
+        p[unsampled_pairs] = observed_value_unsampled_pairs
+    else:
+        p[unsampled_pairs] = 0
+
+    unsampled_matrix = np.zeros_like(out_in_strength_matrix)
+    unsampled_matrix[unsampled_pairs] = observed_value_unsampled_pairs
+    
+
+    # remove diagonal
+    p *= 1-np.eye(p.shape[0])
+    unsampled_matrix *= 1-np.eye(p.shape[0])
+
+    return p, unsampled_matrix
 
 def fc_title(ref_model):
     return "Summed" if ref_model.fc_direction.startswith("fc") else "Fractioned"
