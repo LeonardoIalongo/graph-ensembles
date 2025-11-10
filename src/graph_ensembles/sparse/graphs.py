@@ -65,7 +65,7 @@ class common_functions():
         """
         
         if self.get("corpkey"):
-            base_dir = os.path.dirname(os.getcwd()) + "/outputs" #os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-Directed"
+            base_dir = os.path.dirname(os.path.dirname(os.getcwd())) + "/graph-ensemples_outputs" #os.path.expanduser('~') + "/data/corealgos/rmilocco/outputs/datasets/ING-Directed"
         else:
             base_dir = os.path.expanduser('~') + "/Documents/outputs/datasets/ING-Directed"
         
@@ -1021,7 +1021,7 @@ class DiGraph(Graph):
         else:
             scaler = np.sum(mod_dict[f"{meas}_on_I"])
         
-        # multiply by it since scaler isin [0,1]
+        # multiply by it since scaler is in [0,1] interval
         self.__dict__[f"{meas}"] *= scaler
         self.__dict__[f"{meas}_desc"] *= scaler
 

@@ -243,9 +243,10 @@ class overlap_helpers:
         g.vars_dir_vsplit = dirname(dirname(gI.vars_dir)) + "/full"
         
         # overlap between the pr_on_I and out/in strengths/degree rankings
-        g.topN_overlap_pr_out_in_strengths()
-        g.topN_overlap_pr_out_in_degree()
+        # the observed measures doesn't change from "intra" to "intra-bet". So recompute = False
+        g.topN_overlap_pr_out_in_strengths(recompute = recompute)
+        g.topN_overlap_pr_out_in_degree(recompute = recompute)
 
         # internal graph out/in degree
-        g.topN_overlap_pr_out_in_degree(gI)
-        g.topN_overlap_pr_out_in_degree(model)
+        g.topN_overlap_pr_out_in_degree(gI, recompute = recompute)
+        g.topN_overlap_pr_out_in_degree(model, recompute = recompute)

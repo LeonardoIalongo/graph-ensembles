@@ -31,7 +31,8 @@ dependencies = [
   "tqdm",
   "torch",
   "torchvision",
-  "torchaudio"
+  "torchaudio",
+  "dclab"
 ]
 
 [tool.setuptools]

@@ -179,9 +179,6 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log", correlation = "Spe
 
     H, xedges, yedges = _compute_hist2d(x, y, num_bins = num_bins, axis_scale=axis_scale)
     mesh = ax.pcolormesh(xedges, yedges, H, cmap=dep.cmap, norm=axis_scale, zorder=1)
-    # im = ax.imshow(H, cmap = dep.cmap, norm = axis_scale, aspect = "auto", 
-    #                     origin='lower', extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-    #                     zorder = 1)
 
     if colorbar:
         fig.colorbar(mesh)
@@ -197,13 +194,72 @@ def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log", correlation = "Spe
         ax.text(0.54, 0.93, stats, fontsize=15, bbox=bbox,
                 transform=ax.transAxes, horizontalalignment='right')
 
-def pr_on_internal_nodes(model, g, gI, num_bins = 100):
+def ds_scatterplot(fig, ax, x, y, **kwargs):
+    
+    downsample_n = kwargs.get("downsample_n", 0)
+    marker = kwargs.get("marker", ".") 
+    cmap_name = kwargs.get("cmap_name", "magma")
+    colorbar =  kwargs.get("colorbar", True) 
+    edgecolor = kwargs.get("edgecolor", "k")
+    alpha = kwargs.get("alpha", 1)
+    axis_scale = kwargs.get("axis_scale", "log")
+    size = kwargs.get("size", 10) 
+    label = kwargs.get("label", None)
+
+    import dclab
+    from matplotlib.colors import LogNorm, Normalize, ListedColormap
+
+    # with log-scale the kde assumes NaN value that can't be colored
+    # So, remove them
+    if axis_scale == "log":
+        mask = (x > 0) & (y > 0)
+        x = x[mask]
+        y = y[mask]
+    
+    # create the dataset
+    data_dict = {"area_um": x,"deform": y,}
+    ds = dclab.new_dataset(data_dict)
+
+    # donwsample the dataset
+    xsamp, ysamp = ds.get_downsampled_scatter(xax="area_um", yax="deform", downsample=downsample_n, xscale = axis_scale, yscale = axis_scale)
+    
+    # find the kde_color on samples
+    kde_samp = ds.get_kde_scatter(xax="area_um", yax="deform", yscale=axis_scale, xscale=axis_scale, positions=(xsamp, ysamp))
+
+    # plot it
+    # Choose color normalization
+    cmap = mpl.colormaps[cmap_name]
+    vmax = 0.8 if cmap_name == "magma" else 0.8
+    new_cmap = ListedColormap(cmap(np.linspace(0, vmax, 128)))
+    
+    if axis_scale == "log":
+        # Remove 0 values from KDE results which may be there for really low values. # Otherwise, white points are there
+        valid_mask = kde_samp > 0
+        xsamp = xsamp[valid_mask]
+        ysamp = ysamp[valid_mask]
+        kde_samp = kde_samp[valid_mask]
+        
+        # calculate the extrema for vmin, vmax in log scale
+        # vmin = kde_samp[kde_samp > 0].min()  # Exclude zeros for log
+        # vmax = kde_samp.max()
+        norm = LogNorm()
+    else:
+        norm = Normalize(vmin=kde_samp.min(), vmax=kde_samp.max())
+
+    sc2 = ax.scatter(xsamp, ysamp, c=kde_samp, marker=marker, edgecolor=edgecolor, s=size, cmap=new_cmap, norm = norm, alpha=alpha, label=label)
+    
+    # plot the colorbar
+    if colorbar and fig is not None:
+        fig.colorbar(sc2)
+
+def pr_on_internal_nodes(model, g, gI, num_bins = None):
     """
     Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
     .) x-axis, there would be the full page rank of the intra nodes.
     .) y-axis, the page-rank determined on internal connections
     num_vsplits: integer number of vsplits which are equal to the number of seeds used to select the vI
     """
+
     old_font = mpl.rcParams['font.size']
 
     mpl.rcParams["font.size"] = 18
@@ -215,9 +271,28 @@ def pr_on_internal_nodes(model, g, gI, num_bins = 100):
         fig, axs = plt.subplots(1,2, figsize = (12, 6), sharex=True, sharey=True)
 
         x = g._pr_on_I
-        _plot_hist2d(fig, axs[0], x, gI._pr, num_bins = num_bins, axis_scale = axis_scale)
-        _plot_hist2d(fig, axs[1], x, model._pr_on_I, num_bins = num_bins, axis_scale = axis_scale)
 
+        if num_bins:
+            _plot_hist2d(fig, axs[0], x, gI._pr, num_bins = num_bins, axis_scale = axis_scale)
+            _plot_hist2d(fig, axs[1], x, model._pr_on_I, num_bins = num_bins, axis_scale = axis_scale)
+        else:
+            downsample_n, marker_size = min(x.size * 0.2, 2e4), dep.obs_ms
+            ds_scatterplot(
+                            fig, 
+                            axs[0], x, gI._pr, 
+                            downsample_n = downsample_n, 
+                            axis_scale = axis_scale, 
+                            size = marker_size,
+                            edgecolor = None
+                            )
+            ds_scatterplot(fig, axs[1], x, model._pr_on_I, 
+                            downsample_n = downsample_n, 
+                            axis_scale = axis_scale, 
+                            size = marker_size,
+                            edgecolor = None
+                            )
+
+        axis_scale = "log"
         # plot the identity line, no grid, customize the legend, set the lables and scale
         for i, ax in enumerate(axs):
             
@@ -253,29 +328,77 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
     
     fig, axs = plt.subplots(1, 2, figsize = (24,8))
     axis_scale = 'log'
-    obs_s, exp_s = 100, 50
+    cmap_reconstr = "Reds_r"
+    cmap_emp = "Greens_r"
+
+    exp_s = 50
 
     # out direction
-    alpha = .8
+    alpha = 1
     x, y = g._out_degree_on_I, model._out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    downsample_n = min(x.size * 0.2, 2e4)
+    ds_scatterplot(
+                    None, axs[0], x, y, 
+                    downsample_n = downsample_n, 
+                    marker = dep.sum_model_marker, 
+                    cmap_name = cmap_reconstr, 
+                    edgecolor = dep.sum_model_edgecolor, 
+                    alpha = alpha, 
+                    axis_scale = axis_scale,
+                    size = exp_s,
+                    label = f'Rec. w/ {model.fit_method_title}'
+                    )
+    # axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
     y = gI._out_degree
-    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
+    ds_scatterplot(
+                    None, axs[0], x, y, 
+                    downsample_n = downsample_n,
+                    marker = dep.ref_model_marker, 
+                    cmap_name = cmap_emp, 
+                    edgecolor = dep.ref_model_edgecolor, 
+                    alpha = alpha, 
+                    axis_scale = axis_scale, 
+                    size = exp_s * 1.4, 
+                    label = 'Internal Out-Degree'
+                    )
+    # axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
+
 
     # plot the reference identity line
     _ = axs[0].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
     # in direction
     x, y = g._in_degree_on_I, model._in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    ds_scatterplot(
+                    None, axs[1], x, y,
+                    downsample_n = downsample_n,
+                    marker = dep.sum_model_marker, 
+                    cmap_name = cmap_reconstr, 
+                    edgecolor = dep.sum_model_edgecolor, 
+                    alpha = alpha, 
+                    axis_scale = axis_scale, 
+                    size = exp_s, 
+                    label = f'Rec. w/ {model.fit_method_title}'
+                    )
+    # axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
     y = gI._in_degree
-    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
+    ds_scatterplot(
+                    None, axs[1], x, y,
+                    downsample_n = downsample_n,
+                    marker = dep.ref_model_marker, 
+                    cmap_name = cmap_emp, 
+                    edgecolor = dep.ref_model_edgecolor, 
+                    alpha = alpha, 
+                    axis_scale = axis_scale, 
+                    size = exp_s * 1.4, 
+                    label = 'Internal In-Degree'
+                    )
+    # axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
     
     _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
-    axis_scale = "log" #if out_min == 0 or in_min == 0 else "log"
     for i, ax in enumerate(axs):
         lgd = ax.legend()
         for legend_handle in lgd.legend_handles:
