@@ -6,8 +6,8 @@ import numpy as np
 from .. import utils
 
 
-def ccdf_deg_out_in(g, gI, model):
-    full_path = model.plots_dir + "/ccdf_deg_out_in.png"
+def ccdf_out_in_degree(g, model, comp_meas = None):
+    full_path = model.plots_dir + "/ccdf_out_in_degree.png"
 
     def _ccdf_vs_deg(deg):
         def normalized_ccdf(arr):
@@ -18,9 +18,10 @@ def ccdf_deg_out_in(g, gI, model):
 
         return np.sort(deg), normalized_ccdf(deg)
 
-    def plot_ccdf(axs, deg_out, deg_in, color, lw = 5, label = "ciao"):
+    def plot_ccdf(axs, deg_out, deg_in, color, lw = 5, label = None):
         x, y = _ccdf_vs_deg(deg_out)
         axs[0].step(x, y, color = color, lw = lw, label = label)
+
         x, y = _ccdf_vs_deg(deg_in)
         axs[1].step(x, y, color = color, lw = lw, label = label)
 
@@ -29,11 +30,17 @@ def ccdf_deg_out_in(g, gI, model):
     plot_ccdf(axs, g.out_degree(), g.in_degree(), lw = 9, color = dep.obs_color, label = "Full Network")
     # plot_ccdf(axs, gI.out_degree(), gI.in_degree(), lw = 7, color = dep.ref_model_color, label = "Internal")
     plot_ccdf(axs, model.expected_out_degree(),  model.expected_in_degree(), lw = 5, color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}')
+    
+    if comp_meas:
+        prev_fit_method = list(comp_meas.keys())[0]
+        comp_meas = comp_meas[prev_fit_method]
+        prev_out_deg, prev_in_deg = comp_meas["model"]["_out_degree"], comp_meas["model"]["_in_degree"]
+        plot_ccdf(axs, prev_out_deg,  prev_in_deg, lw = 5, color = dep.azure_color, label = f'Rec. w/ {prev_fit_method.title()}')
 
     axis_scale = "log"
     for i, ax in enumerate(axs):
         out_in_label = "Out" if i == 0 else "In"
-        ax.set(xlabel = f'{out_in_label}-Degrees', ylabel = 'CCDF', xscale = axis_scale, yscale = "linear")
+        ax.set(xlabel = f'{out_in_label}-Degree', ylabel = 'CCDF', xscale = axis_scale, yscale = "linear")
         ax.legend()
         ax.set_axisbelow(True)
         ax.grid(True)
@@ -83,7 +90,7 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
 
     ax = axs
     ax.set(xscale = axis_scale, yscale = axis_scale,)
-    ax.set(xlabel = f'{ddir.title()}-Degrees', ylabel = f'Avg.Ne.Ne.Deg. {ddir.title()}-{ndir.title()}',)
+    ax.set(xlabel = f'{ddir.title()}-Degree', ylabel = f'Avg.Ne.Ne.Deg. {ddir.title()}-{ndir.title()}',)
     ax.legend()
     ax.set_axisbelow(True)
     ax.grid(True)
@@ -95,7 +102,7 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
     plt.close()
 
 def exp_deg_out_in(g, gI, model):
-    """Plot Internal Out and In Degrees as computed in the Full Network, Internal or Int+Reconstructed Model."""
+    """Plot Internal Out and In Degree as computed in the Full Network, Internal or Int+Reconstructed Model."""
     full_path = model.plots_dir + "/deg_annd_cc/deg_out_in.png"
 
     fig, axs = plt.subplots(1, 2, figsize=(20, 7))
@@ -139,7 +146,7 @@ def exp_deg_out_in(g, gI, model):
     for i, ax in enumerate(axs):
         ax.set(xscale=axis_scale, yscale=axis_scale)
         out_in_label = "Out" if i == 0 else "In"
-        ax.set(xlabel=f'{out_in_label}-Degrees', ylabel=f'{out_in_label}-Degrees')
+        ax.set(xlabel=f'{out_in_label}-Degree', ylabel=f'{out_in_label}-Degree')
         ax.legend()
         ax.set_axisbelow(True)
         ax.grid(True)
@@ -175,27 +182,30 @@ def _compute_hist2d(x, y, num_bins = 30, axis_scale = "linear"):
 
     return H, xedges, yedges
 
-def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log", correlation = "Spearman", colorbar = True):
+def _plot_hist2d(fig, ax, x, y, num_bins, axis_scale = "log", colorbar = True):
 
     H, xedges, yedges = _compute_hist2d(x, y, num_bins = num_bins, axis_scale=axis_scale)
     mesh = ax.pcolormesh(xedges, yedges, H, cmap=dep.cmap, norm=axis_scale, zorder=1)
 
     if colorbar:
         fig.colorbar(mesh)
+
+def _plot_correlation(ax, x, y, type_ = None):
     
-    if correlation == "Spearman":
-        # plot also the pearson and spearman correlation coefficients
+    # plot also the spearman correlation coefficients
+    if type_ == "Spearman":
         from scipy import stats	
         # pears_corr = stats.pearsonr(x, y)[0]
         spear_corr = stats.spearmanr(x, y)[0]
         # stats = (f'Pears CC = {pears_corr:.3f}\n'
         stats = (f'Spear CC = {spear_corr:.3f}')
         bbox = dict(boxstyle='round', fc='whitesmoke', ec='lightgrey', alpha=1)
-        ax.text(0.54, 0.93, stats, fontsize=15, bbox=bbox,
+        ax.text(0.43, 0.93, stats, fontsize=15, bbox=bbox,
                 transform=ax.transAxes, horizontalalignment='right')
 
 def ds_scatterplot(fig, ax, x, y, **kwargs):
     
+    y_std = kwargs.get("y_std", None)
     downsample_n = kwargs.get("downsample_n", 0)
     marker = kwargs.get("marker", ".") 
     cmap_name = kwargs.get("cmap_name", "magma")
@@ -205,6 +215,8 @@ def ds_scatterplot(fig, ax, x, y, **kwargs):
     axis_scale = kwargs.get("axis_scale", "log")
     size = kwargs.get("size", 10) 
     label = kwargs.get("label", None)
+    correlation_type = kwargs.get("correlation_type", None)
+    num_sigmas = kwargs.get("num_sigmas", 1)
 
     import dclab
     from matplotlib.colors import LogNorm, Normalize, ListedColormap
@@ -215,25 +227,35 @@ def ds_scatterplot(fig, ax, x, y, **kwargs):
         mask = (x > 0) & (y > 0)
         x = x[mask]
         y = y[mask]
+
+    # plot the correlation
+    _plot_correlation(ax, x, y, type_ = correlation_type)
     
     # create the dataset
     data_dict = {"area_um": x,"deform": y,}
     ds = dclab.new_dataset(data_dict)
 
     # donwsample the dataset
-    xsamp, ysamp = ds.get_downsampled_scatter(xax="area_um", yax="deform", downsample=downsample_n, xscale = axis_scale, yscale = axis_scale)
-    
+    if y_std is None:
+        xsamp, ysamp = ds.get_downsampled_scatter(xax="area_um", yax="deform", downsample=downsample_n, xscale = axis_scale, yscale = axis_scale)
+    else:
+        xsamp, ysamp, ds_mask = ds.get_downsampled_scatter(xax="area_um", yax="deform", downsample=downsample_n, xscale = axis_scale, yscale = axis_scale, ret_mask=True)
+
     # find the kde_color on samples
     kde_samp = ds.get_kde_scatter(xax="area_um", yax="deform", yscale=axis_scale, xscale=axis_scale, positions=(xsamp, ysamp))
 
     # plot it
     # Choose color normalization
     cmap = mpl.colormaps[cmap_name]
-    vmax = 0.8 if cmap_name == "magma" else 0.8
-    new_cmap = ListedColormap(cmap(np.linspace(0, vmax, 128)))
+    if cmap_name == "magma":
+        vmin, vmax = 0, 0.8
+    elif cmap_name in ["Greens_r", "Reds_r"]:
+        vmin, vmax = 0, 1
+    
+    new_cmap = ListedColormap(cmap(np.linspace(vmin, vmax, 128)))
     
     if axis_scale == "log":
-        # Remove 0 values from KDE results which may be there for really low values. # Otherwise, white points are there
+        # Remove 0 values from KDE results which may be there for really low values. Otherwise, white points are there
         valid_mask = kde_samp > 0
         xsamp = xsamp[valid_mask]
         ysamp = ysamp[valid_mask]
@@ -246,13 +268,27 @@ def ds_scatterplot(fig, ax, x, y, **kwargs):
     else:
         norm = Normalize(vmin=kde_samp.min(), vmax=kde_samp.max())
 
-    sc2 = ax.scatter(xsamp, ysamp, c=kde_samp, marker=marker, edgecolor=edgecolor, s=size, cmap=new_cmap, norm = norm, alpha=alpha, label=label)
+    sc2 = ax.scatter(xsamp, ysamp, c=kde_samp, marker=marker, edgecolor=edgecolor, s=size, cmap=new_cmap, norm = norm, alpha=alpha, label=label, zorder = 2)
+    
+    if y_std is not None:
+        _, bars, caps = ax.errorbar(
+                        xsamp, ysamp,
+                        yerr=num_sigmas*y_std[mask][ds_mask][valid_mask],
+                        fmt='none',
+                        ecolor=dep.sum_model_color,    # or something like edgecolor
+                        alpha=1,
+                        capsize=3,
+                        zorder=1
+                    )
+        [bar.set_alpha(0.2) for bar in bars]
+        [cap.set_alpha(0.2) for cap in caps]
+
     
     # plot the colorbar
     if colorbar and fig is not None:
         fig.colorbar(sc2)
 
-def pr_on_internal_nodes(model, g, gI, num_bins = None):
+def pr_on_internal_nodes(model, g, gI, num_bins = None, correlation = "Spearman"):
     """
     Plot the Page-Rank for a fixed number of vsplits (num_vsplits): 
     .) x-axis, there would be the full page rank of the intra nodes.
@@ -273,26 +309,32 @@ def pr_on_internal_nodes(model, g, gI, num_bins = None):
         x = g._pr_on_I
 
         if num_bins:
-            _plot_hist2d(fig, axs[0], x, gI._pr, num_bins = num_bins, axis_scale = axis_scale)
+            _plot_hist2d(fig, axs[0], x, gI._pr_rescaled, num_bins = num_bins, axis_scale = axis_scale)
             _plot_hist2d(fig, axs[1], x, model._pr_on_I, num_bins = num_bins, axis_scale = axis_scale)
         else:
-            downsample_n, marker_size = min(x.size * 0.2, 2e4), dep.obs_ms
+            downsample_n, marker_size = min(x.size * 0.2, 2e4), dep.obs_ms * 0.5
             ds_scatterplot(
-                            fig, 
-                            axs[0], x, gI._pr, 
+                            None, 
+                            axs[0], x, gI._pr_rescaled, 
                             downsample_n = downsample_n, 
                             axis_scale = axis_scale, 
                             size = marker_size,
-                            edgecolor = None
+                            edgecolor = None,
+                            correlation_type = correlation
                             )
-            ds_scatterplot(fig, axs[1], x, model._pr_on_I, 
+            ds_scatterplot(
+                            None, 
+                            axs[1], x, model._pr_on_I, 
                             downsample_n = downsample_n, 
                             axis_scale = axis_scale, 
                             size = marker_size,
-                            edgecolor = None
+                            edgecolor = None,
+                            correlation_type = correlation
                             )
+        
+        
+        
 
-        axis_scale = "log"
         # plot the identity line, no grid, customize the legend, set the lables and scale
         for i, ax in enumerate(axs):
             
@@ -336,9 +378,12 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
     # out direction
     alpha = 1
     x, y = g._out_degree_on_I, model._out_degree_on_I
+    y_std = model._out_degree_on_I_std
     downsample_n = min(x.size * 0.2, 2e4)
+
     ds_scatterplot(
                     None, axs[0], x, y, 
+                    y_std = y_std,
                     downsample_n = downsample_n, 
                     marker = dep.sum_model_marker, 
                     cmap_name = cmap_reconstr, 
@@ -346,13 +391,14 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
                     alpha = alpha, 
                     axis_scale = axis_scale,
                     size = exp_s,
-                    label = f'Rec. w/ {model.fit_method_title}'
+                    label = f'Rec. w/ {model.fit_method_title}',
+                    num_sigmas = model.num_sigmas
                     )
     # axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
     y = gI._out_degree
     ds_scatterplot(
-                    None, axs[0], x, y, 
+                    fig, axs[0], x, y, 
                     downsample_n = downsample_n,
                     marker = dep.ref_model_marker, 
                     cmap_name = cmap_emp, 
@@ -360,7 +406,7 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
                     alpha = alpha, 
                     axis_scale = axis_scale, 
                     size = exp_s * 1.4, 
-                    label = 'Internal Out-Degree'
+                    label = 'Internal'
                     )
     # axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
 
@@ -371,7 +417,8 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
     # in direction
     x, y = g._in_degree_on_I, model._in_degree_on_I
     ds_scatterplot(
-                    None, axs[1], x, y,
+                    fig, axs[1], x, y,
+                    y_std = y_std,
                     downsample_n = downsample_n,
                     marker = dep.sum_model_marker, 
                     cmap_name = cmap_reconstr, 
@@ -379,7 +426,8 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
                     alpha = alpha, 
                     axis_scale = axis_scale, 
                     size = exp_s, 
-                    label = f'Rec. w/ {model.fit_method_title}'
+                    label = f'Rec. w/ {model.fit_method_title}',
+                    num_sigmas = model.num_sigmas
                     )
     # axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
 
@@ -393,18 +441,27 @@ def out_in_degree_internal_VS_restricted(g, gI, model):
                     alpha = alpha, 
                     axis_scale = axis_scale, 
                     size = exp_s * 1.4, 
-                    label = 'Internal In-Degree'
+                    label = 'Internal'
                     )
     # axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
     
     _ = axs[1].plot([x.min(), x.max()], [x.min(), x.max()], ls = '--', color = "grey", zorder = -1,)
 
     for i, ax in enumerate(axs):
-        lgd = ax.legend()
-        for legend_handle in lgd.legend_handles:
-            legend_handle.set_alpha(1)
-            legend_handle.set_sizes([200])
-            
+        
+        # create fake plots to properly color the marker in the legend
+        ax.scatter([], [], marker = dep.sum_model_marker, c = dep.sum_model_color, ec = dep.sum_model_edgecolor, alpha = 1, label = f"Rec. w/ {model.fit_method_title}")
+        ax.scatter([], [], marker = dep.ref_model_marker, c = dep.ref_model_color, ec = dep.ref_model_edgecolor, alpha = 1, label = "Internal")
+
+        # select only the last two patches in the legend
+        handles, labels = ax.get_legend_handles_labels()
+        handles, labels = handles[-2:], labels[-2:] # WARNING: set_sizes acts on the marker size in the plot (not only in the legend)
+        for legend_handle in handles:
+            legend_handle.set_sizes([400])
+        
+        ax.legend(handles, labels)
+
+        # set labels and other parameters
         xy_label = "Out-" if i == 0 else "In-"
         ax.set(xscale = axis_scale, yscale = axis_scale, xlabel = xy_label + 'Degree', ylabel = "Estimated",)
         ax.set_axisbelow(True)
@@ -488,7 +545,39 @@ def _set_alpha(bars, caps, alpha = 0.5):
     [bar.set_alpha(alpha) for bar in bars]
     [cap.set_alpha(alpha) for cap in caps]
 
-def pr_on_internal_nodes_vs_rank(model, g, gI):
+def downsample_when_dense(x, y, downsample_n, axis_scale = "log"):
+    # downsample the points
+    import dclab
+    
+    # create the dataset
+    data_dict = {"area_um": x,"deform": y,}
+    ds = dclab.new_dataset(data_dict)
+
+    # donwsample the dataset
+    xsamp, ysamp = ds.get_downsampled_scatter(xax="area_um", yax="deform", downsample=downsample_n, xscale = axis_scale, yscale = axis_scale)
+
+    return xsamp, ysamp
+
+def log_incremental(max_n):
+    """
+    Return ints: [1..9, 10..90, 100..900, ...] up to max_n (inclusive).
+    Vectorized, very fast and memory-cheap (9 * n_decades elements).
+    """
+    import numpy as np
+    if max_n < 1:
+        return np.array([], dtype=int)
+    max_pow = int(np.floor(np.log10(max_n)))
+    multipliers = np.arange(1, 10, dtype=int).reshape(-1, 1)    # shape (9,1)
+    powers = (10 ** np.arange(0, max_pow + 1, dtype=int)).reshape(1, -1)  # shape (1, n_decades)
+    grid = multipliers * powers   # broadcasting -> shape (9, n_decades)
+    seq = grid.ravel(order='F')   # Fortran order -> decade by decade: [1..9,10..90,...]
+    seq = seq[seq <= max_n]       # cut at max_n
+
+    if seq[-1] < max_n:
+        seq = np.append(seq, max_n-1)
+    return seq
+
+def pr_on_internal_nodes_vs_rank(model, g, gI, dict_meas):
     """
     Create 2 plots sharing the same x-axis, which is the ranking position (range(1, N))
     Left) meas computed on the sub-internal graph VS ranking;
@@ -505,24 +594,42 @@ def pr_on_internal_nodes_vs_rank(model, g, gI):
     inset_zorder_exp = 0
     num_sigmas = model.num_sigmas
     num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-    title_pr = g._pr_name.title()
+    title_pr = g._pr_name.title().replace("_", "-")
     
     # x-axis will be just increasing values, i.e. ranking position
-    x = range(1, len(gI._pr)+1)
+    # x = log_incremental(gI._pr_rescaled.size)
+    full_x = np.arange(1, gI._pr_rescaled.size+1)
+    x = full_x
+    # dowsample_n = 200
 
     # scores to assign the ranking
     g_pr_on_I_desc = g._pr_on_I_desc
     g_pr_on_I_rank = g._pr_on_I_rank
-    
+    gI_pr_rescaled_desc = gI._pr_rescaled_desc
+
     # === focus on meas obtained by considering only a portion of the network ===
     # plot the measurements as a function of their rankings in a descending order
-    axs[0].scatter(x, gI._pr_desc, marker = 'x', color = dep.ref_model_color, s = msize, label = 'Internal')
-    axs[0].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize * 0.5, label = 'Full Network')
-    axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Rank (descending)', ylabel = f'{title_pr} Values',)
+    downs_at_n = lambda y: (x, y[x-1])
+    # downs_at_n = lambda y: downsample_when_dense(full_x, y, downsample_n=dowsample_n, axis_scale = "linear")
+    axs[0].scatter(*downs_at_n(gI_pr_rescaled_desc), marker = 'x', color = dep.ref_model_color, s = msize * 1.4, label = model.fit_method_title)
     
+    if dict_meas:
+        prev_fit_method = list(dict_meas.keys())[0]
+        prev_method_dict_meas = dict_meas[prev_fit_method]
+        gI_rescaled_desc_intra = prev_method_dict_meas["gI"]["_pr_rescaled_desc"]
+        axs[0].scatter(*downs_at_n(gI_rescaled_desc_intra), marker = "*", color = dep.orange_color, s = msize, label = prev_fit_method.title())
+    
+    axs[0].scatter(*downs_at_n(g_pr_on_I_desc), marker = 'o', color = dep.obs_color, s = msize * 0.5, label = 'Full Network')
+    axs[0].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Rank (descending)', ylabel = f'{title_pr} Value',)
+    
+    # axs[0].scatter(downs_at_n(gI_pr_rescaled_desc), marker = 'x', color = dep.ref_model_color, s = msize * 1.4, label = model.fit_method_title)
+    # axs[0].scatter(x, gI_rescaled_desc_intra, marker = "o", color = dep.melon_color, s = msize * 0.5, label = "Internal")
+    # axs[0].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize * 0.5, label = 'Full Network')
+
     # plot the reorder gI._pr with respect to the full-network ranking, i.e. idx_g_pr_on_I
-    inaxs = inset_pr_vs_rank(axs[0], x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize * 0.5, zorder = 1)
-    inaxs.scatter(x, gI._pr[g_pr_on_I_rank], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
+    x = full_x
+    inaxs = inset_pr_vs_rank(axs[0], full_x, true_rank = g_pr_on_I_desc, axis_scale=axis_scale, size = msize * 0.5, zorder = 1)
+    inaxs.scatter(full_x, gI._pr_rescaled[g_pr_on_I_rank], marker = 'x', color = dep.ref_model_color, s = msize, zorder = inset_zorder_exp)
 
     # === focus on meas obtained by RECONSTRUCTING the missing parts ===
     # plot the reorder model._pr with respect to the full-network ranking, i.e. idx_g_pr_on_I
@@ -533,8 +640,19 @@ def pr_on_internal_nodes_vs_rank(model, g, gI):
                         y2 = mu - num_sigmas * sigma, 
                         color = dep.sum_model_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
                         alpha = inset_alpha)
+
+    if dict_meas:
+        mu, sigma = prev_method_dict_meas["model"]["_pr_on_I_desc"], prev_method_dict_meas["model"]["_pr_on_I_std_desc"]
+        axs[1].scatter(x, y = mu, marker = "*", s = msize,
+                        color = dep.azure_color, label = f'Rec. w/ {prev_fit_method.title()}',)
+        axs[1].fill_between(x, y1 = mu + num_sigmas * sigma,
+                            y2 = mu - num_sigmas * sigma, 
+                            color = dep.azure_color, label = f'Disp.Int. [-{num_sigmas_label}s, +{num_sigmas_label}s]',
+                            alpha = inset_alpha)
+
+
     axs[1].scatter(x, g_pr_on_I_desc, marker = 'o', color = dep.obs_color, s = msize * 0.5, label = 'Full Network')
-    axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Rank (descending)', ylabel = f'{title_pr} Values',)
+    axs[1].set(xscale = axis_scale, yscale = axis_scale, xlabel = 'Rank (descending)', ylabel = f'{title_pr} Value',)
     
 
     # in the inset, plot the meas based on the g_pr_on_I ranking
@@ -547,7 +665,12 @@ def pr_on_internal_nodes_vs_rank(model, g, gI):
                         color = dep.sum_model_color, alpha = inset_alpha, zorder = inset_zorder_exp)
 
     for ax in axs:
-        ax.legend(markerscale=2)
+        ax.legend(markerscale=2, loc='upper right')
+        # set the marker to have the same size
+        # lgd = ax.legend()
+        # for legend_handle in lgd.legend_handles:
+        #     legend_handle.set_sizes([200])
+        
         ax.set_axisbelow(True)
         ax.grid(True)
 
@@ -557,22 +680,20 @@ def pr_on_internal_nodes_vs_rank(model, g, gI):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_pr(gI, model):
+def topN_overlap_pr(gI, model, comp_meas = {}):
     """
     Over the N-firms with highest pr values, plot the average overlap and the total relative error over all the sampled networks
     """
     
     full_path = model.plots_dir + f"/topN_overlap_pr_{gI._pr_name}.png"
-    num_sigmas = model.num_sigmas
-    num_sigmas_label = "" if num_sigmas == 1 else num_sigmas
-
+    
     fig, ax = plt.subplots(figsize = (12,7))
     axis_scale = 'log'
-    obs_s, exp_s = 60, 60
-    alpha = .8
+    exp_s, lw = 60, 0.1
+    alpha = 1
 
     # internal topN overlap
-    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.2, label = 'Internal')
+    ax.scatter(gI._topN_overlap_pr_range, gI._topN_overlap_pr, marker = 'o', color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, lw = lw, alpha = alpha, s = exp_s * 1.2, label = 'Internal')
     
     # expected topN overlap on average
     # _, bars, caps = ax.errorbar(
@@ -582,11 +703,22 @@ def topN_overlap_pr(gI, model):
     # _set_alpha(bars, caps, alpha = 0.5)
 
     # expected topN overlap over mean "#48ACF0" #4E937A
-    ax.scatter(model._topN_overlap_pr_on_I_range, model._topN_overlap_pr_on_I, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    ax.scatter(model._topN_overlap_pr_on_I_range, model._topN_overlap_pr_on_I, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, lw = lw, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+    if comp_meas:
+
+        # prepare the meas function comp_topN_overlap_degree
+        prev_fit_method = list(comp_meas.keys())[0]
+        comp_meas = comp_meas[prev_fit_method]["model"]
+        x, y = comp_meas["_topN_overlap_pr_on_I_range"], comp_meas["_topN_overlap_pr_on_I"]
+        
+        ax.scatter(x, y, marker = "*", color = dep.maroon_color, edgecolor = dep.maroon_edgecolor, lw = lw, alpha = alpha, s = exp_s, label = f'Rec. w/ {prev_fit_method.title()}')
     
     ax.set(xscale = axis_scale, yscale = "linear", xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
     
-    ax.legend()
+    lgd = ax.legend()
+    for legend_handle in lgd.legend_handles:
+        legend_handle.set_sizes([200])
     ax.grid(False)
 
     fig.tight_layout(pad=1.08, h_pad=None, w_pad=None, rect=None)
@@ -594,53 +726,67 @@ def topN_overlap_pr(gI, model):
     utils.save_fig(fig, full_path=full_path)
     plt.close()
 
-def topN_overlap_pr_deg_stre(g, gI, model):
+def topN_overlap_pr_deg_stre(g, gI, model, comp_meas):
 
     full_path = model.plots_dir + f"/topN_overlap_pr_deg_stre.png"
     
     fig, axs = plt.subplots(1, 2, figsize = (24,8))
-    axis_scale = 'log'
-    obs_s, exp_s = 100, 50
-    alpha = .8
+    obs_s, exp_s, lw = 100, 50, 0.1
+    alpha = 1
 
     # out direction
     x, y = g._topN_overlap_out_degree_on_I_range, g._topN_overlap_out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, edgecolor = dep.obs_edgecolor, alpha = alpha, s = obs_s * 1.4, label = 'Out-Degree')
+    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, edgecolor = dep.obs_edgecolor, lw = lw, alpha = alpha, s = obs_s * 1.4, label = 'Full Network')
 
     x, y = g._topN_overlap_out_strength_on_I_range, g._topN_overlap_out_strength_on_I
-    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, edgecolor = dep.azure_edgecolor, alpha = alpha, s = obs_s, label = 'Out-Strength')
+    axs[0].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, edgecolor = dep.azure_edgecolor, lw = lw, alpha = alpha, s = obs_s, label = 'Out-Strength')
 
     x, y = gI._topN_overlap_out_degree_range, gI._topN_overlap_out_degree
-    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal Out-Degree')
+    axs[0].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, lw = lw, alpha = alpha, s = exp_s * 1.4, label = 'Internal')
 
     x, y = model._topN_overlap_out_degree_on_I_range, model._topN_overlap_out_degree_on_I
-    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[0].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, lw = lw, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+    if comp_meas:
+
+        # prepare the meas function comp_topN_overlap_degree
+        prev_fit_method = list(comp_meas.keys())[0]
+        comp_meas = comp_meas[prev_fit_method]["model"]
+        comp_topN_overlap_degree = lambda out_in: (comp_meas[f"_topN_overlap_{out_in}_degree_on_I_range"], comp_meas[f"_topN_overlap_{out_in}_degree_on_I"])
+
+        # plot out degree topN overlap
+        x, y = comp_topN_overlap_degree("out")
+        axs[0].scatter(x, y, marker = "*", color = dep.maroon_color, edgecolor = dep.maroon_edgecolor, lw = lw, alpha = alpha, s = exp_s, label = f'Rec. w/ {prev_fit_method.title()}')
 
 
     # in direction
     x, y = g._topN_overlap_in_degree_on_I_range, g._topN_overlap_in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, edgecolor = dep.obs_edgecolor, alpha = alpha, s = obs_s * 1.4, label = 'In-Degree')
+    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.obs_color, edgecolor = dep.obs_edgecolor, lw = lw, alpha = alpha, s = obs_s * 1.4, label = 'Full Network')
 
     x, y = g._topN_overlap_in_strength_on_I_range, g._topN_overlap_in_strength_on_I
-    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, edgecolor = dep.azure_edgecolor, alpha = alpha, s = obs_s, label = 'In-Strength')
+    axs[1].scatter(x, y, marker = dep.obs_marker, color = dep.azure_color, edgecolor = dep.azure_edgecolor, lw = lw, alpha = alpha, s = obs_s, label = 'In-Strength')
 
     x, y = gI._topN_overlap_in_degree_range, gI._topN_overlap_in_degree
-    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, alpha = alpha, s = exp_s * 1.4, label = 'Internal In-Degree')
+    axs[1].scatter(x, y, marker = dep.ref_model_marker, color = dep.ref_model_color, edgecolor = dep.ref_model_edgecolor, lw = lw, alpha = alpha, s = exp_s * 1.4, label = 'Internal')
 
     x, y = model._topN_overlap_in_degree_on_I_range, model._topN_overlap_in_degree_on_I
-    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+    axs[1].scatter(x, y, marker = dep.sum_model_marker, color = dep.sum_model_color, edgecolor = dep.sum_model_edgecolor, lw = lw, alpha = alpha, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
+
+    if comp_meas:
+        x, y = comp_topN_overlap_degree("in")
+        axs[1].scatter(x, y, marker = "*", color = dep.maroon_color, edgecolor = dep.maroon_edgecolor, lw = lw, alpha = alpha, s = exp_s, label = f'Rec. w/ {prev_fit_method.title()}')
 
     out_min = np.min([g._topN_overlap_out_degree_on_I[0], gI._topN_overlap_out_degree[0], g._topN_overlap_out_strength_on_I[0], model._topN_overlap_out_degree_on_I[0]])
     in_min = np.min([g._topN_overlap_in_degree_on_I[0], gI._topN_overlap_in_degree[0], g._topN_overlap_in_strength_on_I[0], model._topN_overlap_in_degree_on_I[0]])
     
     yscale = "linear" if out_min == 0 or in_min == 0 else "log"
-    for _, ax in enumerate(axs):
+    for i, ax in enumerate(axs):
         lgd = ax.legend()
         for legend_handle in lgd.legend_handles:
             legend_handle.set_alpha(1)
             legend_handle.set_sizes([200])
-        
-        ax.set(ylim = [None, None], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap (%)',)
+        title = "Out-Degree and Strength" if i == 0 else "In-Degree and Strength"
+        ax.set(ylim = [None, None], xscale = "log", yscale = yscale, xlabel = 'TopN (descending)', ylabel = 'Overlap (%)', title = title)
         ax.set_axisbelow(True)
         ax.grid(True)
     

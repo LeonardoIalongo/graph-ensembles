@@ -77,8 +77,7 @@ def dataset_loader(name, corpkey = None, dataset_direction = "Undirected", id_co
         # decide whether to go for COREALGOS directory or LOCAL one based on the corpkey finding
         if corpkey:
             dataset_folder = os.path.expanduser('~') + "/data/corealgos/rmilocco"
-            print(f"\nReading from COREALGOS")# @ {full_path(dataset_folder)}")
-
+            print(f"\nReading from COREALGOS")
         else:
             # the naics_code dataset is sorted (ascending) by payer and beneficiaries
             print(f"\nReading from local source")

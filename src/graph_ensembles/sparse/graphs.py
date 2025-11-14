@@ -1020,10 +1020,12 @@ class DiGraph(Graph):
             scaler = 1
         else:
             scaler = np.sum(mod_dict[f"{meas}_on_I"])
-        
+        print(f'-Internal PR {self._pr[:3]} rescaled by: {scaler}',)
         # multiply by it since scaler is in [0,1] interval
-        self.__dict__[f"{meas}"] *= scaler
-        self.__dict__[f"{meas}_desc"] *= scaler
+        self.__dict__[f"{meas}_rescaled"] = self.__dict__[f"{meas}"] * scaler
+        self.__dict__[f"{meas}_rescaled_desc"] = self.__dict__[f"{meas}_desc"] * scaler
+        print(f'-Internal PR {self._pr_rescaled[:3]}',)
+
 
     def average_nn_property(
         self, prop, ndir="out", selfloops=False, deg_recompute=False

@@ -205,7 +205,7 @@ class DiGraphEnsemble(GraphEnsemble):
             mod_vars.update(meas_dict)
         
         else:
-            print('-Computing The Degrees',)
+            print('-Computing The Degree',)
             # create self._out_degree and in_degree
             _ = self.expected_degree(unsampled_vI, gI, recompute = recompute)
 

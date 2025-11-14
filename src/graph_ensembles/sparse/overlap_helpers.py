@@ -26,7 +26,7 @@ class overlap_helpers:
             return intersection / len(est)
 
     @staticmethod
-    def topN_overlap_2_meas_fast(true_meas, est_meas, max_pos = None):
+    def topN_overlap_2_meas_fast(true_meas, est_meas, print_topN = None):
         """
         Calculate Jaccard similarity between ranked groups incrementally.
         
@@ -40,7 +40,7 @@ class overlap_helpers:
         """
         import numpy as np
 
-        # Get ranked groups
+        # Get ranked groups, aka list of list of indexes in descending order
         num_vertices = len(true_meas)
         true_ranked = overlap_helpers.get_ranked_groups(true_meas)
         est_ranked = overlap_helpers.get_ranked_groups(est_meas)
@@ -74,8 +74,9 @@ class overlap_helpers:
                 # update the start_true_ranked
                 start_true_ranked = end_true_ranked
         
-            # print(f'-topN_true: {topN_true}',)
-            # print(f'-topN_est: {topN_est}',)
+            if est_pos < print_topN:
+                print(f'-topN_true: {topN_true}',)
+                print(f'-topN_est: {topN_est}',)
             
             # Calculate overlap
             overlap = overlap_helpers.similarity(topN_true, topN_est, "fraction")
@@ -83,30 +84,6 @@ class overlap_helpers:
             overlaps_range.append(len(topN_est))
     
         return overlaps_range, overlaps
-
-        # Iterate through ranks
-        # set it to min if you want to remove the straight line at the end (inclusion rather than similarity)
-        # if max_pos == None:
-        #     max_pos = max(len(true_ranked), len(est_ranked)) 
-        # for N in range(max_pos):
-            
-        #     # Add nodes at current rank to sets
-        #     if N < len(true_ranked):
-        #         topN_true.update(true_ranked[N])
-        #     if N < len(est_ranked):
-        #         topN_est.update(est_ranked[N])
-            
-        #     # Calculate overlap
-        #     overlap = overlap_helpers.similarity(topN_true, topN_est)
-        #     overlaps.append(overlap)
-        #     overlaps_range.append(len(topN_est))
-
-            # print(f'\n-N: {N}',)
-            # print(f'-topN_true: {topN_true}',)
-            # print(f'-topN_est: {topN_est}',)
-            # print(f'-overlap: {overlap}',)
-                
-        # return range(1, len(overlaps) + 1), overlaps
 
     def topN_overlap_pr_out_in(g, gI_model = None, measures = ["_pr"], recompute = False):
         """
@@ -122,8 +99,7 @@ class overlap_helpers:
         import os
         from graph_ensembles import utils
 
-        # if no specification, then ground truth is assumed to be passed
-        if gI_model == None:
+        if gI_model == None: # ground truth
             gI_model = g
             base_folder = g.vars_dir_vsplit
         else:
@@ -132,7 +108,7 @@ class overlap_helpers:
         # smart way of creating a not-existing var with changing name
         gI_model_vars = gI_model.__dict__
 
-        if len(measures) == 2:
+        if len(measures) == 2: # ["_out_strength", "_in_strength"]
             fname = base_folder + "/topN_overlap_out_in_" + measures[0].strip("_out") + "_range.pkl"
         else:
             fname = base_folder + "/topN_overlap" + measures[0] + "_range.pkl"
@@ -148,13 +124,15 @@ class overlap_helpers:
             g_pr_on_I = g._pr_on_I
             max_pos = g.__dict__.get("_topN_max_pos", None)
             
-            # loop over the measures and select only the new ones to be saved
+            # loop over the measures
             meas_dict = {}
             for meas in measures:
-                print(f'-Computing topN overlap PR VS {meas} for {gI_model.name}-{kind}', )
+                print(f'\n-Computing topN overlap PR VS {meas} for {gI_model.name}-{kind}', )
                 var_name = "_topN_overlap"+meas
+
+                print_topN = 0 #5 if ("degree" in meas and gI_model.get("graph_kind") != "full") else 0
                 gI_model_vars[var_name+"_range"], gI_model_vars[var_name] \
-                                    = overlap_helpers.topN_overlap_2_meas_fast(g_pr_on_I, gI_model_vars[meas], max_pos)
+                                    = overlap_helpers.topN_overlap_2_meas_fast(g_pr_on_I, gI_model_vars[meas], print_topN)
                 meas_dict[var_name+"_range"], meas_dict[var_name] = gI_model_vars[var_name+"_range"], gI_model_vars[var_name]
             
             # print(f'-To fname: {fname}',)
@@ -187,18 +165,16 @@ class overlap_helpers:
         """
         Overlap btw the PR-ground-truth and the out/in degrees
         """
-
         
-        # ground truth
-        if gI_model == None:
+        if gI_model == None: # ground truth
             degree_measures = ["_out_degree_on_I", "_in_degree_on_I"]
         
-        # internal and observed
-        elif gI_model.graph_kind == "intra" and gI_model.kind == "obs": # isinternal
+        
+        elif gI_model.graph_kind == "intra" and gI_model.kind == "obs": # internal and observed
             degree_measures = ["_out_degree", "_in_degree"]
         
-        # model case
-        else:
+        
+        else: # model case
             degree_measures = ["_out_degree_on_I", "_in_degree_on_I"]
 
         return g.topN_overlap_pr_out_in(gI_model, degree_measures, recompute)
@@ -231,7 +207,10 @@ class overlap_helpers:
         # calculate the degrees on I for model
         if model is not None:
             model._out_degree_on_I = model._out_degree[internal_nodes]
+            model._out_degree_on_I_std = model._out_degree_std[internal_nodes]
+            
             model._in_degree_on_I = model._in_degree[internal_nodes]
+            model._in_degree_on_I_std = model._in_degree_std[internal_nodes]
 
     def topN_overlap_pr_deg_stre(g, gI, model, recompute = False):
         """
