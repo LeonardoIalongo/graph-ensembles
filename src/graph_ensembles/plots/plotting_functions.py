@@ -29,7 +29,7 @@ def ccdf_out_in_degree(g, model, comp_meas = None):
 
     plot_ccdf(axs, g.out_degree(), g.in_degree(), lw = 9, color = dep.obs_color, label = "Full Network")
     # plot_ccdf(axs, gI.out_degree(), gI.in_degree(), lw = 7, color = dep.ref_model_color, label = "Internal")
-    plot_ccdf(axs, model.expected_out_degree(),  model.expected_in_degree(), lw = 5, color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}')
+    plot_ccdf(axs, model.expected_out_degree(),  model.expected_in_degree(), lw = 7, color = dep.sum_model_color, label = f'Rec. w/ {model.fit_method_title}')
     
     if comp_meas:
         prev_fit_method = list(comp_meas.keys())[0]
@@ -277,7 +277,7 @@ def ds_scatterplot(fig, ax, x, y, **kwargs):
                         fmt='none',
                         ecolor=dep.sum_model_color,    # or something like edgecolor
                         alpha=1,
-                        capsize=3,
+                        capsize=7,
                         zorder=1
                     )
         [bar.set_alpha(0.2) for bar in bars]

@@ -127,7 +127,7 @@ class overlap_helpers:
             # loop over the measures
             meas_dict = {}
             for meas in measures:
-                print(f'\n-Computing topN overlap PR VS {meas} for {gI_model.name}-{kind}', )
+                print(f'-Computing topN overlap PR VS {meas} for {gI_model.name}-{kind}', )
                 var_name = "_topN_overlap"+meas
 
                 print_topN = 0 #5 if ("degree" in meas and gI_model.get("graph_kind") != "full") else 0
