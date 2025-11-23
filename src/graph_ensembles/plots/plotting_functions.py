@@ -81,7 +81,7 @@ def annd_vs_deg_out_in(g, gI, model, ddir = "out", ndir = "in"):
 
     _, bars, caps = axs.errorbar(
         x = deg_z, xerr = num_sigmas * deg_z_std, y = z, yerr = num_sigmas * z_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
-        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5, alpha = alpha, ms = np.sqrt(exp_s), mec = "k")
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=8, alpha = alpha, ms = np.sqrt(exp_s), mec = "k")
     _set_alpha(bars, caps, alpha = bar_alpha)
     
     # axs.scatter(deg_z, z, marker = "x", color = dep.sum_model_color, s = exp_s, label = f'Rec. w/ {model.fit_method_title}')
@@ -123,7 +123,7 @@ def exp_deg_out_in(g, gI, model):
 
     _, bars, caps = axs[0].errorbar(
         x, mu, yerr=num_sigmas * sigma, fmt=dep.sum_model_marker, color=dep.sum_model_color,
-        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5, ms = np.sqrt(exp_s), mec = "k", alpha = alpha
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=8, ms = np.sqrt(exp_s), mec = "k", alpha = alpha
     )
     _set_alpha(bars, caps, alpha = bar_alpha)
 
@@ -136,7 +136,7 @@ def exp_deg_out_in(g, gI, model):
 
     _, bars, caps = axs[1].errorbar(
         x, mu, yerr=num_sigmas * sigma, fmt=dep.sum_model_marker, color=dep.sum_model_color,
-        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+        label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=8,
         ms = np.sqrt(exp_s), mec = "k", alpha = alpha)
     _set_alpha(bars, caps, alpha = bar_alpha)
 
@@ -698,7 +698,7 @@ def topN_overlap_pr(gI, model, comp_meas = {}):
     # expected topN overlap on average
     # _, bars, caps = ax.errorbar(
     #     x = model._topN_overlap_pr_range, y = model._topN_overlap_pr, yerr = num_sigmas * model._topN_overlap_pr_std, fmt=dep.sum_model_marker, color=dep.sum_model_color,
-    #     label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=5,
+    #     label=f'Rec. w/ {model.fit_method_title} +- {num_sigmas_label}s', capsize=8,
     # )
     # _set_alpha(bars, caps, alpha = 0.5)
 
