@@ -81,7 +81,7 @@ class ScaleInvariantModel(FitnessModel):
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
@@ -100,7 +100,7 @@ class ScaleInvariantModel(FitnessModel):
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return -tmp
 
@@ -271,7 +271,7 @@ class MultiInvariantModel(MultiFitnessModel):
                 j += 1
 
         if val == 0.0:
-            return -np.infty
+            return -np.inf
         else:
             return log(-expm1(-val))
 
@@ -296,7 +296,7 @@ class MultiInvariantModel(MultiFitnessModel):
                 if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
                     if isinf(tmp):
-                        return -np.infty
+                        return -np.inf
                     else:
                         val += tmp
                 i += 1
@@ -330,7 +330,7 @@ class MultiInvariantModel(MultiFitnessModel):
         layer k.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d * x_i * y_j
         if isinf(tmp):

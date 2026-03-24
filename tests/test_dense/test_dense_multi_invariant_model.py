@@ -772,7 +772,7 @@ class TestInvariantModelMeasures:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -803,7 +803,7 @@ class TestInvariantModelMeasures:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=False,
         )
 
@@ -836,10 +836,10 @@ class TestInvariantModelMeasures:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -876,7 +876,7 @@ class TestInvariantModelMeasures:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=False,
         )
 
@@ -1061,7 +1061,7 @@ class TestInvariantModelMeasuresSelfloops:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -1092,7 +1092,7 @@ class TestInvariantModelMeasuresSelfloops:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=True,
         )
 
@@ -1125,10 +1125,10 @@ class TestInvariantModelMeasuresSelfloops:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -1165,7 +1165,7 @@ class TestInvariantModelMeasuresSelfloops:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=True,
         )
 
@@ -1352,7 +1352,7 @@ class TestInvariantModelMeasuresPerlabel:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -1383,7 +1383,7 @@ class TestInvariantModelMeasuresPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=False,
         )
 
@@ -1416,10 +1416,10 @@ class TestInvariantModelMeasuresPerlabel:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -1456,7 +1456,7 @@ class TestInvariantModelMeasuresPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=False,
         )
 
@@ -1642,7 +1642,7 @@ class TestInvariantModelMeasuresSelfPerlabel:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -1673,7 +1673,7 @@ class TestInvariantModelMeasuresSelfPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=True,
         )
 
@@ -1706,10 +1706,10 @@ class TestInvariantModelMeasuresSelfPerlabel:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -1746,7 +1746,7 @@ class TestInvariantModelMeasuresSelfPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=True,
         )
 

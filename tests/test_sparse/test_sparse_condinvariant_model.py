@@ -487,7 +487,7 @@ class TestInvariantModelMeasures:
             prop_in=in_strength,
             groups=g.groups,
             adj=agg_adj,
-            param=np.infty,
+            param=np.inf,
         )
 
         res = model.log_likelihood(adj)
@@ -611,7 +611,7 @@ class TestInvariantModelMeasuresSelfloops:
             prop_in=in_strength,
             groups=g.groups,
             adj=agg_adj,
-            param=np.infty,
+            param=np.inf,
             selfloops=True,
         )
 

@@ -559,7 +559,7 @@ class TestInvariantModelMeasures:
             num_vertices=num_vertices,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.infty,
+            param=np.inf,
         )
 
         res = model.log_likelihood(adj)
@@ -755,7 +755,7 @@ class TestInvariantModelMeasuresSelfloops:
             num_vertices=num_vertices,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.infty,
+            param=np.inf,
             selfloops=True,
         )
 

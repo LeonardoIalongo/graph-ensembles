@@ -216,7 +216,7 @@ class FitnessModel(DiGraphEnsemble):
                 atol=atol,
                 rtol=rtol,
                 x_l=0.0,
-                x_u=np.infty,
+                x_u=np.inf,
                 max_iter=maxiter,
                 full_return=True,
                 verbose=verbose,
@@ -304,7 +304,7 @@ class FitnessModel(DiGraphEnsemble):
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (z_ij == 0) or (d[0] == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
@@ -323,7 +323,7 @@ class FitnessModel(DiGraphEnsemble):
 
         tmp = d[0] * x_i * y_j * z_ij
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-tmp / (1 + tmp))
 
@@ -661,7 +661,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                         atol=atol,
                         rtol=rtol,
                         x_l=0.0,
-                        x_u=np.infty,
+                        x_u=np.inf,
                         max_iter=maxiter,
                         full_return=True,
                         verbose=verbose,
@@ -686,7 +686,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                     atol=atol,
                     rtol=rtol,
                     x_l=0.0,
-                    x_u=np.infty,
+                    x_u=np.inf,
                     max_iter=maxiter,
                     full_return=True,
                     verbose=verbose,
@@ -920,7 +920,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 j += 1
 
         if val == 1.0:
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-val)
 
@@ -945,7 +945,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
                     if isinf(tmp):
-                        return -np.infty
+                        return -np.inf
                     else:
                         val /= 1 + tmp
                 i += 1
@@ -982,7 +982,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         layer k.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d * x_i * y_j
         if isinf(tmp):
@@ -1001,6 +1001,6 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
         tmp = d * x_i * y_j
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-tmp / (1 + tmp))

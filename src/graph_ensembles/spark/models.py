@@ -1212,9 +1212,9 @@ class RandomDiGraph(DiGraphEnsemble):
 
         # Compute log likelihood of graph
         if (self.param[0] == 0) and (adj.nnz > 0):
-            return -np.infty
+            return -np.inf
         if (self.param[0] == 1) and (adj.nnz != 0):
-            return -np.infty
+            return -np.inf
 
         like = adj.nnz * log(self.param[0])
         if selfloops:
@@ -1225,7 +1225,7 @@ class RandomDiGraph(DiGraphEnsemble):
             )
             # Ensure that the matrix has no elements on the diagonal
             if adj.diagonal().sum() > 0:
-                return -np.infty
+                return -np.inf
 
         return like
 
@@ -1674,7 +1674,7 @@ class FitnessModel(DiGraphEnsemble):
                 atol=atol,
                 rtol=rtol,
                 x_l=0,
-                x_u=np.infty,
+                x_u=np.inf,
                 max_iter=maxiter,
                 full_return=True,
                 verbose=verbose,
@@ -1763,7 +1763,7 @@ class FitnessModel(DiGraphEnsemble):
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (d[0] == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d[0] * x_i * y_j
         if isinf(tmp):
@@ -1782,7 +1782,7 @@ class FitnessModel(DiGraphEnsemble):
 
         tmp = d[0] * x_i * y_j
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-tmp / (1 + tmp))
 
@@ -1863,7 +1863,7 @@ class ScaleInvariantModel(FitnessModel):
     def logp(d, x_i, y_j, z_ij):
         """Compute the log probability of connection between node i and j."""
         if (x_i == 0) or (y_j == 0) or (d[0] == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d[0] * x_i * y_j
         if isinf(tmp):
@@ -1882,7 +1882,7 @@ class ScaleInvariantModel(FitnessModel):
 
         tmp = d[0] * x_i * y_j
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return -tmp
 
@@ -2945,17 +2945,17 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             if n != m:
                 ind = ind_out == i
                 if not np.any(ind):
-                    return -np.infty
+                    return -np.inf
                 if np.any(prop_out[ind] == 0):
-                    return -np.infty
+                    return -np.inf
 
                 j_list = indices[n:m]
                 for j in j_list:
                     ind = ind_in == j
                     if not np.any(ind):
-                        return -np.infty
+                        return -np.inf
                     if np.any(prop_in[ind] == 0):
-                        return -np.infty
+                        return -np.inf
 
         # Now compute likelihood due to non-zero values of pijk
         for i, out_i in zip(ind_out, prop_out):
@@ -3510,7 +3510,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                             atol=atol,
                             rtol=rtol,
                             x_l=0.0,
-                            x_u=np.infty,
+                            x_u=np.inf,
                             max_iter=maxiter,
                             full_return=True,
                             verbose=verbose,
@@ -3542,7 +3542,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                     atol=atol,
                     rtol=rtol,
                     x_l=0.0,
-                    x_u=np.infty,
+                    x_u=np.inf,
                     max_iter=maxiter,
                     full_return=True,
                     verbose=verbose,
@@ -3768,7 +3768,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 j += 1
 
         if val == 1.0:
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-val)
 
@@ -3789,7 +3789,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
                 if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
                     if isinf(tmp):
-                        return -np.infty
+                        return -np.inf
                     else:
                         val /= 1 + tmp
                 i += 1
@@ -3826,7 +3826,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
         layer k.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d * x_i * y_j
         if isinf(tmp):
@@ -3845,7 +3845,7 @@ class MultiFitnessModel(MultiDiGraphEnsemble):
 
         tmp = d * x_i * y_j
         if isinf(tmp):
-            return -np.infty
+            return -np.inf
         else:
             return log1p(-tmp / (1 + tmp))
 
@@ -4004,7 +4004,7 @@ class MultiInvariantModel(MultiFitnessModel):
                 j += 1
 
         if val == 0.0:
-            return -np.infty
+            return -np.inf
         else:
             return log(-expm1(-val))
 
@@ -4025,7 +4025,7 @@ class MultiInvariantModel(MultiFitnessModel):
                 if (d[x_lbl[i]] != 0) and (x_val[i] != 0) and (y_val[j] != 0):
                     tmp = d[x_lbl[i]] * x_val[i] * y_val[j]
                     if isinf(tmp):
-                        return -np.infty
+                        return -np.inf
                     else:
                         val += tmp
                 i += 1
@@ -4059,7 +4059,7 @@ class MultiInvariantModel(MultiFitnessModel):
         layer k.
         """
         if (x_i == 0) or (y_j == 0) or (d == 0):
-            return -np.infty
+            return -np.inf
 
         tmp = d * x_i * y_j
         if isinf(tmp):

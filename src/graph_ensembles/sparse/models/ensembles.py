@@ -1069,17 +1069,17 @@ class MultiDiGraphEnsemble(DiGraphEnsemble):
             if n != m:
                 ind = prop_out[0] == i
                 if not np.any(ind):
-                    return -np.infty
+                    return -np.inf
                 if np.any(prop_out[1][ind] == 0):
-                    return -np.infty
+                    return -np.inf
 
                 j_list = indices[n:m]
                 for j in j_list:
                     ind = prop_in[0] == j
                     if not np.any(ind):
-                        return -np.infty
+                        return -np.inf
                     if np.any(prop_in[1][ind] == 0):
-                        return -np.infty
+                        return -np.inf
 
         # Now compute likelihood due to non-zero values of pijk
         for i, out_i in zip(prop_out[0], prop_out[1]):

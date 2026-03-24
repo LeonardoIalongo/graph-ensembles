@@ -795,7 +795,7 @@ class TestFitnessModelMeasures:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -826,7 +826,7 @@ class TestFitnessModelMeasures:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=False,
         )
 
@@ -859,10 +859,10 @@ class TestFitnessModelMeasures:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -899,7 +899,7 @@ class TestFitnessModelMeasures:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=False,
         )
 
@@ -1084,7 +1084,7 @@ class TestFitnessModelMeasuresSelfloops:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -1115,7 +1115,7 @@ class TestFitnessModelMeasuresSelfloops:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=True,
         )
 
@@ -1148,10 +1148,10 @@ class TestFitnessModelMeasuresSelfloops:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -1188,7 +1188,7 @@ class TestFitnessModelMeasuresSelfloops:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
             selfloops=True,
         )
 
@@ -1375,7 +1375,7 @@ class TestFitnessModelMeasuresPerlabel:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -1406,7 +1406,7 @@ class TestFitnessModelMeasuresPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=False,
         )
 
@@ -1439,10 +1439,10 @@ class TestFitnessModelMeasuresPerlabel:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -1479,7 +1479,7 @@ class TestFitnessModelMeasuresPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=False,
         )
 
@@ -1665,7 +1665,7 @@ class TestFitnessModelMeasuresSelfPerlabel:
         # Compute reference
         p_log = self.p_proj.copy()
         p_log[p_log != 0] = np.log(p_log[p_log != 0])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p_proj != 1
         np_log[ind] = np.log1p(-self.p_proj[ind])
         adj = np.array([[0, 1, 0, 1], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]])
@@ -1696,7 +1696,7 @@ class TestFitnessModelMeasuresSelfPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=True,
         )
 
@@ -1729,10 +1729,10 @@ class TestFitnessModelMeasuresSelfPerlabel:
     def test_likelihood_3D(self):
         """Test likelihood code."""
         # Compute reference
-        p_log = np.full(self.p.shape, -np.infty)
+        p_log = np.full(self.p.shape, -np.inf)
         ind = self.p > 0
         p_log[ind] = np.log(self.p[ind])
-        np_log = np.full(p_log.shape, -np.infty)
+        np_log = np.full(p_log.shape, -np.inf)
         ind = self.p < 1
         np_log[ind] = np.log1p(-self.p[ind])
         adj = np.zeros((4, 4, 4), dtype=bool)
@@ -1769,7 +1769,7 @@ class TestFitnessModelMeasuresSelfPerlabel:
             num_labels=num_labels,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty] * num_labels),
+            param=np.array([np.inf] * num_labels),
             selfloops=True,
         )
 

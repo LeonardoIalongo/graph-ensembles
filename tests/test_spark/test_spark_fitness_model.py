@@ -596,7 +596,7 @@ class TestFitnessModelMeasures:
             num_vertices=num_vertices,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
         )
 
         res = model.log_likelihood(adj)
@@ -814,7 +814,7 @@ class TestFitnessModelMeasuresSelfloops:
             num_vertices=num_vertices,
             prop_out=out_strength,
             prop_in=in_strength,
-            param=np.array([np.infty]),
+            param=np.array([np.inf]),
         )
 
         res = model.log_likelihood(adj)
